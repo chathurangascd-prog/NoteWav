@@ -1,0 +1,13 @@
+.env
+credentials/
+*.json
+__pycache__/
+*.pyc
+venv_new/
+venv/
+env/
+notewav.db
+static/output_*.mp3
+.DS_Store
+*.log
+.env.save
