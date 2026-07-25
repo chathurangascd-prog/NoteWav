@@ -5,3 +5,4 @@ google-cloud-vision
 gTTS
 pydub
 gunicorn
+audioop-lts
