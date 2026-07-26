@@ -632,6 +632,45 @@
         .share-menu-item .fa-telegram {
             color: #229ED9;
         }
+
+        /* ===== INSTALL APP BUTTON (small, bottom-left, out of the way) ===== */
+        .install-app-btn {
+            position: fixed;
+            bottom: 18px;
+            left: 18px;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: var(--radius-full);
+            border: 1px solid rgba(107, 48, 255, 0.45);
+            background: rgba(20, 20, 30, 0.9);
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-md);
+            transition: all 0.2s ease;
+        }
+        .install-app-btn:hover {
+            background: rgba(107, 48, 255, 0.2);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        .install-app-btn i {
+            color: #6b30ff;
+        }
+        @media (max-width: 640px) {
+            .install-app-btn {
+                bottom: 14px;
+                left: 14px;
+                padding: 9px 14px;
+                font-size: 0.75rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -945,6 +984,10 @@
             </div>
         </footer>
     </div>
+
+    <button id="install-app-btn" class="install-app-btn hidden">
+        <i class="fas fa-download"></i> Install app
+    </button>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

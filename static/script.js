@@ -1418,3 +1418,43 @@ if ('serviceWorker' in navigator) {
             .catch((err) => console.warn('⚠️ Service worker registration failed:', err));
     });
 }
+
+// ========================================
+// PWA: CUSTOM "INSTALL APP" BUTTON
+// ========================================
+// Chrome/Android normally show their own install UI (address bar icon
+// or a browser-controlled banner), but this gives a small, always-
+// visible button instead — only shown when the browser confirms the
+// app is actually installable (PWA criteria met, not already
+// installed). Note: iOS Safari doesn't support this event at all, so
+// the button simply never appears there — iOS users still install via
+// Share → "Add to Home Screen" manually.
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const btn = document.getElementById('install-app-btn');
+    if (btn) btn.classList.remove('hidden');
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const installBtn = document.getElementById('install-app-btn');
+    if (!installBtn) return;
+
+    installBtn.addEventListener('click', async function() {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        console.log('Install prompt outcome:', outcome);
+        deferredInstallPrompt = null;
+        installBtn.classList.add('hidden');
+    });
+});
+
+window.addEventListener('appinstalled', function() {
+    const btn = document.getElementById('install-app-btn');
+    if (btn) btn.classList.add('hidden');
+    deferredInstallPrompt = null;
+    console.log('🎉 NoteWav AI installed as an app!');
+});
