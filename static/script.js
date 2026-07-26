@@ -1357,7 +1357,7 @@ window.addEventListener('load', function() {
             splash.style.opacity = '0';
             setTimeout(() => { splash.style.display = 'none'; }, 400);
         }
-    }, 1800);
+    }, 2100);
 });
 
 // ========================================

@@ -645,7 +645,7 @@
             justify-content: center;
             gap: 18px;
             animation: splashFadeOut 0.5s ease forwards;
-            animation-delay: 1.7s;
+            animation-delay: 2.0s;
         }
         .splash-icon {
             width: 100px;
@@ -679,6 +679,20 @@
         @keyframes splashTextIn {
             to { opacity: 1; transform: translateY(0); }
         }
+        .splash-subtitle {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #ffffff;
+            margin-top: -6px;
+            opacity: 0;
+            animation: splashSubtitleIn 0.9s ease forwards;
+            animation-delay: 0.95s;
+        }
+        @keyframes splashSubtitleIn {
+            from { opacity: 0; letter-spacing: 8px; transform: translateY(6px); }
+            to { opacity: 0.85; letter-spacing: 1px; transform: translateY(0); }
+        }
         @keyframes splashFadeOut {
             to { opacity: 0; visibility: hidden; pointer-events: none; }
         }
@@ -689,6 +703,7 @@
     <div id="splash-screen">
         <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="" class="splash-icon">
         <h1 class="splash-text">NoteWav</h1>
+        <p class="splash-subtitle">Smart විදිහට පාඩම් අහන්න</p>
     </div>
 
     <div id="error-banner" class="hidden" role="alert">
