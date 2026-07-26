@@ -802,45 +802,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // FIX (still "Tainted canvases may not be exported" on
-            // mobile even with htmlLabels off): rasterizing the SVG via
-            // <img> + canvas.drawImage() + toDataURL() is fundamentally
-            // unreliable across mobile browsers — some versions treat
-            // ANY blob-sourced SVG image as tainting the canvas,
-            // regardless of content. Switching to svg2pdf.js sidesteps
-            // canvas entirely: it walks the SVG's DOM and draws
-            // directly into the PDF as real vector paths/text, so
-            // there's no canvas, no toDataURL, no taint check at all —
-            // and the resulting PDF is sharper (infinitely scalable)
-            // as a bonus.
-            let tempSvgEl = null;
+            // FIX (svg2pdf.js showed empty boxes — no text): jsPDF's
+            // default fonts don't include Sinhala glyphs, and properly
+            // embedding a Unicode font with correct complex-script
+            // shaping is not realistic here. Switched to canvg instead:
+            // it rasterizes the SVG onto a canvas using the BROWSER's
+            // own native text rendering (ctx.fillText under the hood),
+            // so Sinhala renders correctly exactly like it does on
+            // screen. Crucially, canvg draws shapes/text directly via
+            // canvas drawing calls rather than loading the SVG as an
+            // external <img> resource, so it never triggers the
+            // "tainted canvas" restriction that broke the earlier
+            // <img>+drawImage() approach on mobile.
             try {
                 const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
 
-                // svg2pdf needs a live DOM element (not a string), and
-                // needs it actually mounted in the document to measure
-                // it correctly — mount off-screen, remove when done.
-                const parser = new DOMParser();
-                const parsedDoc = parser.parseFromString(fixedSvg, 'image/svg+xml');
-                tempSvgEl = parsedDoc.documentElement;
-                tempSvgEl.style.position = 'fixed';
-                tempSvgEl.style.left = '-99999px';
-                tempSvgEl.style.top = '0';
-                document.body.appendChild(tempSvgEl);
+                const scale = 3; // high-res export — renders crisply at 3x real size
+                const canvas = document.createElement('canvas');
+                canvas.width = width * scale;
+                canvas.height = height * scale;
+
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#14141e'; // match app background, avoid a transparent/white PDF
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scale, scale);
+
+                const v = await canvg.Canvg.from(ctx, fixedSvg);
+                await v.render();
+
+                const imgData = canvas.toDataURL('image/png');
 
                 const { jsPDF } = window.jspdf;
-                const orientation = width >= height ? 'l' : 'p';
-                const pdf = new jsPDF({ orientation, unit: 'px', format: [width, height] });
-
-                // Vector PDFs have no background by default — paint the
-                // app's dark background first so it's not a white page.
-                pdf.setFillColor(20, 20, 30);
-                pdf.rect(0, 0, width, height, 'F');
-
-                await pdf.svg(tempSvgEl, { x: 0, y: 0, width, height });
-
-                document.body.removeChild(tempSvgEl);
-                tempSvgEl = null;
+                const orientation = canvas.width >= canvas.height ? 'l' : 'p';
+                const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
+                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
 
                 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -878,7 +873,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     pdf.save('notewav_mindmap.pdf');
                 }
             } catch (err) {
-                if (tempSvgEl && tempSvgEl.parentNode) document.body.removeChild(tempSvgEl);
                 console.error('PDF export error:', err);
                 showErrorBanner('PDF හදන්න බැරි උනා: ' + (err && err.message ? err.message : err));
             }
