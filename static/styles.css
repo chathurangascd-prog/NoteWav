@@ -1,6 +1,6 @@
 /* ========================================
    NOTEWAV AI - COMPLETE STYLES
-   Purple/Green Theme with Highlight Support
+   Single-accent purple theme, Fraunces + Plus Jakarta Sans pairing
    ======================================== */
 
    * {
@@ -18,9 +18,20 @@
     --bg-input: rgba(255, 255, 255, 0.06);
     --bg-input-hover: rgba(255, 255, 255, 0.09);
     --border-color: rgba(58, 229, 16, 0.08);
-    --border-hover: rgba(0, 237, 197, 0.682);
-    
-    /* Gradients */
+    /* CHANGED: was a teal hover border competing with the purple brand
+       color — now tinted from the same accent so hover states feel
+       like part of one system instead of a second color language */
+    --border-hover: rgba(139, 92, 246, 0.55);
+
+    /* CHANGED: one signature accent (violet) used everywhere something
+       needs to say "selected / focused / this is the brand color" —
+       previously purple, gold and orange all competed for that job */
+    --accent: #8b5cf6;
+    --accent-soft: rgba(139, 92, 246, 0.16);
+
+    /* Gradients — --primary-grad is the ONE signature gradient, reused
+       everywhere (buttons, step numbers, visualizer, brand mark) rather
+       than introducing new gradients per element */
     --primary-grad: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%);
     --primary-grad-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     
@@ -71,6 +82,31 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* NEW: respect reduced-motion preference across all animations */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* NEW: visible keyboard focus states — previously only textarea had a
+   focus style, so keyboard users had no idea where they were on the
+   page for buttons, links, or the progress bar */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.control-btn:focus-visible,
+.progress-bar:focus-visible,
+.upload-area:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+}
+
 /* ===== ANIMATED BACKGROUND ===== */
 body::before {
     content: '';
@@ -102,11 +138,11 @@ body::after {
 
 /* ===== SELECTION ===== */
 ::selection {
-    background: rgba(48, 141, 255, 0.35);
+    background: rgba(139, 92, 246, 0.35);
     color: #fff;
 }
 ::-moz-selection {
-    background: rgba(48, 241, 255, 0.35);
+    background: rgba(139, 92, 246, 0.35);
     color: #fff;
 }
 
@@ -152,15 +188,21 @@ body::after {
     50% { transform: translateY(-12px) rotate(-3deg); }
 }
 
-/* ===== BRAND TITLE - GOLD GRADIENT ===== */
+/* ===== BRAND TITLE ===== */
+/* CHANGED: was a separate gold/terracotta gradient competing with the
+   purple accent used everywhere else. Now uses Fraunces (a display
+   serif) for personality, and the SAME --primary-grad as the rest of
+   the app so the brand mark and the UI read as one system. */
 .brand h1 {
+    font-family: 'Baloo 2', sans-serif;
     font-size: 2.8rem;
     font-weight: 800;
-    background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+    font-style: normal;
+    background: linear-gradient(90deg, #EFC37B 0%, #DB8D64 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -1.5px;
+    letter-spacing: -0.5px;
     line-height: 1.1;
 }
 
@@ -178,6 +220,7 @@ body::after {
     text-transform: uppercase;
     display: inline-block;
     backdrop-filter: blur(10px);
+    font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
 .app-header p {
@@ -221,7 +264,7 @@ body::after {
 
 .stat-badge i {
     font-size: 0.7rem;
-    color: #667eea;
+    color: var(--accent);
 }
 
 /* ========================================
@@ -301,8 +344,12 @@ body::after {
     box-shadow: 0 4px 15px rgba(107, 48, 255, 0.25);
 }
 
+/* CHANGED: section headings now use the Fraunces display face too, so
+   the serif/sans pairing carries through the whole page instead of
+   being a one-off on the hero title */
 .card-header h2 {
-    font-size: 1.25rem;
+    font-family: 'Fraunces', serif;
+    font-size: 1.3rem;
     font-weight: 600;
     color: var(--text-primary);
     letter-spacing: -0.3px;
@@ -340,9 +387,9 @@ textarea {
 
 textarea:focus {
     outline: none;
-    border-color: #6b30ff;
+    border-color: var(--accent);
     background: var(--bg-input-hover);
-    box-shadow: 0 0 0 4px rgba(107, 48, 255, 0.08), inset 0 0 0 1px rgba(107, 48, 255, 0.1);
+    box-shadow: 0 0 0 4px var(--accent-soft), inset 0 0 0 1px rgba(139, 92, 246, 0.1);
 }
 
 textarea::placeholder {
@@ -394,7 +441,7 @@ textarea:hover {
 
 .section-title i {
     margin-right: 8px;
-    color: #667eea;
+    color: var(--accent);
 }
 
 .mode-options {
@@ -420,24 +467,51 @@ textarea:hover {
     transform: translateY(-2px);
 }
 
+/* CHANGED (accessibility fix): the radio input was `display: none`,
+   which removes it from the tab order entirely — keyboard users could
+   not select Full Text / Smart Study mode at all. This keeps it
+   invisible but still focusable, and .mode-box:has(input:focus-visible)
+   below gives it a visible focus ring. */
 .mode-box input[type="radio"] {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
 }
 
+.mode-box:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+/* CHANGED: selected-state border/glow now uses the single --accent
+   variable instead of a one-off orange (#f39317) that didn't match
+   anything else in the page */
 .mode-box:has(input:checked) {
-    border-color: #f39317;
-    background: rgba(108, 34, 255, 0.045);
-    box-shadow: 0 0 40px rgba(165, 48, 255, 0.06);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.10);
 }
 
+/* CHANGED: checkmark now sits in a small filled circle so it's legible
+   against any card background, instead of bare white text floating
+   in the corner */
 .mode-box:has(input:checked)::after {
     content: '✓';
     position: absolute;
     top: 10px;
     right: 14px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-grad);
+    border-radius: 50%;
     color: #ffffff;
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 0.65rem;
 }
 
 .mode-content {
@@ -478,7 +552,7 @@ textarea:hover {
 }
 
 .mode-box:has(input:checked) .mode-title {
-    color: #6b30ff;
+    color: var(--accent);
 }
 
 /* ========================================
@@ -559,7 +633,7 @@ textarea:hover {
 
 .btn-reset:hover {
     background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(107, 48, 255, 0.3) !important;
+    border-color: rgba(139, 92, 246, 0.3) !important;
 }
 
 /* ========================================
@@ -600,7 +674,7 @@ textarea:hover {
 
 .info-text i {
     margin-right: 8px;
-    color: #667eea;
+    color: var(--accent);
 }
 
 /* ========================================
@@ -610,7 +684,11 @@ textarea:hover {
     padding: 4px 0;
 }
 
-/* ===== VISUALIZER ===== */
+/* ===== VISUALIZER =====
+   NOTE: these bars are now driven live by the Web Audio API in
+   scripts.js while audio is playing (real frequency data, not just a
+   canned loop) — this CSS keyframe remains as the idle/ambient motion
+   and as a graceful fallback if Web Audio setup fails. */
 .player-visualizer {
     display: flex;
     justify-content: center;
@@ -627,7 +705,7 @@ textarea:hover {
     border-radius: 4px;
     animation: waveAnim 1.5s ease-in-out infinite;
     opacity: 0.5;
-    transition: all 0.3s ease;
+    transition: height 0.08s ease;
 }
 
 .wave-bar:nth-child(1) { height: 18px; animation-delay: 0.0s; }
@@ -648,18 +726,19 @@ textarea:hover {
 
 .player-container.playing .wave-bar {
     animation-duration: 0.7s;
+    opacity: 1;
 }
 
-.player-container.playing .wave-bar:nth-child(1) { height: 25px; }
-.player-container.playing .wave-bar:nth-child(2) { height: 40px; }
-.player-container.playing .wave-bar:nth-child(3) { height: 30px; }
-.player-container.playing .wave-bar:nth-child(4) { height: 45px; }
-.player-container.playing .wave-bar:nth-child(5) { height: 35px; }
-.player-container.playing .wave-bar:nth-child(6) { height: 48px; }
-.player-container.playing .wave-bar:nth-child(7) { height: 28px; }
-.player-container.playing .wave-bar:nth-child(8) { height: 42px; }
-.player-container.playing .wave-bar:nth-child(9) { height: 32px; }
-.player-container.playing .wave-bar:nth-child(10) { height: 22px; }
+/* NEW: when JS successfully hooks up the Web Audio API analyser, it
+   adds this class and takes over bar height/opacity directly from
+   real playback data — so the canned CSS keyframe animation needs to
+   stand down instead of fighting it. If the analyser can't be set up
+   (unsupported browser, etc.), this class is never added and the
+   original CSS animation above still runs as the fallback. */
+.player-visualizer.audio-reactive .wave-bar {
+    animation: none;
+    transition: transform 0.08s ease-out, opacity 0.08s ease-out;
+}
 
 /* ===== PLAYER CONTROLS ===== */
 .player-controls {
@@ -772,11 +851,11 @@ textarea:hover {
     top: -4px;
     width: 13px;
     height: 13px;
-    background: #6b30ff;
+    background: var(--accent);
     border-radius: 50%;
     opacity: 0;
     transition: opacity 0.2s ease;
-    box-shadow: 0 0 20px rgba(107, 48, 255, 0.6);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
 }
 
 .progress-bar:hover .progress-fill::after {
@@ -823,20 +902,20 @@ textarea:hover {
 
 .lyric-line.active {
     color: #ffffff;
-    background: linear-gradient(135deg, rgba(107, 48, 255, 0.25), rgba(102, 126, 234, 0.15));
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(102, 126, 234, 0.15));
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: 600;
-    text-shadow: 0 0 20px rgba(107, 48, 255, 0.2);
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
     animation: highlightPulse 1.5s ease-in-out infinite;
 }
 
 @keyframes highlightPulse {
     0%, 100% {
-        background: linear-gradient(135deg, rgba(107, 48, 255, 0.25), rgba(102, 126, 234, 0.15));
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(102, 126, 234, 0.15));
     }
     50% {
-        background: linear-gradient(135deg, rgba(107, 48, 255, 0.35), rgba(102, 126, 234, 0.25));
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(102, 126, 234, 0.25));
     }
 }
 
@@ -851,6 +930,33 @@ textarea:hover {
     background: var(--primary-grad);
     border-radius: 10px;
 }
+
+/* ========================================
+   MINI WAVE (loading indicator)
+   ======================================== */
+/* NEW: replaces the generic fa-spinner icon in loading states with a
+   tiny version of the same waveform motif used in the audio player —
+   one consistent "this app is about sound" visual language instead of
+   a spinner unrelated to the product. */
+.mini-wave {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    vertical-align: middle;
+}
+
+.mini-wave span {
+    width: 3px;
+    background: currentColor;
+    border-radius: 2px;
+    animation: waveAnim 0.9s ease-in-out infinite;
+}
+
+.mini-wave span:nth-child(1) { height: 6px;  animation-delay: 0s; }
+.mini-wave span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
+.mini-wave span:nth-child(3) { height: 8px;  animation-delay: 0.3s; }
+.mini-wave span:nth-child(4) { height: 14px; animation-delay: 0.45s; }
 
 /* ========================================
    STATUS MESSAGE
@@ -888,9 +994,8 @@ textarea:hover {
     color: var(--text-secondary);
 }
 
-.status-content i {
-    color: #667eea;
-    font-size: 1.1rem;
+.status-content .mini-wave {
+    color: var(--accent);
 }
 
 /* ========================================
@@ -921,7 +1026,7 @@ textarea:hover {
 
 .app-footer p i {
     margin-right: 6px;
-    color: #667eea;
+    color: var(--accent);
     opacity: 0.6;
 }
 
@@ -974,13 +1079,13 @@ textarea:hover {
 }
 
 .upload-area {
-    border: 2px dashed rgba(107, 48, 255, 0.3);
+    border: 2px dashed rgba(139, 92, 246, 0.35);
     border-radius: var(--radius-md);
     padding: 25px 20px;
     text-align: center;
     cursor: pointer;
     transition: all 0.3s ease;
-    background: rgba(107, 48, 255, 0.03);
+    background: rgba(139, 92, 246, 0.03);
     position: relative;
     min-height: 120px;
     display: flex;
@@ -990,19 +1095,19 @@ textarea:hover {
 }
 
 .upload-area:hover {
-    border-color: rgba(107, 48, 255, 0.6);
-    background: rgba(107, 48, 255, 0.06);
+    border-color: rgba(139, 92, 246, 0.6);
+    background: rgba(139, 92, 246, 0.06);
 }
 
 .upload-area.dragover {
     border-color: #ffffff;
-    background: rgba(107, 48, 255, 0.10);
+    background: rgba(139, 92, 246, 0.10);
     transform: scale(1.02);
 }
 
 .upload-area i {
     font-size: 2.5rem;
-    color: #6b30ff;
+    color: var(--accent);
     display: block;
     margin-bottom: 8px;
 }
@@ -1029,20 +1134,19 @@ textarea:hover {
 .ocr-status {
     margin-top: 10px;
     padding: 10px 16px;
-    background: rgba(107, 48, 255, 0.08);
+    background: rgba(139, 92, 246, 0.08);
     border-radius: var(--radius-md);
-    border: 1px solid rgba(107, 48, 255, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.15);
     display: flex;
     align-items: center;
     gap: 12px;
 }
 
-.ocr-status i {
-    font-size: 1.1rem;
-    color: #6b30ff;
+.ocr-status .mini-wave {
+    color: var(--accent);
 }
 
-.ocr-status span {
+.ocr-status span:last-child {
     color: var(--text-secondary);
     font-size: 0.9rem;
 }
@@ -1114,7 +1218,7 @@ textarea:hover {
     }
     
     .card-header h2 {
-        font-size: 1.05rem;
+        font-size: 1.1rem;
     }
     
     .step-num {
@@ -1271,7 +1375,7 @@ textarea:hover {
     }
     
     .card-header h2 {
-        font-size: 0.95rem;
+        font-size: 1rem;
     }
     
     .step-num {
