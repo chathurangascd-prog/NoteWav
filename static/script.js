@@ -71,8 +71,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let isPlaying = false;
     let isOCRRunning = false;
     let lyricsLines = [];
-    // NEW: persisted across audio generations, so switching to a new
-    // script keeps the speed/volume the user picked.
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
@@ -139,7 +137,6 @@ document.addEventListener('DOMContentLoaded', function() {
             showCopiedFeedback(btn);
         } catch (err) {
             console.error('Copy failed:', err);
-            // Fallback for browsers/contexts without Clipboard API access.
             textarea.select();
             document.execCommand('copy');
             showCopiedFeedback(btn);
@@ -180,8 +177,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (libraryModalBackdrop) libraryModalBackdrop.classList.add('hidden');
     }
 
-    // NEW: keeps the full fetched list around so search/filter can run
-    // instantly client-side without refetching from the server.
     let allLibraryNotes = [];
     const librarySearchInput = document.getElementById('library-search-input');
 
@@ -562,18 +557,6 @@ document.addEventListener('DOMContentLoaded', function() {
             theme: 'dark',
             securityLevel: 'loose',
             fontFamily: 'Plus Jakarta Sans, sans-serif',
-            // NEW: bigger default node boxes (more readable without
-            // needing to zoom) — only affects visual size, not the
-            // number of nodes or the diagram's structure.
-            //
-            // FIX (PDF export failed on mobile with "Tainted canvases
-            // may not be exported"): htmlLabels:true makes Mermaid
-            // render node text using SVG <foreignObject> (raw embedded
-            // HTML) instead of plain SVG <text>. Browsers — especially
-            // strict on mobile — treat <foreignObject> content as
-            // tainting the canvas once it's drawn there, which blocks
-            // canvas.toDataURL() entirely. Plain SVG text doesn't have
-            // this problem, so htmlLabels is now off.
             flowchart: {
                 htmlLabels: false,
                 nodeSpacing: 65,
@@ -586,15 +569,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: mermaid source per language + rendered SVG cache, so
-    // switching between Sinhala/English is instant (no re-render,
-    // no network call) once both have been rendered at least once.
     let mermaidCodes = { si: '', en: '' };
     let mindmapSvgCache = { si: '', en: '' };
     let currentMindMapLang = 'si';
-    // Mirrors whichever language is currently displayed — the enlarge
-    // modal and PDF export both reuse this without caring which
-    // language it came from.
     let lastMindMapSvg = '';
 
     const mindmapLangSiBtn = document.getElementById('mindmap-lang-si-btn');
@@ -617,7 +594,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Already rendered once — instant switch, no re-render needed.
         if (mindmapSvgCache[lang]) {
             lastMindMapSvg = mindmapSvgCache[lang];
             mindmapContainer.innerHTML = lastMindMapSvg;
@@ -635,8 +611,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const uniqueId = 'mermaidGraph_' + lang + '_' + Date.now();
             const { svg } = await mermaid.render(uniqueId, code);
             mindmapSvgCache[lang] = svg;
-            // The user might have switched languages again while this
-            // was still rendering — only paint if still on this one.
             if (currentMindMapLang === lang) {
                 lastMindMapSvg = svg;
                 mindmapContainer.innerHTML = svg;
@@ -654,12 +628,8 @@ document.addEventListener('DOMContentLoaded', function() {
         mermaidCodes = { si: codeSi || '', en: codeEn || '' };
         mindmapSvgCache = { si: '', en: '' };
 
-        // Show Sinhala first (default)...
         await renderMindMapForLang('si');
 
-        // ...then pre-render English quietly in the background, so by
-        // the time the user clicks "English" it's already cached and
-        // switches instantly instead of showing a loading state.
         if (window.mermaid && mermaidCodes.en && mermaidCodes.en.trim()) {
             try {
                 const uniqueId = 'mermaidGraph_en_preload_' + Date.now();
@@ -725,7 +695,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (mindmapModalBackdrop) {
-        // Clicking the dimmed backdrop (but not the card itself) closes it.
         mindmapModalBackdrop.addEventListener('click', function(e) {
             if (e.target === mindmapModalBackdrop) closeMindMapModal();
         });
@@ -737,7 +706,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // NEW: mouse-wheel zoom inside the enlarged card.
     if (mindmapModalBody) {
         mindmapModalBody.addEventListener('wheel', function(e) {
             e.preventDefault();
@@ -749,9 +717,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (mindmapZoomOutBtn) mindmapZoomOutBtn.addEventListener('click', () => setMindMapZoom(mindmapZoom - 0.25));
     if (mindmapZoomResetBtn) mindmapZoomResetBtn.addEventListener('click', () => setMindMapZoom(1));
 
-    // NEW: click-and-drag panning (hand/grab tool) — lets the user
-    // move around the zoomed-in diagram with the mouse instead of
-    // hunting for scrollbars.
     let isDraggingMindMap = false;
     let mindmapDragStartX = 0;
     let mindmapDragStartY = 0;
@@ -784,16 +749,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: reads the SVG's real intrinsic size (viewBox, or width/height
-    // attributes) and writes it back as explicit pixel width/height.
-    // FIX (blurry PDF): without this, an <img> loading an SVG that only
-    // has a viewBox (no absolute width/height) falls back to the
-    // browser's default 300x150 box — so the whole diagram got
-    // rasterized tiny and then stretched, causing the blurry/illegible
-    // text seen in exported PDFs. Setting explicit dimensions first
-    // makes the browser rasterize the SVG at its real size, and the
-    // additional canvas scale factor below then renders that crisply
-    // at high resolution instead of upscaling a blurry small bitmap.
     function prepareSvgForExport(svgString) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(svgString, 'image/svg+xml');
@@ -831,16 +786,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // FIX (canvg also showed empty boxes — text still missing):
-            // parsing a detached SVG STRING in isolation seems to lose
-            // font/text info regardless of which SVG-parsing library is
-            // used. Switched to html2canvas instead: it doesn't
-            // re-parse SVG markup at all — it walks the ALREADY
-            // rendered, already-laid-out DOM (with real computed
-            // styles/fonts, exactly as visible on screen) and paints
-            // that. Since it's copying live DOM content rather than
-            // loading an external image resource, it doesn't trigger
-            // canvas tainting either.
             let tempContainer = null;
             try {
                 const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
@@ -855,8 +800,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 tempContainer.innerHTML = fixedSvg;
                 document.body.appendChild(tempContainer);
 
-                // Give the browser a moment to lay out/paint the SVG
-                // before capturing it.
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
                 const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
@@ -864,7 +807,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const canvas = await html2canvas(tempContainer, {
                     backgroundColor: '#14141e',
-                    scale: 3, // high-res export
+                    scale: 3,
                     width: width,
                     height: height,
                     logging: false,
@@ -882,10 +825,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-                // Web Share API hands the PDF file straight to the OS
-                // share sheet (Save to Files, share via WhatsApp, etc.)
-                // — the most reliable mobile path, no blob URL/new tab
-                // navigation involved.
                 if (isMobile && navigator.share && navigator.canShare) {
                     const pdfBlob = pdf.output('blob');
                     const pdfFile = new File([pdfBlob], 'notewav_mindmap.pdf', { type: 'application/pdf' });
@@ -894,7 +833,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         try {
                             await navigator.share({ files: [pdfFile], title: 'NoteWav Mind Map' });
                         } catch (shareErr) {
-                            // AbortError just means the user cancelled the share sheet — not a real error.
                             if (shareErr && shareErr.name !== 'AbortError') {
                                 console.error('Share failed:', shareErr);
                                 showErrorBanner('PDF share කරගැනීම අසාර්ථක විය: ' + shareErr.message);
@@ -905,10 +843,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (isMobile) {
-                    // Web Share API unavailable — fall back to
-                    // navigating THIS SAME tab to the blob URL (same
-                    // document context, so it always resolves, unlike
-                    // opening a new tab).
                     const pdfBlobUrl = pdf.output('bloburl');
                     window.location.href = pdfBlobUrl;
                     showErrorBanner('PDF එක open වෙනවා — Share/Download icon එකෙන් save කරගන්න.');
@@ -1023,7 +957,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     noteInput.value = extractedText;
                 }
 
-                // Respect the 2000-char cap even after OCR appends text.
                 if (noteInput.value.length > MAX_TEXT_LENGTH) {
                     noteInput.value = noteInput.value.slice(0, MAX_TEXT_LENGTH);
                     showErrorBanner(`සටහන අකුරු ${MAX_TEXT_LENGTH}ට කප්පාදු කළා (උපරිම සීමාව).`);
@@ -1112,7 +1045,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     showErrorBanner(data.warning);
                 }
 
-                // Render the Mind Map (both languages) from this same response.
                 await renderMindMap(data.mermaid_code_si, data.mermaid_code_en);
 
                 if (audio) {
@@ -1142,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // ========================================
-    // GENERATE AUDIO (ElevenLabs via /tts)
+    // GENERATE AUDIO
     // ========================================
     generateAudioBtn.addEventListener('click', async function() {
         const text = scriptOutput.value.trim();
@@ -1407,10 +1339,30 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ========================================
+// SPLASH SCREEN: guaranteed hide (JS fallback)
+// ========================================
+// FIX (splash screen stuck permanently, page never showing): the CSS
+// animation-delay + forwards approach can silently fail in several
+// real-world cases — a backgrounded tab throttling/pausing the
+// animation timer, prefers-reduced-motion rules interacting oddly
+// with the delay, or the animation simply never being triggered. This
+// forces the splash screen away after a fixed timeout regardless of
+// what the CSS animation is doing, so the app can never get stuck
+// behind it.
+window.addEventListener('load', function() {
+    setTimeout(function() {
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            splash.style.transition = 'opacity 0.4s ease';
+            splash.style.opacity = '0';
+            setTimeout(() => { splash.style.display = 'none'; }, 400);
+        }
+    }, 1800);
+});
+
+// ========================================
 // PWA: SERVICE WORKER REGISTRATION
 // ========================================
-// Runs outside the DOMContentLoaded listener above since service
-// worker registration doesn't need the DOM — registering early is fine.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
         navigator.serviceWorker.register('/static/sw.js')
@@ -1422,13 +1374,6 @@ if ('serviceWorker' in navigator) {
 // ========================================
 // PWA: CUSTOM "INSTALL APP" BUTTON
 // ========================================
-// Chrome/Android normally show their own install UI (address bar icon
-// or a browser-controlled banner), but this gives a small, always-
-// visible button instead — only shown when the browser confirms the
-// app is actually installable (PWA criteria met, not already
-// installed). Note: iOS Safari doesn't support this event at all, so
-// the button simply never appears there — iOS users still install via
-// Share → "Add to Home Screen" manually.
 let deferredInstallPrompt = null;
 
 window.addEventListener('beforeinstallprompt', function(e) {

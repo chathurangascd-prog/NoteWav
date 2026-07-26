@@ -4,7 +4,7 @@
 // (/process-note, /tts, /ocr, /library/*) are NEVER cached — they
 // always need a live network request, so those are excluded here.
 
-const CACHE_NAME = 'notewav-shell-v2'; // bumped: v1 had stale styles.css cached client-side
+const CACHE_NAME = 'notewav-shell-v3'; // bumped again after splash-screen JS fix
 const SHELL_FILES = [
     '/',
     '/static/styles.css',
