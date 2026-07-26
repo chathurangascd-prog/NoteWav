@@ -536,8 +536,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // NEW: bigger default node boxes (more readable without
             // needing to zoom) — only affects visual size, not the
             // number of nodes or the diagram's structure.
+            //
+            // FIX (PDF export failed on mobile with "Tainted canvases
+            // may not be exported"): htmlLabels:true makes Mermaid
+            // render node text using SVG <foreignObject> (raw embedded
+            // HTML) instead of plain SVG <text>. Browsers — especially
+            // strict on mobile — treat <foreignObject> content as
+            // tainting the canvas once it's drawn there, which blocks
+            // canvas.toDataURL() entirely. Plain SVG text doesn't have
+            // this problem, so htmlLabels is now off.
             flowchart: {
-                htmlLabels: true,
+                htmlLabels: false,
                 nodeSpacing: 65,
                 rankSpacing: 75,
                 padding: 40
