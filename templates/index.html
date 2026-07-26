@@ -17,7 +17,7 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -29,7 +29,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 
     <style>
-        /* ===== PLAYER: CIRCULAR PLAY/PAUSE + COMPACT STOP ===== */
         .player-primary-controls {
             display: flex;
             align-items: center;
@@ -88,8 +87,6 @@
             width: auto;
             padding: 10px 24px;
         }
-
-        /* ===== PLAYER SPEED / VOLUME CONTROLS ===== */
         .player-extra-controls {
             display: flex;
             flex-wrap: wrap;
@@ -145,8 +142,6 @@
             accent-color: #6b30ff;
             cursor: pointer;
         }
-
-        /* ===== SMART MIND MAP SECTION ===== */
         .mindmap-lang-toggle {
             display: flex;
             gap: 8px;
@@ -197,7 +192,7 @@
         .mindmap-container svg {
             max-width: 100%;
             height: auto;
-            pointer-events: none; /* clicks pass through to the container */
+            pointer-events: none;
         }
         .mindmap-empty,
         .mindmap-loading {
@@ -206,8 +201,6 @@
             text-align: center;
             padding: 20px;
         }
-
-        /* ===== MIND MAP MODAL ===== */
         .mindmap-modal-backdrop {
             position: fixed;
             inset: 0;
@@ -279,13 +272,6 @@
             transition: transform 0.06s linear;
         }
         .mindmap-modal-body svg {
-            /* FIX: previously max-width:100% shrank the WHOLE diagram
-               down to fit the modal's width, which cancelled out any
-               font-size/node-size increase — a wide diagram just got
-               scaled down uniformly, so text stayed small. Rendering
-               at native size instead (scrollable/pannable via the
-               drag-to-pan + zoom controls) keeps text legible
-               regardless of how wide the diagram is. */
             display: block;
             min-width: max-content;
         }
@@ -318,8 +304,6 @@
             min-width: 44px;
             text-align: center;
         }
-
-        /* ===== TEXTAREA COPY / CLEAR ACTIONS ===== */
         .textarea-wrapper {
             position: relative;
         }
@@ -368,15 +352,11 @@
             border-color: #22c55e;
             color: #22c55e;
         }
-
-        /* ===== CHARACTER LIMIT WARNING ===== */
         .character-count.over-limit #char-count,
         .character-count.over-limit {
             color: #ef4444;
             font-weight: 700;
         }
-
-        /* ===== ERROR BANNER ===== */
         #error-banner {
             position: fixed;
             top: 20px;
@@ -400,8 +380,6 @@
             color: #ef4444;
             flex-shrink: 0;
         }
-
-        /* ===== MINI WAVEFORM LOADING INDICATOR ===== */
         .mini-wave {
             display: inline-flex;
             align-items: flex-end;
@@ -424,8 +402,6 @@
             0%, 100% { transform: scaleY(0.4); opacity: 0.5; }
             50% { transform: scaleY(1); opacity: 1; }
         }
-
-        /* ===== LIBRARY NAV BUTTON ===== */
         .library-nav-btn {
             position: absolute;
             top: 24px;
@@ -451,11 +427,6 @@
         .app-header {
             position: relative;
         }
-
-        /* FIX: on narrow (mobile) screens, the absolutely-positioned
-           library button overlapped the brand/logo text. Below this
-           width, drop it into normal document flow instead, centered
-           under the header content, so nothing overlaps. */
         @media (max-width: 640px) {
             .library-nav-btn {
                 position: static;
@@ -464,8 +435,6 @@
                 margin: 16px auto 0;
             }
         }
-
-        /* ===== LIBRARY MODAL ===== */
         .library-modal-card {
             width: 720px;
         }
@@ -560,8 +529,6 @@
             border-color: #ef4444;
             color: #ef4444;
         }
-
-        /* ===== SAVE TO LIBRARY ROW ===== */
         .library-save-row {
             display: flex;
             gap: 10px;
@@ -588,8 +555,6 @@
             white-space: nowrap;
             padding: 10px 18px;
         }
-
-        /* ===== SHARE MENU ===== */
         .share-menu-wrapper {
             position: relative;
         }
@@ -632,8 +597,6 @@
         .share-menu-item .fa-telegram {
             color: #229ED9;
         }
-
-        /* ===== INSTALL APP BUTTON (small, bottom-left, out of the way) ===== */
         .install-app-btn {
             position: fixed;
             bottom: 18px;
@@ -671,8 +634,6 @@
                 font-size: 0.75rem;
             }
         }
-
-        /* ===== SPLASH SCREEN (app open animation) ===== */
         #splash-screen {
             position: fixed;
             inset: 0;
@@ -696,12 +657,15 @@
             animation-delay: 0.1s;
             box-shadow: 0 8px 40px rgba(107, 48, 255, 0.35);
         }
+        /* FIX: this was still the OLD Fraunces-italic + purple-gradient
+           style — only the header's .brand h1 got updated to Baloo 2 +
+           the gold/terracotta gradient earlier, this rule got missed. */
         .splash-text {
-            font-family: 'Fraunces', serif;
-            font-size: 2rem;
-            font-weight: 600;
-            font-style: italic;
-            background: var(--primary-grad);
+            font-family: 'Baloo 2', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            font-style: normal;
+            background: linear-gradient(90deg, #EFC37B 0%, #DB8D64 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -735,7 +699,6 @@
 
     <div class="app-container">
 
-        <!-- ===== HEADER ===== -->
         <header class="app-header">
             <div class="brand">
                 <span class="logo-icon">🎙️</span>
@@ -754,7 +717,6 @@
 
         <main class="app-main">
 
-            <!-- ===== STEP 1: Input Section ===== -->
             <div class="glass-card animate-fade card-step-1">
                 <div class="card-header">
                     <span class="step-num">01</span>
@@ -762,7 +724,6 @@
                     <span class="step-subtitle">📝 Paste your notes here</span>
                 </div>
 
-                <!-- ===== IMAGE UPLOAD SECTION ===== -->
                 <div class="image-upload-section">
                     <p class="section-title">
                         <i class="fas fa-image"></i>
@@ -827,7 +788,6 @@
                 </button>
             </div>
 
-            <!-- ===== STEP 2: Safety Check ===== -->
             <div id="safety-section" class="glass-card hidden animate-fade card-step-2">
                 <div class="card-header">
                     <span class="step-num">02</span>
@@ -864,7 +824,6 @@
                 </div>
             </div>
 
-            <!-- ===== SMART MIND MAP SECTION ===== -->
             <div id="mindmap-section" class="glass-card hidden animate-fade card-step-2">
                 <div class="card-header">
                     <span class="step-num">🧠</span>
@@ -880,7 +839,6 @@
                 </div>
             </div>
 
-            <!-- ===== NOTES LIBRARY MODAL ===== -->
             <div id="library-modal-backdrop" class="mindmap-modal-backdrop hidden">
                 <div id="library-modal-card" class="mindmap-modal-card library-modal-card">
                     <div class="mindmap-modal-header">
@@ -899,7 +857,6 @@
                 </div>
             </div>
 
-            <!-- ===== MIND MAP MODAL (enlarged view) ===== -->
             <div id="mindmap-modal-backdrop" class="mindmap-modal-backdrop hidden">
                 <div id="mindmap-modal-card" class="mindmap-modal-card">
                     <div class="mindmap-modal-header">
@@ -931,7 +888,6 @@
                 </div>
             </div>
 
-            <!-- ===== STEP 3: Audio Player ===== -->
             <div id="audio-section" class="glass-card hidden animate-fade card-step-3">
                 <div class="card-header">
                     <span class="step-num">03</span>
