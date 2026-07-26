@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NoteWav AI - Listen to Your Notes</title>
 
+    <!-- PWA: installable app support -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#6b30ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="NoteWav">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -416,6 +425,17 @@
             50% { transform: scaleY(1); opacity: 1; }
         }
 
+        /* ===== OFFLINE LIMITATION NOTE ===== */
+        .offline-note {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+            opacity: 0.75;
+        }
+        .offline-note i {
+            margin-right: 4px;
+        }
+
         /* ===== LIBRARY NAV BUTTON ===== */
         .library-nav-btn {
             position: absolute;
@@ -459,6 +479,27 @@
         /* ===== LIBRARY MODAL ===== */
         .library-modal-card {
             width: 720px;
+        }
+        .library-search-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 24px 0;
+            color: var(--text-muted);
+        }
+        .library-search-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+        .library-search-input:focus {
+            outline: none;
+            border-color: #6b30ff;
         }
         .library-modal-body {
             padding: 20px 24px;
@@ -625,6 +666,9 @@
                 <span class="stat-badge"><i class="fas fa-podcast"></i> Podcast Narration</span>
                 <span class="stat-badge"><i class="fas fa-diagram-project"></i> Mind Maps</span>
             </div>
+            <p class="offline-note">
+                <i class="fas fa-wifi"></i> AI features (script, mind map, audio) internet ඕන — app එකේ interface එක විතරයි offline load වෙන්නේ.
+            </p>
             <button id="open-library-btn" class="library-nav-btn">
                 <i class="fas fa-book"></i> My Library
             </button>
@@ -766,6 +810,10 @@
                         <button id="library-modal-close" class="mindmap-modal-close" aria-label="Close">
                             <i class="fas fa-times"></i>
                         </button>
+                    </div>
+                    <div class="library-search-row">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="library-search-input" class="library-search-input" placeholder="Title/Subject එකෙන් හොයන්න...">
                     </div>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>

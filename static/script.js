@@ -180,8 +180,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (libraryModalBackdrop) libraryModalBackdrop.classList.add('hidden');
     }
 
+    // NEW: keeps the full fetched list around so search/filter can run
+    // instantly client-side without refetching from the server.
+    let allLibraryNotes = [];
+    const librarySearchInput = document.getElementById('library-search-input');
+
     async function loadLibraryList() {
         libraryModalBody.innerHTML = '<p class="mindmap-empty"><span class="mini-wave"><span></span><span></span><span></span><span></span></span> Loading...</p>';
+        if (librarySearchInput) librarySearchInput.value = '';
         try {
             const response = await fetch('/library/notes');
             const data = await response.json();
@@ -189,16 +195,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 libraryModalBody.innerHTML = '<p class="mindmap-empty">Library එක load කරගැනීම අසාර්ථක විය.</p>';
                 return;
             }
-            renderLibraryList(data.notes || []);
+            allLibraryNotes = data.notes || [];
+            renderLibraryList(allLibraryNotes);
         } catch (err) {
             console.error('Library load error:', err);
             libraryModalBody.innerHTML = '<p class="mindmap-empty">Library එක load කරගැනීම අසාර්ථක විය.</p>';
         }
     }
 
-    function renderLibraryList(notes) {
+    function filterLibraryNotes(searchTerm) {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) {
+            renderLibraryList(allLibraryNotes);
+            return;
+        }
+        const filtered = allLibraryNotes.filter(note =>
+            (note.title || '').toLowerCase().includes(term) ||
+            (note.subject || '').toLowerCase().includes(term)
+        );
+        renderLibraryList(filtered, term);
+    }
+
+    if (librarySearchInput) {
+        librarySearchInput.addEventListener('input', function() {
+            filterLibraryNotes(this.value);
+        });
+    }
+
+    function renderLibraryList(notes, searchTerm) {
         if (!notes.length) {
-            libraryModalBody.innerHTML = '<p class="mindmap-empty">තවම save කරපු notes නෑ. Script එකක් process කරලා "Library එකට Save කරන්න" click කරන්න.</p>';
+            const message = searchTerm
+                ? `"${escapeHtml(searchTerm)}" එකට notes කිසිවක් හම්බුනේ නෑ.`
+                : 'තවම save කරපු notes නෑ. Script එකක් process කරලා "Library එකට Save කරන්න" click කරන්න.';
+            libraryModalBody.innerHTML = `<p class="mindmap-empty">${message}</p>`;
             return;
         }
 
@@ -1376,3 +1405,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     console.log('🎵 NoteWav AI Loaded — Mind Maps + gTTS narration ready!');
 });
+
+// ========================================
+// PWA: SERVICE WORKER REGISTRATION
+// ========================================
+// Runs outside the DOMContentLoaded listener above since service
+// worker registration doesn't need the DOM — registering early is fine.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/sw.js')
+            .then((reg) => console.log('✅ Service worker registered:', reg.scope))
+            .catch((err) => console.warn('⚠️ Service worker registration failed:', err));
+    });
+}
