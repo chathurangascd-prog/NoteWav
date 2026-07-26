@@ -443,6 +443,19 @@
             position: relative;
         }
 
+        /* FIX: on narrow (mobile) screens, the absolutely-positioned
+           library button overlapped the brand/logo text. Below this
+           width, drop it into normal document flow instead, centered
+           under the header content, so nothing overlaps. */
+        @media (max-width: 640px) {
+            .library-nav-btn {
+                position: static;
+                display: flex;
+                width: fit-content;
+                margin: 16px auto 0;
+            }
+        }
+
         /* ===== LIBRARY MODAL ===== */
         .library-modal-card {
             width: 720px;

@@ -816,7 +816,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     const orientation = canvas.width >= canvas.height ? 'l' : 'p';
                     const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
                     pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                    pdf.save('notewav_mindmap.pdf');
+
+                    // FIX (PDF download only worked on PC): mobile
+                    // browsers (iOS Safari, Android Chrome) often
+                    // ignore the <a download> attribute that
+                    // pdf.save() relies on — it just opens/does
+                    // nothing instead of downloading. Detect mobile
+                    // and instead open the PDF as a blob URL in a new
+                    // tab, where the phone's own PDF viewer lets the
+                    // user save/share it via the OS share sheet.
+                    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                    if (isMobile) {
+                        const pdfBlobUrl = pdf.output('bloburl');
+                        window.open(pdfBlobUrl, '_blank');
+                        showErrorBanner('PDF එක tab එකකින් open වුනා — Share/Download icon එකෙන් save කරගන්න.');
+                    } else {
+                        pdf.save('notewav_mindmap.pdf');
+                    }
                 };
                 img.onerror = function() {
                     URL.revokeObjectURL(url);
