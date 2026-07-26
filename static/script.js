@@ -827,7 +827,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.scale(scale, scale);
 
-                const v = await canvg.Canvg.from(ctx, fixedSvg);
+                // FIX ("canvg is not defined"): the UMD <script> CDN
+                // build didn't expose a reliable global variable name.
+                // Loading it as a proper ES module via dynamic import
+                // sidesteps that guessing game entirely.
+                const { Canvg } = await import('https://esm.sh/canvg@4.0.3');
+                const v = await Canvg.from(ctx, fixedSvg);
                 await v.render();
 
                 const imgData = canvas.toDataURL('image/png');
