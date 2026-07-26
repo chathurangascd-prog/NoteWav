@@ -802,38 +802,47 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // FIX (svg2pdf.js showed empty boxes — no text): jsPDF's
-            // default fonts don't include Sinhala glyphs, and properly
-            // embedding a Unicode font with correct complex-script
-            // shaping is not realistic here. Switched to canvg instead:
-            // it rasterizes the SVG onto a canvas using the BROWSER's
-            // own native text rendering (ctx.fillText under the hood),
-            // so Sinhala renders correctly exactly like it does on
-            // screen. Crucially, canvg draws shapes/text directly via
-            // canvas drawing calls rather than loading the SVG as an
-            // external <img> resource, so it never triggers the
-            // "tainted canvas" restriction that broke the earlier
-            // <img>+drawImage() approach on mobile.
+            // FIX (canvg also showed empty boxes — text still missing):
+            // parsing a detached SVG STRING in isolation seems to lose
+            // font/text info regardless of which SVG-parsing library is
+            // used. Switched to html2canvas instead: it doesn't
+            // re-parse SVG markup at all — it walks the ALREADY
+            // rendered, already-laid-out DOM (with real computed
+            // styles/fonts, exactly as visible on screen) and paints
+            // that. Since it's copying live DOM content rather than
+            // loading an external image resource, it doesn't trigger
+            // canvas tainting either.
+            let tempContainer = null;
             try {
                 const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
 
-                const scale = 3; // high-res export — renders crisply at 3x real size
-                const canvas = document.createElement('canvas');
-                canvas.width = width * scale;
-                canvas.height = height * scale;
+                tempContainer = document.createElement('div');
+                tempContainer.style.position = 'fixed';
+                tempContainer.style.left = '-99999px';
+                tempContainer.style.top = '0';
+                tempContainer.style.width = width + 'px';
+                tempContainer.style.height = height + 'px';
+                tempContainer.style.background = '#14141e';
+                tempContainer.innerHTML = fixedSvg;
+                document.body.appendChild(tempContainer);
 
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#14141e'; // match app background, avoid a transparent/white PDF
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.scale(scale, scale);
+                // Give the browser a moment to lay out/paint the SVG
+                // before capturing it.
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-                // FIX ("canvg is not defined"): the UMD <script> CDN
-                // build didn't expose a reliable global variable name.
-                // Loading it as a proper ES module via dynamic import
-                // sidesteps that guessing game entirely.
-                const { Canvg } = await import('https://esm.sh/canvg@4.0.3');
-                const v = await Canvg.from(ctx, fixedSvg);
-                await v.render();
+                const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
+                const html2canvas = html2canvasModule.default;
+
+                const canvas = await html2canvas(tempContainer, {
+                    backgroundColor: '#14141e',
+                    scale: 3, // high-res export
+                    width: width,
+                    height: height,
+                    logging: false,
+                });
+
+                document.body.removeChild(tempContainer);
+                tempContainer = null;
 
                 const imgData = canvas.toDataURL('image/png');
 
@@ -878,6 +887,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     pdf.save('notewav_mindmap.pdf');
                 }
             } catch (err) {
+                if (tempContainer && tempContainer.parentNode) document.body.removeChild(tempContainer);
                 console.error('PDF export error:', err);
                 showErrorBanner('PDF හදන්න බැරි උනා: ' + (err && err.message ? err.message : err));
             }
