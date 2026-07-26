@@ -792,6 +792,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 showErrorBanner('Download කරන්න Mind Map එකක් නෑ.');
                 return;
             }
+
+            // FIX (mobile download still failing): the previous version
+            // called window.open() inside img.onload — an ASYNC callback.
+            // By the time that runs, the browser no longer considers it
+            // a direct result of the click, so mobile Safari/Chrome
+            // silently blocked it as a popup. Opening a blank tab HERE,
+            // synchronously inside the click handler, keeps it tied to
+            // the user gesture — we just redirect that already-open tab
+            // to the real PDF once it's ready.
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            let mobileTab = null;
+            if (isMobile) {
+                mobileTab = window.open('', '_blank');
+            }
+
             try {
                 const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
                 const svgBlob = new Blob([fixedSvg], { type: 'image/svg+xml;charset=utf-8' });
@@ -817,18 +832,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
                     pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
 
-                    // FIX (PDF download only worked on PC): mobile
-                    // browsers (iOS Safari, Android Chrome) often
-                    // ignore the <a download> attribute that
-                    // pdf.save() relies on — it just opens/does
-                    // nothing instead of downloading. Detect mobile
-                    // and instead open the PDF as a blob URL in a new
-                    // tab, where the phone's own PDF viewer lets the
-                    // user save/share it via the OS share sheet.
-                    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
                     if (isMobile) {
                         const pdfBlobUrl = pdf.output('bloburl');
-                        window.open(pdfBlobUrl, '_blank');
+                        if (mobileTab) {
+                            mobileTab.location.href = pdfBlobUrl;
+                        } else {
+                            // The blank tab itself got blocked — fall
+                            // back to a direct open attempt anyway.
+                            window.open(pdfBlobUrl, '_blank');
+                        }
                         showErrorBanner('PDF එක tab එකකින් open වුනා — Share/Download icon එකෙන් save කරගන්න.');
                     } else {
                         pdf.save('notewav_mindmap.pdf');
@@ -836,11 +848,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
                 img.onerror = function() {
                     URL.revokeObjectURL(url);
+                    if (mobileTab) mobileTab.close();
                     showErrorBanner('Mind Map එක PDF එකට convert කරගන්න බැරි උනා.');
                 };
                 img.src = url;
             } catch (err) {
                 console.error('PDF export error:', err);
+                if (mobileTab) mobileTab.close();
                 showErrorBanner('Mind Map එක PDF එකට convert කරගන්න බැරි උනා.');
             }
         });
