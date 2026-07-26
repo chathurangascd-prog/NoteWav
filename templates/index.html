@@ -671,9 +671,62 @@
                 font-size: 0.75rem;
             }
         }
+
+        /* ===== SPLASH SCREEN (app open animation) ===== */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            animation: splashFadeOut 0.5s ease forwards;
+            animation-delay: 1.7s;
+        }
+        .splash-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 24px;
+            opacity: 0;
+            transform: scale(0.85);
+            animation: splashIconIn 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            animation-delay: 0.1s;
+            box-shadow: 0 8px 40px rgba(107, 48, 255, 0.35);
+        }
+        .splash-text {
+            font-family: 'Fraunces', serif;
+            font-size: 2rem;
+            font-weight: 600;
+            font-style: italic;
+            background: var(--primary-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            opacity: 0;
+            transform: translateY(8px);
+            animation: splashTextIn 0.6s ease forwards;
+            animation-delay: 0.55s;
+        }
+        @keyframes splashIconIn {
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes splashTextIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes splashFadeOut {
+            to { opacity: 0; visibility: hidden; pointer-events: none; }
+        }
     </style>
 </head>
 <body>
+
+    <div id="splash-screen">
+        <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="" class="splash-icon">
+        <h1 class="splash-text">NoteWav</h1>
+    </div>
 
     <div id="error-banner" class="hidden" role="alert">
         <i class="fas fa-triangle-exclamation"></i>
