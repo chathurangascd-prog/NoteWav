@@ -793,19 +793,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // FIX (mobile download still failing): the previous version
-            // called window.open() inside img.onload — an ASYNC callback.
-            // By the time that runs, the browser no longer considers it
-            // a direct result of the click, so mobile Safari/Chrome
-            // silently blocked it as a popup. Opening a blank tab HERE,
-            // synchronously inside the click handler, keeps it tied to
-            // the user gesture — we just redirect that already-open tab
-            // to the real PDF once it's ready.
             const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-            let mobileTab = null;
-            if (isMobile) {
-                mobileTab = window.open('', '_blank');
-            }
 
             try {
                 const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
@@ -832,29 +820,52 @@ document.addEventListener('DOMContentLoaded', function() {
                     const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
                     pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
 
-                    if (isMobile) {
-                        const pdfBlobUrl = pdf.output('bloburl');
-                        if (mobileTab) {
-                            mobileTab.location.href = pdfBlobUrl;
-                        } else {
-                            // The blank tab itself got blocked — fall
-                            // back to a direct open attempt anyway.
-                            window.open(pdfBlobUrl, '_blank');
+                    // FIX (mobile showed a blank page): a blob URL
+                    // created on this page often fails to resolve when
+                    // navigated to from a DIFFERENT tab/window on mobile
+                    // browsers — that's what caused the blank page.
+                    // The Web Share API sidesteps this entirely: it
+                    // hands the actual PDF file to the OS share sheet
+                    // (Save to Files, share via WhatsApp, etc.) with no
+                    // new tab or blob URL involved.
+                    if (isMobile && navigator.share && navigator.canShare) {
+                        const pdfBlob = pdf.output('blob');
+                        const pdfFile = new File([pdfBlob], 'notewav_mindmap.pdf', { type: 'application/pdf' });
+
+                        if (navigator.canShare({ files: [pdfFile] })) {
+                            navigator.share({
+                                files: [pdfFile],
+                                title: 'NoteWav Mind Map',
+                            }).catch(err => {
+                                // AbortError just means the user cancelled the share sheet — not a real error.
+                                if (err && err.name !== 'AbortError') {
+                                    console.error('Share failed:', err);
+                                    showErrorBanner('PDF share කරගැනීම අසාර්ථක විය.');
+                                }
+                            });
+                            return;
                         }
-                        showErrorBanner('PDF එක tab එකකින් open වුනා — Share/Download icon එකෙන් save කරගන්න.');
+                    }
+
+                    if (isMobile) {
+                        // Web Share API unavailable — fall back to
+                        // navigating THIS SAME tab to the blob URL
+                        // (same document context, so it always
+                        // resolves, unlike opening a new tab).
+                        const pdfBlobUrl = pdf.output('bloburl');
+                        window.location.href = pdfBlobUrl;
+                        showErrorBanner('PDF එක open වෙනවා — Share/Download icon එකෙන් save කරගන්න.');
                     } else {
                         pdf.save('notewav_mindmap.pdf');
                     }
                 };
                 img.onerror = function() {
                     URL.revokeObjectURL(url);
-                    if (mobileTab) mobileTab.close();
                     showErrorBanner('Mind Map එක PDF එකට convert කරගන්න බැරි උනා.');
                 };
                 img.src = url;
             } catch (err) {
                 console.error('PDF export error:', err);
-                if (mobileTab) mobileTab.close();
                 showErrorBanner('Mind Map එක PDF එකට convert කරගන්න බැරි උනා.');
             }
         });
