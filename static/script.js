@@ -802,61 +802,72 @@ document.addEventListener('DOMContentLoaded', function() {
                 const img = new Image();
 
                 img.onload = function() {
-                    const scale = 3; // high-res export — renders the SVG crisply at 3x its real size
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width * scale;
-                    canvas.height = height * scale;
+                    // FIX ("click but nothing happens"): this whole
+                    // callback runs asynchronously (after the image
+                    // loads), so the outer try/catch around img.src=url
+                    // does NOT catch errors thrown in here — they were
+                    // failing completely silently. Wrapping this body in
+                    // its own try/catch means any failure (canvas
+                    // tainting, jsPDF issues, Share API quirks) now
+                    // shows a real error message instead of doing
+                    // nothing.
+                    try {
+                        const scale = 3; // high-res export — renders the SVG crisply at 3x its real size
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width * scale;
+                        canvas.height = height * scale;
 
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#14141e'; // match app background, avoid a transparent/white PDF
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.scale(scale, scale);
-                    ctx.drawImage(img, 0, 0, width, height);
-                    URL.revokeObjectURL(url);
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#14141e'; // match app background, avoid a transparent/white PDF
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.scale(scale, scale);
+                        ctx.drawImage(img, 0, 0, width, height);
+                        URL.revokeObjectURL(url);
 
-                    const imgData = canvas.toDataURL('image/png');
-                    const { jsPDF } = window.jspdf;
-                    const orientation = canvas.width >= canvas.height ? 'l' : 'p';
-                    const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
-                    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                        const imgData = canvas.toDataURL('image/png');
+                        const { jsPDF } = window.jspdf;
+                        const orientation = canvas.width >= canvas.height ? 'l' : 'p';
+                        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
+                        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
 
-                    // FIX (mobile showed a blank page): a blob URL
-                    // created on this page often fails to resolve when
-                    // navigated to from a DIFFERENT tab/window on mobile
-                    // browsers — that's what caused the blank page.
-                    // The Web Share API sidesteps this entirely: it
-                    // hands the actual PDF file to the OS share sheet
-                    // (Save to Files, share via WhatsApp, etc.) with no
-                    // new tab or blob URL involved.
-                    if (isMobile && navigator.share && navigator.canShare) {
-                        const pdfBlob = pdf.output('blob');
-                        const pdfFile = new File([pdfBlob], 'notewav_mindmap.pdf', { type: 'application/pdf' });
+                        // The Web Share API hands the actual PDF file to
+                        // the OS share sheet (Save to Files, share via
+                        // WhatsApp, etc.) — no new tab or blob URL
+                        // navigation involved, which is what made mobile
+                        // downloads unreliable before.
+                        if (isMobile && navigator.share && navigator.canShare) {
+                            const pdfBlob = pdf.output('blob');
+                            const pdfFile = new File([pdfBlob], 'notewav_mindmap.pdf', { type: 'application/pdf' });
 
-                        if (navigator.canShare({ files: [pdfFile] })) {
-                            navigator.share({
-                                files: [pdfFile],
-                                title: 'NoteWav Mind Map',
-                            }).catch(err => {
-                                // AbortError just means the user cancelled the share sheet — not a real error.
-                                if (err && err.name !== 'AbortError') {
-                                    console.error('Share failed:', err);
-                                    showErrorBanner('PDF share කරගැනීම අසාර්ථක විය.');
-                                }
-                            });
-                            return;
+                            if (navigator.canShare({ files: [pdfFile] })) {
+                                navigator.share({
+                                    files: [pdfFile],
+                                    title: 'NoteWav Mind Map',
+                                }).catch(err => {
+                                    // AbortError just means the user cancelled the share sheet — not a real error.
+                                    if (err && err.name !== 'AbortError') {
+                                        console.error('Share failed:', err);
+                                        showErrorBanner('PDF share කරගැනීම අසාර්ථක විය: ' + err.message);
+                                    }
+                                });
+                                return;
+                            }
                         }
-                    }
 
-                    if (isMobile) {
-                        // Web Share API unavailable — fall back to
-                        // navigating THIS SAME tab to the blob URL
-                        // (same document context, so it always
-                        // resolves, unlike opening a new tab).
-                        const pdfBlobUrl = pdf.output('bloburl');
-                        window.location.href = pdfBlobUrl;
-                        showErrorBanner('PDF එක open වෙනවා — Share/Download icon එකෙන් save කරගන්න.');
-                    } else {
-                        pdf.save('notewav_mindmap.pdf');
+                        if (isMobile) {
+                            // Web Share API unavailable — fall back to
+                            // navigating THIS SAME tab to the blob URL
+                            // (same document context, so it always
+                            // resolves, unlike opening a new tab).
+                            const pdfBlobUrl = pdf.output('bloburl');
+                            window.location.href = pdfBlobUrl;
+                            showErrorBanner('PDF එක open වෙනවා — Share/Download icon එකෙන් save කරගන්න.');
+                        } else {
+                            pdf.save('notewav_mindmap.pdf');
+                        }
+                    } catch (innerErr) {
+                        console.error('PDF generation error (inside img.onload):', innerErr);
+                        showErrorBanner('PDF හදන්න බැරි උනා: ' + (innerErr && innerErr.message ? innerErr.message : innerErr));
                     }
                 };
                 img.onerror = function() {
