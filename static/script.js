@@ -554,18 +554,45 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.mermaid) {
         mermaid.initialize({
             startOnLoad: false,
-            theme: 'dark',
+            theme: 'base',
             securityLevel: 'loose',
             fontFamily: 'Plus Jakarta Sans, sans-serif',
             flowchart: {
                 htmlLabels: false,
-                nodeSpacing: 65,
-                rankSpacing: 75,
-                padding: 40
+                nodeSpacing: 70,
+                rankSpacing: 85,
+                padding: 20,
+                curve: 'basis' // smooth curved connectors instead of sharp angles
             },
             themeVariables: {
-                fontSize: '20px'
-            }
+                fontSize: '19px',
+                fontFamily: 'Plus Jakarta Sans, sans-serif',
+                primaryColor: '#241f38',        // default (uncategorized) node fill
+                primaryTextColor: '#ffffff',
+                primaryBorderColor: '#6b30ff',
+                lineColor: '#8b6fd6',
+                background: '#14141e',
+                mainBkg: '#241f38',
+                clusterBkg: '#1c1c2a',
+                edgeLabelBackground: '#1c1c2a',
+                nodeBorder: '#6b30ff',
+            },
+            // NEW: polish pass — rounded node corners + soft glow
+            // shadow (matches the app's glass-card aesthetic elsewhere)
+            // and thicker, smoother connector lines. Mermaid embeds
+            // this raw CSS directly into the rendered SVG.
+            themeCSS: `
+                .node rect, .node polygon, .node circle, .node ellipse {
+                    rx: 14px; ry: 14px;
+                    filter: drop-shadow(0 4px 14px rgba(107, 48, 255, 0.28));
+                }
+                .edgePath .path {
+                    stroke-width: 2.5px;
+                }
+                .node.root-node rect, .node.root-node polygon {
+                    filter: drop-shadow(0 6px 22px rgba(107, 48, 255, 0.5));
+                }
+            `
         });
     }
 

@@ -297,21 +297,22 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    d. ඉහත 3න් කිසිවකට match නොවේ නම් (සාමාන්‍ය category/grouping node එකක් නම්):
       ":::className" කිසිවක් නොදා, plain label එකක් විතරක් දාන්න.
 
-   Root node එකට සහ ප්‍රධාන category nodes (කොන්දේසි/ක්‍රියාවලිය වැනි grouping nodes)
-   වලට class එකක් **නොදෙන්න** — ඒවා structure/organization විතරයි පෙන්වන්නේ, content
-   කරුණු නොවේ.
-   ":::important" size එකේ label එකට syntax එකම භාවිතා කරන්න — "A[Label]:::important".
+   Root node එකට **හැමවිටම** ":::root" class එක දෙන්න (උදා: "Root[Label]:::root") —
+   එය visual විදිහට වෙනස් කර පෙන්වයි. ප්‍රධාන category nodes (කොන්දේසි/ක්‍රියාවලිය වැනි
+   grouping nodes) වලට කිසිම class එකක් **නොදෙන්න** — ඒවා structure/organization
+   විතරයි පෙන්වන්නේ, content කරුණු නොවේ.
 7. Node label එකේ විශේෂ අකුරු (", (, ), {{, }}, |, :) තිබේ නම් label එක quotes
    ("...") තුළ දමන්න — උදා: A["සම්භවය (1948)"]:::example.
 8. Syntax සම්පූර්ණයෙන්ම වලංගු (valid) බවට වගබලාගන්න.
-9. **හැම විටම අවසානයේ, මේ පේළි තුනම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
+9. **හැම විටම අවසානයේ, මේ පේළි හතරම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
+   classDef root fill:#6b30ff,color:#ffffff,stroke:#a78bfa,stroke-width:3px,font-weight:bold
    classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
    classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
    classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
 
 උදාහරණයක් (structure එක විතරයි, content එක ඔබේම පාඩම අනුව):
 flowchart TD
-  Root[ප්‍රභාසංස්ලේෂණය] --> A[කොන්දේසි]
+  Root[ප්‍රභාසංස්ලේෂණය]:::root --> A[කොන්දේසි]
   A --> A1[සූර්ය ආලෝකය]:::important
   A --> A2[ජලය]:::important
   Root --> B[ක්‍රියාවලිය]
@@ -319,6 +320,7 @@ flowchart TD
   B --> B2[පත්‍ර වල සිදුවේ]:::example
   Root --> C[ප්‍රතිඵල]
   C --> C1[ඔක්සිජන් නිකුත් වීම]
+  classDef root fill:#6b30ff,color:#ffffff,stroke:#a78bfa,stroke-width:3px,font-weight:bold
   classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
   classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
   classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
