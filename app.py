@@ -287,7 +287,10 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    "id" කියන්නේ character 2-4ක ඉංග්‍රීසි අකුරු/සංඛ්‍යා (A1, B2 වැනි) — Sinhala අකුරු
    id එකට කිසිසේත් යොදන්න එපා. mermaid_code_si සහ mermaid_code_en දෙකේම id එකම
    විය යුතුය (label භාෂාව විතරයි වෙනස් වෙන්නේ).
-6. Label එකේ "(" හෝ ")" අකුරු තිබේ නම්, label එක quotes තුළ දමන්න: id("සම්භවය (1948)"):::example
+6. **ඉතා වැදගත්:** Label එකේ "(" හෝ ")" අකුරු (රසායන සූත්‍ර, දිනයන් වරහන් තුළ, ඕනෑම
+   කරුණක්) තිබේ නම්, **අනිවාර්යයෙන්ම** label එකම quotes ("...") තුළ දමන්න — id("සම්භවය (1948)"):::example
+   වැනි. මෙය මගහැරුනොත් සම්පූර්ණ mind map එකම render වීම අසාර්ථක වේ. සැක සහිත
+   අවස්ථාවකදී, quotes යොදන්න වඩා ආරක්ෂිතයි.
 7. Root node එකේ සිට උප මාතෘකා 2-3 level දක්වා පමණක් යොදන්න (ඉතා ගැඹුරු nesting එපා).
    සම්පූර්ණ mind map එකේ nodes 8ත් 20ත් අතර ප්‍රමාණයක් තබාගන්න.
 8. **හැම විටම අවසානයේ, මේ පේළි තුනම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
@@ -336,6 +339,19 @@ def _sanitize_mermaid_labels(code):
     Gemini is instructed to quote node labels containing special
     characters, but doesn't always do it reliably. Wraps EVERY
     square/round/circle-bracket node label in quotes unconditionally.
+
+    FIX #2 (mindmap rendering broke entirely after this ran — "Syntax
+    error in text"): the original character classes were [^()]+ /
+    [^\\[\\]]+, which can match ACROSS newlines. If any single label
+    anywhere in the code had an unquoted, unbalanced paren (e.g. Gemini
+    wrote "Glucose (C6H12O6) production" without quotes), the regex
+    would keep consuming forward hunting for a matching closing paren
+    — swallowing subsequent lines and their indentation whitespace
+    into one corrupted blob. Since mindmap syntax is 100% dependent on
+    per-line indentation to express hierarchy, that corruption broke
+    the whole diagram, not just the one bad label. Excluding \\n from
+    every character class below means a match can never cross a line
+    boundary, so one bad label now stays a contained, local problem.
     """
     if not code:
         return code
@@ -364,9 +380,9 @@ def _sanitize_mermaid_labels(code):
         safe_label = stripped.replace('"', "'")
         return f'{node_id}(("{safe_label}"))'
 
-    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\(\(([^()]+)\)\)', quote_circle_label, code)
-    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\[([^\[\]]+)\]', quote_square_label, code)
-    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\(([^()]+)\)(:::\w+)?', quote_round_label, code)
+    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\(\(([^()\n]+)\)\)', quote_circle_label, code)
+    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\[([^\[\]\n]+)\]', quote_square_label, code)
+    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\(([^()\n]+)\)(:::\w+)?', quote_round_label, code)
     return code
 
 
