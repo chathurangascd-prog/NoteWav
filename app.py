@@ -31,8 +31,6 @@ except Exception as e:
 
 app = Flask(__name__)
 
-# Server-side upload limit for OCR images (client-side JS check alone
-# can be bypassed).
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 
 # ========================================
@@ -71,13 +69,10 @@ init_db()
 # ========================================
 # FEATURE 2: ABUSE PREVENTION / SAFETY VALIDATION
 # ========================================
-MAX_TEXT_LENGTH = 2000  # hard character cap before sending to Gemini/ElevenLabs
+MAX_TEXT_LENGTH = 2000
 
 
 def validate_text_length(text):
-    """Returns a friendly Sinhala error message if text is too long,
-    otherwise None. Enforced BEFORE any Gemini or ElevenLabs API call
-    to prevent unexpected cost overruns from very long inputs."""
     if len(text) > MAX_TEXT_LENGTH:
         return (
             f'සටහන ඉතා දිගයි — අකුරු {MAX_TEXT_LENGTH}ක සීමාවක් තිබේ '
@@ -103,8 +98,6 @@ try:
         print("✅ Google Cloud Vision API is ready!")
     else:
         print("⚠️ Google Cloud Vision credentials not found")
-        print(f"   Path checked: {credentials_path}")
-        print(f"   File exists: {os.path.exists(credentials_path) if credentials_path else False}")
 except Exception as e:
     print(f"⚠️ Google Cloud Vision not available: {e}")
 
@@ -119,8 +112,6 @@ else:
     client = None
     print("⚠️ GEMINI_API_KEY not found")
 
-# FEATURE 2: Gemini safety settings — block harmful/inappropriate
-# content across all standard harm categories.
 SAFETY_SETTINGS = [
     types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
     types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_MEDIUM_AND_ABOVE'),
@@ -128,9 +119,7 @@ SAFETY_SETTINGS = [
     types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
 ]
 
-# ========================================
-# LANGUAGE DETECTION (used for OCR result labeling)
-# ========================================
+
 def detect_language(text):
     sinhala_count = 0
     telugu_count = 0
@@ -164,29 +153,10 @@ def detect_language(text):
         return 'Mixed'
 
 
-# ========================================
-# TEXT FORMATTING FOR TTS
-# ========================================
 def format_for_podcast(text):
     if not text:
         return ""
 
-    # FIX (list-style notes read as one long run-on): the old code
-    # collapsed ALL whitespace — including newlines — into single
-    # spaces immediately, before any sentence-splitting happened
-    # downstream. That destroyed line-item boundaries in notes like:
-    #   Topic list:
-    #   ප්‍රභාසංස්ලේෂණය
-    #   මානව පෝෂණය
-    #   ...
-    # so by the time build_ssml() tried to split into sentences (on
-    # '.', '!', '?'), there were no such marks between items — the
-    # whole list looked like one giant sentence with no pauses.
-    #
-    # Fix: give each non-empty LINE its own sentence-ending period
-    # (if it doesn't already end with one) BEFORE collapsing
-    # whitespace, so every line becomes its own "sentence" and gets
-    # its own <break> pause later.
     lines = [ln.strip() for ln in text.split('\n') if ln.strip()]
     lines = [ln if ln[-1] in ['.', '!', '?', '।', ':'] else ln + '.' for ln in lines]
     text = ' '.join(lines)
@@ -210,12 +180,7 @@ def format_for_podcast(text):
     return text
 
 
-# ========================================
-# AUDIO FILE CLEANUP
-# ========================================
 def cleanup_old_audio(max_age_seconds=3600):
-    """Every /tts call writes a unique file, so we periodically clean
-    up old ones instead of letting static/ grow forever."""
     try:
         now = time.time()
         for path in glob.glob('static/output_*.mp3'):
@@ -225,35 +190,16 @@ def cleanup_old_audio(max_age_seconds=3600):
         print(f"⚠️ Audio cleanup skipped: {e}")
 
 
-# ========================================
-# gTTS + pydub ENGINE (free, no API key needed)
-# ========================================
-# The sole TTS engine used by the app. gTTS's Sinhala pronunciation is
-# generally fine on its own, but the base gTTS call reads a whole
-# block of text flatly with no real pauses. So we synthesize each
-# sentence separately (in parallel, for speed) and stitch them
-# together with real silence gaps for a more natural pace.
-GTTS_AVAILABLE = True  # gTTS needs no API key, just the library + network
-GTTS_FRAME_RATE = 24000  # gTTS's actual output sample rate (mono mp3)
+GTTS_AVAILABLE = True
+GTTS_FRAME_RATE = 24000
 
 
 def split_into_sentences(text):
-    """Split on sentence-ending punctuation while keeping it attached
-    to the sentence."""
     parts = re.split(r'(?<=[.!?])\s+', text)
     return [p.strip() for p in parts if p.strip()]
 
 
 def _tts_sentence_to_segment(args):
-    """Runs in a worker thread: synthesize one sentence with gTTS and
-    return the decoded, frame-rate-normalized audio segment.
-
-    Forcing a consistent frame rate matters: tiny per-sentence mp3
-    clips can get their sample rate mis-detected by ffmpeg, and pydub
-    then auto-resamples using each segment's (wrong) rate as it
-    concatenates — the errors compound across many sentences and the
-    whole track ends up sounding slowed down / pitched lower.
-    """
     sentence, lang = args
     buf = io.BytesIO()
     gTTS(text=sentence, lang=lang, slow=False, tld='com').write_to_fp(buf)
@@ -263,9 +209,6 @@ def _tts_sentence_to_segment(args):
 
 
 def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600, max_workers=5):
-    """Synthesizes each sentence separately (in parallel, for speed)
-    and stitches them together with real silence gaps, instead of one
-    giant gTTS call that reads as a flat, robotic wall of speech."""
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
@@ -295,13 +238,7 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     return combined
 
 
-# ========================================
-# FEATURE 1: STRUCTURED GEMINI OUTPUT
-# (podcast_script + mermaid_code in one JSON response)
-# ========================================
 class GeminiGenerationError(Exception):
-    """Raised whenever Gemini fails to produce usable structured
-    output — safety block, empty response, unparsable JSON, etc."""
     pass
 
 
@@ -312,8 +249,8 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
 
 {{
   "podcast_script": "<සම්පූර්ණ පොඩ්කාස්ට් script එක, පාඩම ලියැවී ඇති භාෂාවෙන්ම (Sinhala නම් Sinhala, Tamil නම් Tamil)>",
-  "mermaid_code_si": "<Mermaid.js flowchart syntax එකක්, node labels සියල්ලම සිංහලෙන්>",
-  "mermaid_code_en": "<Mermaid.js flowchart syntax එකක්, node labels සියල්ලම English වලින්, mermaid_code_si එකේම structure/nodes ම>"
+  "mermaid_code_si": "<Mermaid.js mindmap syntax එකක්, node labels සියල්ලම සිංහලෙන්>",
+  "mermaid_code_en": "<Mermaid.js mindmap syntax එකක්, node labels සියල්ලම English වලින්, mermaid_code_si එකේම structure/nodes ම>"
 }}
 
 === "podcast_script" සඳහා නීති ===
@@ -331,19 +268,47 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    කරුණු කිසිවක් මඟ නොහැරිය යුතුය, නමුත් filler වචන ප්‍රමාණය අවශ්‍ය නම් අඩු කරන්න.
 
 === "mermaid_code_si" සහ "mermaid_code_en" දෙකටම පොදු නීති ===
-1. "flowchart TD" වලින්ම පටන් ගන්න.
-2. පාඩමේ ප්‍රධාන මාතෘකාව root node එකක් ලෙසත්, උප මාතෘකා/ප්‍රධාන සංකල්ප child nodes
-   ලෙසත් සකසන්න (අවශ්‍ය නම් උප-child nodes එකතු කරන්න).
-3. දෙකෙහිම node structure එක (nodes ගණන, connections) එකම විය යුතුය — වෙනස් වෙන්නේ
-   label භාෂාව විතරයි: "mermaid_code_si" හි සියලුම node labels සිංහලෙන්, "mermaid_code_en"
-   හි සියලුම node labels English වලින්.
-4. එක් node label එකක් වචන 1-6ක් තරම් කෙටියෙන් තබන්න.
-5. Node id ලෙස ඉංග්‍රීසි අකුරු/සංඛ්‍යා පමණක් යොදන්න (උදා: A, B, C1) — Sinhala අකුරු
-   node id එකට කිසිසේත් යොදන්න එපා, mermaid parser එකට එය parse කරගත නොහැක. Node id
-   දෙකේම (si/en) එකම විය යුතුය.
-6. Node label එකේ විශේෂ අකුරු (", (, ), {{, }}, |, :) තිබේ නම් label එක quotes
-   ("...") තුළ දමන්න — උදා: A["සම්භවය (1948)"].
-7. Syntax සම්පූර්ණයෙන්ම වලංගු (valid) බවට වගබලාගන්න.
+(මේවා flowchart නොවේ — "mindmap" වර්ගයේ, root topic එකකින් branches පැතිරෙන
+ radial mind map layout එකකි.)
+
+1. පළමු පේළිය හැමවිටම "mindmap" විතරක් විය යුතුය (වෙන කිසිවක් නොදා).
+2. දෙවන පේළියේ root node එක මෙසේ ලියන්න (2 spaces indent, double-parens circle shape):
+   "  root((මූලික මාතෘකාව))"
+3. උප මාතෘකා root node එකට වඩා තවත් 2 spaces indent කර, root එකට පහළින් එකින් එක
+   වෙනම පේළි වල ලියන්න. උප-උප මාතෘකා තව 2 spaces වැඩිපුර indent කරන්න. Indentation
+   එක හරියටම අනුගමනය කරන්න — mindmap parser එක සම්පූර්ණයෙන්ම indentation මත රඳා පවතී.
+4. එක් පේළියකට එක් node එකක් විතරයි දාන්න.
+5. **Node වර්ග අනුව color-coding:** සෑම node එකක්ම පහත ආකාර 4න් එකකට වර්ග කරන්න:
+   - **වැදගත් core concept** එකක් නම්: "id(Label):::important"
+   - **උදාහරණයක්** (example) නම්: "id(Label):::example"
+   - **නිර්වචනයක්** (definition/meaning) නම්: "id(Label):::definition"
+   - වෙන කිසිවක් (සාමාන්‍ය උප-මාතෘකාවක්/ප්‍රවර්ගයක් නම්): shape/class දෙකම නොදා
+     plain label එකක් විතරක් දාන්න (id අවශ්‍ය නැත).
+   "id" කියන්නේ character 2-4ක ඉංග්‍රීසි අකුරු/සංඛ්‍යා (A1, B2 වැනි) — Sinhala අකුරු
+   id එකට කිසිසේත් යොදන්න එපා. mermaid_code_si සහ mermaid_code_en දෙකේම id එකම
+   විය යුතුය (label භාෂාව විතරයි වෙනස් වෙන්නේ).
+6. Label එකේ "(" හෝ ")" අකුරු තිබේ නම්, label එක quotes තුළ දමන්න: id("සම්භවය (1948)"):::example
+7. Root node එකේ සිට උප මාතෘකා 2-3 level දක්වා පමණක් යොදන්න (ඉතා ගැඹුරු nesting එපා).
+   සම්පූර්ණ mind map එකේ nodes 8ත් 20ත් අතර ප්‍රමාණයක් තබාගන්න.
+8. **හැම විටම අවසානයේ, මේ පේළි තුනම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
+   classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
+   classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
+   classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
+
+උදාහරණයක් (structure එක විතරයි, content එක ඔබේම පාඩම අනුව):
+mindmap
+  root((ප්‍රභාසංස්ලේෂණය))
+    කොන්දේසි
+      A1(සූර්ය ආලෝකය):::important
+      A2(ජලය):::important
+    ක්‍රියාවලිය
+      B1("ග්ලූකෝස් (C6H12O6) නිපදවීම"):::definition
+      B2(පත්‍ර වල සිදුවේ):::example
+    ප්‍රතිඵල
+      C1(ඔක්සිජන් නිකුත් වීම)
+  classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
+  classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
+  classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
 
 JSON object එක parse කළ නොහැකි නම් සම්පූර්ණ පද්ධතියම අසාර්ථක වන බැවින්, ඉහත format
 එකෙන් බැහැරව කිසිවක් නොදෙන්න.
@@ -351,9 +316,6 @@ JSON object එක parse කළ නොහැකි නම් සම්පූර�
 
 
 def _parse_json_loose(raw_text):
-    """Gemini is instructed to return pure JSON, but as a safety net
-    this also handles the case where it wraps the JSON in ```json
-    fences or adds stray text around it."""
     text = raw_text.strip()
     text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=re.MULTILINE).strip()
 
@@ -372,21 +334,13 @@ def _parse_json_loose(raw_text):
 def _sanitize_mermaid_labels(code):
     """FIX (Mermaid parse errors like 'Expecting SQE ... got PS'):
     Gemini is instructed to quote node labels containing special
-    characters (parentheses, colons, etc.), but doesn't always do it
-    reliably — an unquoted "(" inside a [...] label is ambiguous with
-    Mermaid's own node-shape syntax and breaks the whole diagram.
-
-    Rather than trying to guess which labels need quoting, this wraps
-    EVERY square-bracket node label in quotes unconditionally (quoting
-    a plain label is always valid Mermaid syntax, so this never makes
-    a working label worse) — it only skips labels that are already
-    quoted, and escapes any stray internal quotes so the result stays
-    valid.
+    characters, but doesn't always do it reliably. Wraps EVERY
+    square/round/circle-bracket node label in quotes unconditionally.
     """
     if not code:
         return code
 
-    def quote_label(match):
+    def quote_square_label(match):
         node_id, label = match.group(1), match.group(2)
         stripped = label.strip()
         if stripped.startswith('"') and stripped.endswith('"'):
@@ -394,8 +348,26 @@ def _sanitize_mermaid_labels(code):
         safe_label = stripped.replace('"', "'")
         return f'{node_id}["{safe_label}"]'
 
-    pattern = re.compile(r'([A-Za-z][A-Za-z0-9_]*)\[([^\[\]]+)\]')
-    return pattern.sub(quote_label, code)
+    def quote_round_label(match):
+        node_id, label, suffix = match.group(1), match.group(2), match.group(3) or ''
+        stripped = label.strip()
+        if stripped.startswith('"') and stripped.endswith('"'):
+            return match.group(0)
+        safe_label = stripped.replace('"', "'")
+        return f'{node_id}("{safe_label}"){suffix}'
+
+    def quote_circle_label(match):
+        node_id, label = match.group(1), match.group(2)
+        stripped = label.strip()
+        if stripped.startswith('"') and stripped.endswith('"'):
+            return match.group(0)
+        safe_label = stripped.replace('"', "'")
+        return f'{node_id}(("{safe_label}"))'
+
+    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\(\(([^()]+)\)\)', quote_circle_label, code)
+    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\[([^\[\]]+)\]', quote_square_label, code)
+    code = re.sub(r'([A-Za-z][A-Za-z0-9_]*)\(([^()]+)\)(:::\w+)?', quote_round_label, code)
+    return code
 
 
 def _clean_mermaid_code(code):
@@ -408,12 +380,6 @@ def _clean_mermaid_code(code):
 
 
 def call_gemini_structured(note_text):
-    """Calls Gemini once and returns (podcast_script, mermaid_code_si,
-    mermaid_code_en). Both Mind Map language versions are generated in
-    the same call so switching between them in the UI is instant (no
-    extra request needed) — raises GeminiGenerationError with a
-    human-readable reason on any failure (safety block, empty
-    response, bad JSON, missing fields)."""
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -437,8 +403,6 @@ def call_gemini_structured(note_text):
     except Exception as e:
         raise GeminiGenerationError(f"Gemini request failed: {e}")
 
-    # FEATURE 2: detect safety-blocked content explicitly, rather than
-    # letting it surface as a confusing crash.
     if not getattr(response, 'candidates', None):
         block_reason = getattr(getattr(response, 'prompt_feedback', None), 'block_reason', 'unknown')
         raise GeminiGenerationError(f"Content was blocked by Gemini's safety filters ({block_reason}).")
@@ -464,9 +428,6 @@ def call_gemini_structured(note_text):
     return podcast_script, mermaid_code_si, mermaid_code_en
 
 
-# ========================================
-# OCR ROUTE
-# ========================================
 @app.route('/ocr', methods=['POST'])
 def ocr_image():
     print("=" * 50)
@@ -547,9 +508,6 @@ def ocr_image():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ========================================
-# TTS ROUTE (gTTS — free, no API key needed)
-# ========================================
 @app.route('/tts', methods=['POST'])
 def text_to_speech():
     data = request.get_json(silent=True) or {}
@@ -558,7 +516,6 @@ def text_to_speech():
     if not text:
         return jsonify({'status': 'error', 'message': 'කියවීමට කිසිම text එකක් ලැබී නැත.'}), 400
 
-    # FEATURE 2: character limit check before calling gTTS.
     length_error = validate_text_length(text)
     if length_error:
         return jsonify({'status': 'error', 'message': length_error}), 400
@@ -571,9 +528,6 @@ def text_to_speech():
         os.makedirs('static')
     cleanup_old_audio()
 
-    # NEW (Tamil support): detect the note's language and pick the
-    # matching gTTS voice instead of always forcing Sinhala, so Tamil
-    # notes are narrated in Tamil.
     detected_lang = detect_language(formatted_text)
     gtts_lang = {'Sinhala': 'si', 'Tamil': 'ta', 'English': 'en'}.get(detected_lang, 'si')
 
@@ -593,17 +547,11 @@ def text_to_speech():
         }), 500
 
 
-# ========================================
-# HOME ROUTE
-# ========================================
 @app.route('/')
 def home():
     return render_template('index.html')
 
 
-# ========================================
-# PROCESS NOTE ROUTE (Feature 1 + Feature 2)
-# ========================================
 @app.route('/process-note', methods=['POST'])
 def process_note():
     data = request.get_json(silent=True) or {}
@@ -613,14 +561,11 @@ def process_note():
     if not note_text:
         return jsonify({'status': 'error', 'message': 'කරුණාකර පාඩම් සටහනක් ඇතුළත් කරන්න.'}), 400
 
-    # FEATURE 2: character limit check before calling Gemini.
     length_error = validate_text_length(note_text)
     if length_error:
         return jsonify({'status': 'error', 'message': length_error}), 400
 
     if not client:
-        # Gemini not configured — no Smart Study, no Mind Map. Full
-        # Text mode still works with the raw note.
         return jsonify({
             'status': 'success',
             'processed_text': note_text,
@@ -643,8 +588,6 @@ def process_note():
             'warning': f'AI processing එක අසාර්ථක විය ({e}). ඔබේ මුල් text එකම පෙන්වයි.'
         })
 
-    # Full Text Mode: keep the user's original wording for narration,
-    # but the Mind Map (from the same Gemini call) is still useful.
     final_text = podcast_script if mode == 'smart' else note_text
 
     return jsonify({
@@ -656,9 +599,6 @@ def process_note():
     })
 
 
-# ========================================
-# NOTES LIBRARY ROUTES (save / list / load / delete)
-# ========================================
 @app.route('/library/save', methods=['POST'])
 def library_save():
     data = request.get_json(silent=True) or {}
@@ -676,7 +616,6 @@ def library_save():
     if length_error:
         return jsonify({'status': 'error', 'message': length_error}), 400
 
-    # Auto title: first few words of the note.
     title_source = (processed_text or note_text).strip()
     title = ' '.join(title_source.split()[:8])
     if len(title) < len(title_source):
@@ -744,9 +683,6 @@ def library_delete(note_id):
         return jsonify({'status': 'error', 'message': 'Note එක delete කරගැනීම අසාර්ථක විය.'}), 500
 
 
-# ========================================
-# HEALTH CHECK
-# ========================================
 @app.route('/health')
 def health():
     return jsonify({
@@ -760,11 +696,6 @@ def health():
 
 
 if __name__ == '__main__':
-    # Render (and most hosts) assign the port dynamically via $PORT.
-    # Locally, no PORT env var is set, so it falls back to 5001.
     port = int(os.environ.get('PORT', 5001))
-    # Debug mode is only for local development — never enable it on a
-    # public deployment (Werkzeug's debugger allows remote code
-    # execution if exposed to the internet).
     debug_mode = os.environ.get('FLASK_DEBUG', 'true').lower() == 'true'
     app.run(debug=debug_mode, host='0.0.0.0', port=port)
