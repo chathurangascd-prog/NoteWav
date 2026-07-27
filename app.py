@@ -479,7 +479,7 @@ def call_gemini_structured(note_text, max_retries=3):
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
                     temperature=0.3,
-                    max_output_tokens=4000,
+                    max_output_tokens=8000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
                 )
@@ -522,6 +522,15 @@ def call_gemini_structured(note_text, max_retries=3):
     finish_reason = str(getattr(candidate, 'finish_reason', '') or '')
     if 'SAFETY' in finish_reason.upper():
         raise GeminiGenerationError("Content was blocked by Gemini's safety filters.")
+    if 'MAX_TOKENS' in finish_reason.upper():
+        # FIX (helps diagnose "response could not be parsed as JSON"
+        # failures): if Gemini hits the output token cap mid-generation,
+        # the JSON gets cut off mid-string and fails to parse — but the
+        # generic parse-failure message didn't say WHY. This gives a
+        # much clearer signal when it happens again.
+        raise GeminiGenerationError(
+            "Gemini's response was cut off (hit the output length limit) — try shortening the note a bit."
+        )
 
     raw_text = response.text
     if not raw_text:
