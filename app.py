@@ -266,6 +266,12 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    යුතුය (spaces ඇතුළුව). පාඩම ඉතා දිග නම්, පොඩ්කාස්ට් වචන (යාලුවනේ, ඊළඟට වැනි)
    අඩුවෙන් යොදාගෙන හෝ core content එකට priority දී, එම සීමාව තුළ තබාගන්න — core
    කරුණු කිසිවක් මඟ නොහැරිය යුතුය, නමුත් filler වචන ප්‍රමාණය අවශ්‍ය නම් අඩු කරන්න.
+5. **රසායන සූත්‍ර/ගණිත ලියද්දී LaTeX/math notation (\\$H_2O\\$, ^, _ subscript syntax
+   වැනි) කිසිසේත් යොදන්න එපා** — මේවා TTS audio එකෙන් කියවෙන්නේ අමුතු ලෙසින්, කියවීමේදීත්
+   අවුල් සහගතයි. සාමාන්‍ය plain text විතරක් යොදන්න — උදා: "ජලය (H2O)" (ජලය ($H_2O$)
+   නොවේ), "කාබන් ඩයොක්සයිඩ් (CO2)" (($CO_2$) නොවේ). හැකි නම්, formula එකට වඩා සිංහල
+   වචනයම (උදා: "ජලය", "කාබන් ඩයොක්සයිඩ්") පමණක් යොදන්න, formula එක අත්‍යවශ්‍ය නම්
+   විතරක් වරහන් තුළ plain text එකක් ලෙස එකතු කරන්න.
 
 === "mermaid_code_si" සහ "mermaid_code_en" දෙකටම පොදු නීති ===
 1. "flowchart TD" වලින්ම පටන් ගන්න.
@@ -439,6 +445,28 @@ def _clean_mermaid_code(code):
     return code
 
 
+def _clean_podcast_script(text):
+    """FIX (chemical formulas showed up as literal "$H_2O$" in the
+    readable/narrated script): despite being instructed not to,
+    Gemini sometimes writes chemical formulas or math using LaTeX-style
+    notation ($...$ delimiters, _ for subscript, ^ for superscript).
+    That's meaningless as plain text — it reads oddly out loud via TTS
+    and looks broken on screen. This is a safety net: strip the $...$
+    math delimiters and normalize subscript/superscript characters to
+    plain digits, regardless of what the prompt asked for.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    text = text.translate(_SUBSCRIPT_SUPERSCRIPT_MAP)
+    # Remove LaTeX math delimiters ($...$) but keep the content inside,
+    # and drop stray underscore/caret subscript-superscript markers
+    # (e.g. "H_2O" -> "H2O", "x^2" -> "x2").
+    text = re.sub(r'\$([^$]+)\$', r'\1', text)
+    text = re.sub(r'(?<=[A-Za-z0-9])_(?=[A-Za-z0-9])', '', text)
+    text = re.sub(r'(?<=[A-Za-z0-9])\^(?=[A-Za-z0-9])', '', text)
+    return text
+
+
 def _is_transient_gemini_error(exc):
     """Distinguishes a transient server-side hiccup (worth a quick
     retry) from a permanent problem (bad API key, safety block,
@@ -548,7 +576,7 @@ def call_gemini_structured(note_text, max_retries=3):
 
     data = _parse_json_loose(raw_text)
 
-    podcast_script = (data.get('podcast_script') or '').strip()
+    podcast_script = _clean_podcast_script((data.get('podcast_script') or '').strip())
     mermaid_code_si = _clean_mermaid_code(data.get('mermaid_code_si'))
     mermaid_code_en = _clean_mermaid_code(data.get('mermaid_code_en'))
 
