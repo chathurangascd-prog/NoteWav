@@ -4,7 +4,7 @@
 // (/process-note, /tts, /ocr, /library/*) are NEVER cached — they
 // always need a live network request, so those are excluded here.
 
-const CACHE_NAME = 'notewav-shell-v3'; // bumped again after splash-screen JS fix
+const CACHE_NAME = 'notewav-shell-v4'; // bumped after mind map arrow/PDF fixes
 const SHELL_FILES = [
     '/',
     '/static/styles.css',
