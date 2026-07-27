@@ -887,6 +887,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const doc = parser.parseFromString(svgString, 'image/svg+xml');
         const svgEl = doc.documentElement;
 
+        // FIX (color/fill fixes never showed up in the exported PDF no
+        // matter how they were applied to the live on-screen DOM):
+        // html2canvas apparently doesn't reflect JS-applied style/attr
+        // changes made to a separately-inserted copy of the SVG. Doing
+        // it HERE instead — directly on this parsed, string-based copy,
+        // serialized back to text with XMLSerializer below — bakes the
+        // fix directly into the markup TEXT itself, before it's ever
+        // inserted into any DOM at all. That removes any ambiguity
+        // about what html2canvas does or doesn't pick up live.
+        svgEl.querySelectorAll('path, line, polyline').forEach(p => {
+            if (p.closest('marker')) return; // leave arrowhead triangle shapes alone
+            p.removeAttribute('style');
+            p.setAttribute('stroke', '#8b6fd6');
+            p.setAttribute('fill', 'none');
+            p.setAttribute('stroke-width', '2.5');
+        });
+
         let minX = 0, minY = 0, width = 0, height = 0;
         const viewBox = svgEl.getAttribute('viewBox');
         if (viewBox) {
@@ -908,16 +925,10 @@ document.addEventListener('DOMContentLoaded', function() {
             height = height || 800;
         }
 
-        // FIX (rightmost/edge nodes got clipped in the exported PDF):
-        // curved ("basis") connector paths can bow slightly outside
-        // Mermaid's own calculated viewBox bounds — especially on wide
-        // diagrams with many parallel branches and the increased
-        // node/rank spacing — so exporting at the EXACT calculated
-        // size clipped that overflow. Add a safety margin on all sides
-        // and expand the viewBox to match (not just width/height, or
-        // the content would just get scaled instead of getting real
-        // breathing room), so edge content always has room to spare.
-        const margin = Math.max(40, Math.round(width * 0.04));
+        // Safety margin so edge content (text or thin connector lines)
+        // never gets clipped — a moderate margin is enough now that
+        // arrows are thin lines rather than filled wing shapes.
+        const margin = Math.max(70, Math.round(width * 0.05));
         minX -= margin;
         minY -= margin;
         width += margin * 2;
@@ -939,19 +950,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let tempContainer = null;
             try {
-                // FIX (PDF still showed the old thick green arrows even
-                // though on-screen was already fixed): html2canvas
-                // handles <svg> content specially (serializing it to an
-                // image internally) and wasn't picking up the JS-applied
-                // fixes from forceEdgeColor() on a freshly re-inserted
-                // copy of the SVG. Using the modal's LIVE svg element's
-                // outerHTML instead — which already has forceEdgeColor's
-                // fixes baked into its actual attributes/inline styles
-                // from when the modal opened — guarantees the export
-                // starts from already-correct markup.
-                const liveModalSvg = mindmapZoomWrapper.querySelector('svg');
-                const svgSource = liveModalSvg ? liveModalSvg.outerHTML : lastMindMapSvg;
-                const { svgString: fixedSvg, width, height } = prepareSvgForExport(svgSource);
+                // FIX now lives inside prepareSvgForExport() itself —
+                // it bakes the color/fill fix directly into the SVG
+                // markup TEXT via DOMParser+XMLSerializer, so the
+                // source string doesn't matter as much anymore; using
+                // lastMindMapSvg (the cached render) directly and
+                // consistently avoids the added complexity/uncertainty
+                // of trying to extract "the right" live DOM element.
+                const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
 
                 tempContainer = document.createElement('div');
                 tempContainer.style.position = 'fixed';

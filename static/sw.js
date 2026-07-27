@@ -4,7 +4,7 @@
 // (/process-note, /tts, /ocr, /library/*) are NEVER cached — they
 // always need a live network request, so those are excluded here.
 
-const CACHE_NAME = 'notewav-shell-v7'; // bumped after PDF arrow/filesize fix
+const CACHE_NAME = 'notewav-shell-v8'; // bumped after consolidating PDF fix into prepareSvgForExport
 const SHELL_FILES = [
     '/',
     '/static/styles.css',
