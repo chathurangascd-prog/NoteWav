@@ -275,6 +275,10 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    label භාෂාව විතරයි: "mermaid_code_si" හි සියලුම node labels සිංහලෙන්, "mermaid_code_en"
    හි සියලුම node labels English වලින්.
 4. එක් node label එකක් වචන 1-6ක් තරම් කෙටියෙන් තබන්න.
+4a. **රසායන සූත්‍ර/සංඛ්‍යා ලියද්දී subscript/superscript unicode අකුරු (₂, ₃, ², ³ වැනි)
+    කිසිසේත් යොදන්න එපා** — ඒවා fonts වල හරියටම render නොවී, node box එකේ text එක
+    cramped/cut-off වගේ පෙනී යයි. සාමාන්‍ය (regular) සංඛ්‍යා විතරක් යොදන්න — උදා: "H2O"
+    (H₂O නොවේ), "CO2" (CO₂ නොවේ).
 5. Node id ලෙස ඉංග්‍රීසි අකුරු/සංඛ්‍යා පමණක් යොදන්න (උදා: A, B, C1) — Sinhala අකුරු
    node id එකට කිසිසේත් යොදන්න එපා, mermaid parser එකට එය parse කරගත නොහැක. Node id
    දෙකේම (si/en) එකම විය යුතුය.
@@ -398,11 +402,29 @@ def _sanitize_mermaid_labels(code):
     return code
 
 
+# Maps Unicode subscript/superscript digits to plain ASCII digits.
+# FIX (chemical formulas like H₂O looked cramped/cut off in mind map
+# nodes): subscript/superscript glyphs (₂, ², etc.) aren't sized like
+# regular text in most fonts, so Mermaid's node-box height estimate
+# (based on normal character metrics) doesn't leave enough room for
+# them, making the label look visually clipped. Converting to plain
+# digits (H2O instead of H₂O) sidesteps the font-metric mismatch
+# entirely — this is a safety net in case Gemini uses them despite
+# being instructed not to.
+_SUBSCRIPT_SUPERSCRIPT_MAP = str.maketrans({
+    '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+    '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+    '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+})
+
+
 def _clean_mermaid_code(code):
     if not code or not isinstance(code, str):
         return ''
     code = code.strip()
     code = re.sub(r'^```(?:mermaid)?\s*|\s*```$', '', code, flags=re.MULTILINE).strip()
+    code = code.translate(_SUBSCRIPT_SUPERSCRIPT_MAP)
     code = _sanitize_mermaid_labels(code)
     return code
 

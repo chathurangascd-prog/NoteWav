@@ -569,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 htmlLabels: false,
                 nodeSpacing: 70,
                 rankSpacing: 85,
-                padding: 20,
+                padding: 32,
                 curve: 'basis' // smooth curved connectors instead of sharp angles
             },
             themeVariables: {
