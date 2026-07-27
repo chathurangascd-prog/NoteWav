@@ -913,14 +913,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
+                // FIX (still clipped after the viewBox-margin attempt):
+                // trusting Mermaid's OWN reported viewBox size wasn't
+                // reliable enough — likely a Sinhala text-width
+                // measurement mismatch inside Mermaid's layout pass.
+                // Instead, measure the SVG's ACTUAL rendered bounding
+                // box directly from the browser's layout engine
+                // (getBBox, only trustworthy once it's live in the DOM
+                // — which is why this runs after the rAF wait above)
+                // and resize the container/SVG to that real size plus
+                // padding, rather than trusting any calculated number.
+                let finalWidth = width;
+                let finalHeight = height;
+                const liveSvg = tempContainer.querySelector('svg');
+                if (liveSvg && typeof liveSvg.getBBox === 'function') {
+                    try {
+                        const bbox = liveSvg.getBBox();
+                        const pad = 60;
+                        const neededWidth = Math.ceil(bbox.x + bbox.width) + pad * 2;
+                        const neededHeight = Math.ceil(bbox.y + bbox.height) + pad * 2;
+                        if (neededWidth > finalWidth || neededHeight > finalHeight) {
+                            finalWidth = Math.max(finalWidth, neededWidth);
+                            finalHeight = Math.max(finalHeight, neededHeight);
+                            liveSvg.setAttribute('width', String(finalWidth));
+                            liveSvg.setAttribute('height', String(finalHeight));
+                            tempContainer.style.width = finalWidth + 'px';
+                            tempContainer.style.height = finalHeight + 'px';
+                            // Give the resize a frame to actually apply before capture.
+                            await new Promise(resolve => requestAnimationFrame(resolve));
+                        }
+                    } catch (bboxErr) {
+                        console.warn('getBBox measurement failed, using calculated size:', bboxErr);
+                    }
+                }
+
                 const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
                 const html2canvas = html2canvasModule.default;
 
                 const canvas = await html2canvas(tempContainer, {
                     backgroundColor: '#14141e',
                     scale: 3,
-                    width: width,
-                    height: height,
+                    width: finalWidth,
+                    height: finalHeight,
                     logging: false,
                 });
 
