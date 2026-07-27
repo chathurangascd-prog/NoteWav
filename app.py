@@ -430,13 +430,26 @@ def _clean_mermaid_code(code):
 
 
 def _is_transient_gemini_error(exc):
-    """Distinguishes a transient server-side hiccup (worth retrying)
-    from a permanent problem (bad API key, safety block, malformed
-    request) where retrying would just waste time and hit the same
-    failure again."""
+    """Distinguishes a transient server-side hiccup (worth a quick
+    retry) from a permanent problem (bad API key, safety block,
+    malformed request) where retrying would just waste time and hit
+    the same failure again."""
     msg = str(exc).upper()
     transient_markers = ['500', '502', '503', '504', 'INTERNAL', 'UNAVAILABLE', 'TIMEOUT', 'DEADLINE_EXCEEDED']
     return any(marker in msg for marker in transient_markers)
+
+
+def _is_rate_limit_error(exc):
+    """A 429/RESOURCE_EXHAUSTED means the API key's quota (often the
+    free tier's daily/per-minute request cap) is used up. This is NOT
+    the same kind of "transient" as a 500 — Google's own error message
+    suggests waiting up to ~35 seconds, which is too long to block a
+    web request for (risks the server's own request timeout killing
+    it first). So this gets its own short-retry-then-clear-message
+    path instead of the generic transient retry loop.
+    """
+    msg = str(exc).upper()
+    return '429' in msg or 'RESOURCE_EXHAUSTED' in msg or 'QUOTA' in msg
 
 
 def call_gemini_structured(note_text, max_retries=3):
@@ -474,6 +487,21 @@ def call_gemini_structured(note_text, max_retries=3):
             break  # success — exit the retry loop
         except Exception as e:
             last_error = e
+
+            if _is_rate_limit_error(e):
+                # One short retry only (a few seconds) in case it was a
+                # brief per-minute burst — but don't try to wait out a
+                # full 30+ second quota window inside a live request.
+                if attempt < 2:
+                    print(f"⚠️ Gemini rate-limited (attempt {attempt}), short retry in 4s: {e}")
+                    time.sleep(4)
+                    continue
+                raise GeminiGenerationError(
+                    "Gemini API එකේ දෛනික/විනාඩි quota එක ඉවර වී ඇත (free tier limit). "
+                    "පැය කිහිපයකින් හෝ මිනිත්තු කිහිපයකින් නැවත උත්සාහ කරන්න, නැතහොත් "
+                    "Gemini API එකේ paid billing plan එකකට upgrade කරන්න."
+                )
+
             if attempt < max_retries and _is_transient_gemini_error(e):
                 wait_seconds = attempt  # 1s, then 2s, then 3s
                 print(f"⚠️ Gemini transient error (attempt {attempt}/{max_retries}), retrying in {wait_seconds}s: {e}")
