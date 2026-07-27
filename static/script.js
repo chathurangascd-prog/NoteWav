@@ -554,7 +554,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.mermaid) {
         mermaid.initialize({
             startOnLoad: false,
-            theme: 'base',
+            // FIX (arrows disappeared): switching to theme:'base' meant
+            // arrows/lines lost their default styling — 'base' needs a
+            // FULL set of theme variables supplied manually or several
+            // elements (like arrowheads) render invisible against the
+            // dark background. Reverted to 'dark' (fully-styled,
+            // working arrows/lines by default) and layered the visual
+            // polish (rounded corners, shadows, curves) on top via
+            // themeCSS instead, which works with any base theme.
+            theme: 'dark',
             securityLevel: 'loose',
             fontFamily: 'Plus Jakarta Sans, sans-serif',
             flowchart: {
@@ -565,32 +573,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 curve: 'basis' // smooth curved connectors instead of sharp angles
             },
             themeVariables: {
-                fontSize: '19px',
-                fontFamily: 'Plus Jakarta Sans, sans-serif',
-                primaryColor: '#241f38',        // default (uncategorized) node fill
-                primaryTextColor: '#ffffff',
-                primaryBorderColor: '#6b30ff',
-                lineColor: '#8b6fd6',
-                background: '#14141e',
-                mainBkg: '#241f38',
-                clusterBkg: '#1c1c2a',
-                edgeLabelBackground: '#1c1c2a',
-                nodeBorder: '#6b30ff',
+                fontSize: '19px'
             },
-            // NEW: polish pass — rounded node corners + soft glow
-            // shadow (matches the app's glass-card aesthetic elsewhere)
-            // and thicker, smoother connector lines. Mermaid embeds
-            // this raw CSS directly into the rendered SVG.
+            // Polish pass — rounded node corners + soft glow shadow
+            // (matches the app's glass-card aesthetic elsewhere) and
+            // thicker connector lines. Mermaid embeds this raw CSS
+            // directly into the rendered SVG.
             themeCSS: `
                 .node rect, .node polygon, .node circle, .node ellipse {
                     rx: 14px; ry: 14px;
                     filter: drop-shadow(0 4px 14px rgba(107, 48, 255, 0.28));
                 }
-                .edgePath .path {
+                .edgePaths .path, .edgePath .path {
                     stroke-width: 2.5px;
                 }
                 .node.root-node rect, .node.root-node polygon {
                     filter: drop-shadow(0 6px 22px rgba(107, 48, 255, 0.5));
+                }
+                /* FIX (arrowheads invisible): the connector LINES were
+                   visible but the triangular arrowhead markers at each
+                   line's end weren't — their fill wasn't being set
+                   explicitly by our custom styling, so it fell back to
+                   a color too close to the dark background to see.
+                   Marker paths live inside <marker> defs referenced by
+                   marker-end, and Mermaid gives them classes like
+                   flowchart-pointEnd / arrowheadPath — style both to
+                   be safe across Mermaid versions. */
+                marker path,
+                .arrowheadPath,
+                .flowchart-pointEnd,
+                .flowchart-pointStart {
+                    fill: #8b6fd6 !important;
+                    stroke: #8b6fd6 !important;
                 }
             `
         });
@@ -685,11 +699,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const mindmapZoomResetBtn = document.getElementById('mindmap-zoom-reset');
     const mindmapDownloadPdfBtn = document.getElementById('mindmap-download-pdf');
 
+    // NEW: mind maps opened at 100% were too small to read comfortably,
+    // so the modal now opens pre-zoomed to 400% actual scale — but that
+    // starting point is now RELABELED as "100%" (the new baseline), so
+    // the on-screen percentage still reads naturally and zooming in
+    // further from there goes progressively bigger still.
+    const MINDMAP_BASE_ZOOM = 4;
     let mindmapZoom = 1;
 
     function setMindMapZoom(level) {
-        mindmapZoom = Math.min(4, Math.max(0.5, level));
-        if (mindmapZoomWrapper) mindmapZoomWrapper.style.transform = `scale(${mindmapZoom})`;
+        mindmapZoom = Math.min(3, Math.max(0.4, level));
+        const actualScale = mindmapZoom * MINDMAP_BASE_ZOOM;
+        if (mindmapZoomWrapper) mindmapZoomWrapper.style.transform = `scale(${actualScale})`;
         if (mindmapZoomLevelEl) mindmapZoomLevelEl.textContent = `${Math.round(mindmapZoom * 100)}%`;
     }
 
@@ -699,7 +720,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         mindmapZoomWrapper.innerHTML = lastMindMapSvg;
-        setMindMapZoom(1);
+        setMindMapZoom(1); // "100%" now = 400% actual scale (see MINDMAP_BASE_ZOOM above)
         mindmapModalBackdrop.classList.remove('hidden');
     }
 
