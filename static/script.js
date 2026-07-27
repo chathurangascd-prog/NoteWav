@@ -647,6 +647,25 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mindmapLangEnBtn) mindmapLangEnBtn.classList.toggle('active', lang === 'en');
     }
 
+    // FIX (arrows stayed green no matter what CSS was tried): Mermaid's
+    // own generated styles for edges apparently win over any CSS rule
+    // we inject, even with !important — likely due to how/where
+    // themeCSS gets inserted relative to Mermaid's own <style> block.
+    // Setting the color directly via JavaScript on each path element,
+    // AFTER Mermaid has already rendered and styled everything, always
+    // wins — it's not part of the CSS cascade at all.
+    function forceEdgeColor(containerEl) {
+        if (!containerEl) return;
+        const svgEl = containerEl.querySelector('svg');
+        if (!svgEl) return;
+        // Every <path> that's an edge/connector (not inside a marker
+        // definition, which holds the arrowhead triangle shapes).
+        svgEl.querySelectorAll('path').forEach(p => {
+            if (p.closest('marker')) return; // leave arrowhead shapes alone
+            p.style.setProperty('stroke', '#8b6fd6', 'important');
+        });
+    }
+
     async function renderMindMapForLang(lang) {
         if (!mindmapSection || !mindmapContainer) return;
         currentMindMapLang = lang;
@@ -662,6 +681,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mindmapSvgCache[lang]) {
             lastMindMapSvg = mindmapSvgCache[lang];
             mindmapContainer.innerHTML = lastMindMapSvg;
+            forceEdgeColor(mindmapContainer);
             return;
         }
 
@@ -679,6 +699,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (currentMindMapLang === lang) {
                 lastMindMapSvg = svg;
                 mindmapContainer.innerHTML = svg;
+                forceEdgeColor(mindmapContainer);
             }
         } catch (err) {
             console.error('Mermaid render error:', err);
@@ -743,6 +764,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         mindmapZoomWrapper.innerHTML = lastMindMapSvg;
+        forceEdgeColor(mindmapZoomWrapper);
         mindmapModalBackdrop.classList.remove('hidden');
 
         // Measure after the modal is actually visible/laid out, then
@@ -909,6 +931,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tempContainer.style.height = height + 'px';
                 tempContainer.style.background = '#14141e';
                 tempContainer.innerHTML = fixedSvg;
+                forceEdgeColor(tempContainer);
                 document.body.appendChild(tempContainer);
 
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
