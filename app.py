@@ -278,12 +278,29 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
 5. Node id ලෙස ඉංග්‍රීසි අකුරු/සංඛ්‍යා පමණක් යොදන්න (උදා: A, B, C1) — Sinhala අකුරු
    node id එකට කිසිසේත් යොදන්න එපා, mermaid parser එකට එය parse කරගත නොහැක. Node id
    දෙකේම (si/en) එකම විය යුතුය.
-6. **Node වර්ග අනුව color-coding:** සෑම node එකක්ම පහත ආකාර 4න් එකකට වර්ග කර, node
-   එකේ label එකට පසුව ":::className" එකතු කරන්න:
-   - **වැදගත් core concept** එකක් නම්: "A[Label]:::important"
-   - **උදාහරණයක්** (example) නම්: "B[Label]:::example"
-   - **නිර්වචනයක්** (definition/meaning) නම්: "C[Label]:::definition"
-   - වෙන කිසිවක් (සාමාන්‍ය node එකක්): ":::className" කිසිවක් නොදා, plain "D[Label]" විතරක් දාන්න.
+6. **Node වර්ග අනුව color-coding:** සෑම node එකක්ම පහත test 3 පිළිවෙළින් අසාගෙන,
+   පළමුවෙන්ම match වන එකට වර්ග කරන්න (test එකට match වුනොත් ඊළඟ test check කරන්න එපා):
+
+   a. **"මෙයින් අදහස් වන්නේ...", "එහි තේරුම...", "...යනු..."** වැනි ආකාරයට යමක් **අර්ථ
+      දක්වනවා (defines what a term means)** ද? → ":::definition" (උදා: "ප්‍රභාසංස්ලේෂණය
+      යනු ශාක ආලෝකය ශක්තියක් බවට පත් කරන ක්‍රියාවලියයි" වැනි නිර්වචනයක්)
+
+   b. එය **විශේෂිත, concrete instance/case** එකක් ද — නිශ්චිත නමක්, දිනයක්, පුද්ගලයෙක්,
+      සිද්ධියක්, වස්තුවක් සඳහන් කරන, "මේ වගේ දෙයක්" කියලා පෙන්වන කරුණක් ද? → ":::example"
+      (උදා: "1948 පෙබරවාරි 4" (independence date), "Isaac Newton" (specific person),
+      "සූර්ය ග්‍රහණය 2024" (specific event) වැනි)
+
+   c. එය පාඩමේ **core/central fact එකක්** ද — ඉගෙන ගැනීමට අත්‍යවශ්‍ය, විෂය මාතෘකාවේ
+      මූලික අංගයක් ද (නිර්වචනයක් හෝ උදාහරණයක් නොවන)? → ":::important" (උදා: "සූර්ය
+      ආලෝකය අවශ්‍යයි", "ප්‍රධාන හේතුව", "ප්‍රතිඵලය" වැනි core කරුණු)
+
+   d. ඉහත 3න් කිසිවකට match නොවේ නම් (සාමාන්‍ය category/grouping node එකක් නම්):
+      ":::className" කිසිවක් නොදා, plain label එකක් විතරක් දාන්න.
+
+   Root node එකට සහ ප්‍රධාන category nodes (කොන්දේසි/ක්‍රියාවලිය වැනි grouping nodes)
+   වලට class එකක් **නොදෙන්න** — ඒවා structure/organization විතරයි පෙන්වන්නේ, content
+   කරුණු නොවේ.
+   ":::important" size එකේ label එකට syntax එකම භාවිතා කරන්න — "A[Label]:::important".
 7. Node label එකේ විශේෂ අකුරු (", (, ), {{, }}, |, :) තිබේ නම් label එක quotes
    ("...") තුළ දමන්න — උදා: A["සම්භවය (1948)"]:::example.
 8. Syntax සම්පූර්ණයෙන්ම වලංගු (valid) බවට වගබලාගන්න.
