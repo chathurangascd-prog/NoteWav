@@ -718,6 +718,29 @@
         @keyframes splashFadeOut {
             to { opacity: 0; visibility: hidden; pointer-events: none; }
         }
+
+        /* ===== HEADER LOGO IMAGE ===== */
+        /* FIX: the header logo used the 🎙️ emoji character directly,
+           which renders using the OS's own emoji font — looked fine
+           on macOS (Apple Color Emoji) but rendered as a plain
+           flat/cream icon on Windows (Segoe UI Emoji), inconsistent
+           across platforms. Using our own icon image instead renders
+           identically everywhere. */
+        .logo-icon-img {
+            width: 52px;
+            height: 52px;
+            border-radius: 12px;
+            animation: logoFloat 3s ease-in-out infinite;
+            filter: drop-shadow(0 0 20px rgba(107, 48, 255, 0.25));
+            transition: transform 0.3s ease;
+        }
+        .logo-icon-img:hover {
+            transform: scale(1.1) rotate(-5deg);
+        }
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(-3deg); }
+        }
     </style>
 </head>
 <body>
@@ -737,7 +760,7 @@
 
         <header class="app-header">
             <div class="brand">
-                <span class="logo-icon">🎙️</span>
+                <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="NoteWav" class="logo-icon-img">
                 <h1>NoteWav <span class="badge">AI</span></h1>
             </div>
             <p>Smart විදිහට පාඩම් අහන්න. NoteWav AI</p>
