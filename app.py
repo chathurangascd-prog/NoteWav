@@ -268,47 +268,40 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    කරුණු කිසිවක් මඟ නොහැරිය යුතුය, නමුත් filler වචන ප්‍රමාණය අවශ්‍ය නම් අඩු කරන්න.
 
 === "mermaid_code_si" සහ "mermaid_code_en" දෙකටම පොදු නීති ===
-(මේවා flowchart නොවේ — "mindmap" වර්ගයේ, root topic එකකින් branches පැතිරෙන
- radial mind map layout එකකි.)
-
-1. පළමු පේළිය හැමවිටම "mindmap" විතරක් විය යුතුය (වෙන කිසිවක් නොදා).
-2. දෙවන පේළියේ root node එක මෙසේ ලියන්න (2 spaces indent, double-parens circle shape):
-   "  root((මූලික මාතෘකාව))"
-3. උප මාතෘකා root node එකට වඩා තවත් 2 spaces indent කර, root එකට පහළින් එකින් එක
-   වෙනම පේළි වල ලියන්න. උප-උප මාතෘකා තව 2 spaces වැඩිපුර indent කරන්න. Indentation
-   එක හරියටම අනුගමනය කරන්න — mindmap parser එක සම්පූර්ණයෙන්ම indentation මත රඳා පවතී.
-4. එක් පේළියකට එක් node එකක් විතරයි දාන්න.
-5. **Node වර්ග අනුව color-coding:** සෑම node එකක්ම පහත ආකාර 4න් එකකට වර්ග කරන්න:
-   - **වැදගත් core concept** එකක් නම්: "id(Label):::important"
-   - **උදාහරණයක්** (example) නම්: "id(Label):::example"
-   - **නිර්වචනයක්** (definition/meaning) නම්: "id(Label):::definition"
-   - වෙන කිසිවක් (සාමාන්‍ය උප-මාතෘකාවක්/ප්‍රවර්ගයක් නම්): shape/class දෙකම නොදා
-     plain label එකක් විතරක් දාන්න (id අවශ්‍ය නැත).
-   "id" කියන්නේ character 2-4ක ඉංග්‍රීසි අකුරු/සංඛ්‍යා (A1, B2 වැනි) — Sinhala අකුරු
-   id එකට කිසිසේත් යොදන්න එපා. mermaid_code_si සහ mermaid_code_en දෙකේම id එකම
-   විය යුතුය (label භාෂාව විතරයි වෙනස් වෙන්නේ).
-6. **ඉතා වැදගත්:** Label එකේ "(" හෝ ")" අකුරු (රසායන සූත්‍ර, දිනයන් වරහන් තුළ, ඕනෑම
-   කරුණක්) තිබේ නම්, **අනිවාර්යයෙන්ම** label එකම quotes ("...") තුළ දමන්න — id("සම්භවය (1948)"):::example
-   වැනි. මෙය මගහැරුනොත් සම්පූර්ණ mind map එකම render වීම අසාර්ථක වේ. සැක සහිත
-   අවස්ථාවකදී, quotes යොදන්න වඩා ආරක්ෂිතයි.
-7. Root node එකේ සිට උප මාතෘකා 2-3 level දක්වා පමණක් යොදන්න (ඉතා ගැඹුරු nesting එපා).
-   සම්පූර්ණ mind map එකේ nodes 8ත් 20ත් අතර ප්‍රමාණයක් තබාගන්න.
-8. **හැම විටම අවසානයේ, මේ පේළි තුනම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
+1. "flowchart TD" වලින්ම පටන් ගන්න.
+2. පාඩමේ ප්‍රධාන මාතෘකාව root node එකක් ලෙසත්, උප මාතෘකා/ප්‍රධාන සංකල්ප child nodes
+   ලෙසත් සකසන්න (අවශ්‍ය නම් උප-child nodes එකතු කරන්න), "-->" arrow මගින් සම්බන්ධ කරන්න.
+3. දෙකෙහිම node structure එක (nodes ගණන, connections) එකම විය යුතුය — වෙනස් වෙන්නේ
+   label භාෂාව විතරයි: "mermaid_code_si" හි සියලුම node labels සිංහලෙන්, "mermaid_code_en"
+   හි සියලුම node labels English වලින්.
+4. එක් node label එකක් වචන 1-6ක් තරම් කෙටියෙන් තබන්න.
+5. Node id ලෙස ඉංග්‍රීසි අකුරු/සංඛ්‍යා පමණක් යොදන්න (උදා: A, B, C1) — Sinhala අකුරු
+   node id එකට කිසිසේත් යොදන්න එපා, mermaid parser එකට එය parse කරගත නොහැක. Node id
+   දෙකේම (si/en) එකම විය යුතුය.
+6. **Node වර්ග අනුව color-coding:** සෑම node එකක්ම පහත ආකාර 4න් එකකට වර්ග කර, node
+   එකේ label එකට පසුව ":::className" එකතු කරන්න:
+   - **වැදගත් core concept** එකක් නම්: "A[Label]:::important"
+   - **උදාහරණයක්** (example) නම්: "B[Label]:::example"
+   - **නිර්වචනයක්** (definition/meaning) නම්: "C[Label]:::definition"
+   - වෙන කිසිවක් (සාමාන්‍ය node එකක්): ":::className" කිසිවක් නොදා, plain "D[Label]" විතරක් දාන්න.
+7. Node label එකේ විශේෂ අකුරු (", (, ), {{, }}, |, :) තිබේ නම් label එක quotes
+   ("...") තුළ දමන්න — උදා: A["සම්භවය (1948)"]:::example.
+8. Syntax සම්පූර්ණයෙන්ම වලංගු (valid) බවට වගබලාගන්න.
+9. **හැම විටම අවසානයේ, මේ පේළි තුනම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
    classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
    classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
    classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
 
 උදාහරණයක් (structure එක විතරයි, content එක ඔබේම පාඩම අනුව):
-mindmap
-  root((ප්‍රභාසංස්ලේෂණය))
-    කොන්දේසි
-      A1(සූර්ය ආලෝකය):::important
-      A2(ජලය):::important
-    ක්‍රියාවලිය
-      B1("ග්ලූකෝස් (C6H12O6) නිපදවීම"):::definition
-      B2(පත්‍ර වල සිදුවේ):::example
-    ප්‍රතිඵල
-      C1(ඔක්සිජන් නිකුත් වීම)
+flowchart TD
+  Root[ප්‍රභාසංස්ලේෂණය] --> A[කොන්දේසි]
+  A --> A1[සූර්ය ආලෝකය]:::important
+  A --> A2[ජලය]:::important
+  Root --> B[ක්‍රියාවලිය]
+  B --> B1["ග්ලූකෝස් (C6H12O6) නිපදවීම"]:::definition
+  B --> B2[පත්‍ර වල සිදුවේ]:::example
+  Root --> C[ප්‍රතිඵල]
+  C --> C1[ඔක්සිජන් නිකුත් වීම]
   classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
   classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
   classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
@@ -395,7 +388,17 @@ def _clean_mermaid_code(code):
     return code
 
 
-def call_gemini_structured(note_text):
+def _is_transient_gemini_error(exc):
+    """Distinguishes a transient server-side hiccup (worth retrying)
+    from a permanent problem (bad API key, safety block, malformed
+    request) where retrying would just waste time and hit the same
+    failure again."""
+    msg = str(exc).upper()
+    transient_markers = ['500', '502', '503', '504', 'INTERNAL', 'UNAVAILABLE', 'TIMEOUT', 'DEADLINE_EXCEEDED']
+    return any(marker in msg for marker in transient_markers)
+
+
+def call_gemini_structured(note_text, max_retries=3):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -404,20 +407,43 @@ def call_gemini_structured(note_text):
 {note_text}
 """
 
-    try:
-        response = client.models.generate_content(
-            model='gemini-flash-latest',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.3,
-                max_output_tokens=4000,
-                response_mime_type='application/json',
-                safety_settings=SAFETY_SETTINGS,
+    # FIX (occasional "Gemini request failed: 500 INTERNAL" shown to
+    # students): that error is a transient hiccup on Google's servers,
+    # not a bug here — it usually succeeds on a quick retry. Rather
+    # than making the student notice this and manually click "try
+    # again", retry automatically a few times with a short backoff
+    # before giving up and surfacing an error. Non-transient failures
+    # (bad API key, safety blocks, malformed requests) are NOT
+    # retried — retrying those would just waste time reproducing the
+    # same permanent failure.
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model='gemini-flash-latest',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=0.3,
+                    max_output_tokens=4000,
+                    response_mime_type='application/json',
+                    safety_settings=SAFETY_SETTINGS,
+                )
             )
-        )
-    except Exception as e:
-        raise GeminiGenerationError(f"Gemini request failed: {e}")
+            break  # success — exit the retry loop
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries and _is_transient_gemini_error(e):
+                wait_seconds = attempt  # 1s, then 2s, then 3s
+                print(f"⚠️ Gemini transient error (attempt {attempt}/{max_retries}), retrying in {wait_seconds}s: {e}")
+                time.sleep(wait_seconds)
+                continue
+            raise GeminiGenerationError(f"Gemini request failed: {e}")
+    else:
+        # Loop exhausted without a successful break (shouldn't normally
+        # reach here since the last iteration always raises above, but
+        # kept as a safety net).
+        raise GeminiGenerationError(f"Gemini request failed after {max_retries} attempts: {last_error}")
 
     if not getattr(response, 'candidates', None):
         block_reason = getattr(getattr(response, 'prompt_feedback', None), 'block_reason', 'unknown')
