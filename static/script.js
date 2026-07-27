@@ -660,8 +660,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!svgEl) return;
         // Every <path> that's an edge/connector (not inside a marker
         // definition, which holds the arrowhead triangle shapes).
-        svgEl.querySelectorAll('path').forEach(p => {
+        // Clearing any existing stroke attribute/inline style FIRST,
+        // then setting both the attribute AND the inline style with
+        // !important, covers every way Mermaid might have originally
+        // colored it (SVG presentation attribute vs CSS vs inline
+        // style all have different precedence — this beats all three).
+        svgEl.querySelectorAll('path, line, polyline').forEach(p => {
             if (p.closest('marker')) return; // leave arrowhead shapes alone
+            p.removeAttribute('style');
+            p.setAttribute('stroke', '#8b6fd6');
             p.style.setProperty('stroke', '#8b6fd6', 'important');
         });
     }
@@ -931,44 +938,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 tempContainer.style.height = height + 'px';
                 tempContainer.style.background = '#14141e';
                 tempContainer.innerHTML = fixedSvg;
-                forceEdgeColor(tempContainer);
                 document.body.appendChild(tempContainer);
+                forceEdgeColor(tempContainer);
 
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-                // FIX (still clipped after the viewBox-margin attempt):
-                // trusting Mermaid's OWN reported viewBox size wasn't
-                // reliable enough — likely a Sinhala text-width
-                // measurement mismatch inside Mermaid's layout pass.
-                // Instead, measure the SVG's ACTUAL rendered bounding
-                // box directly from the browser's layout engine
-                // (getBBox, only trustworthy once it's live in the DOM
-                // — which is why this runs after the rAF wait above)
-                // and resize the container/SVG to that real size plus
-                // padding, rather than trusting any calculated number.
-                let finalWidth = width;
-                let finalHeight = height;
+                // FIX (still clipped after BOTH the viewBox-margin AND
+                // the getBBox-measurement attempts): rather than trying
+                // to precisely calculate or measure the "right" size —
+                // which kept being subtly wrong for Sinhala text and
+                // curved edges — just add a LARGE fixed safety margin
+                // on top of whatever size was calculated. A bit of
+                // extra blank space around the diagram is a much
+                // smaller problem than content getting cut off.
+                const brutePadding = 300;
+                const finalWidth = width + brutePadding * 2;
+                const finalHeight = height + brutePadding * 2;
                 const liveSvg = tempContainer.querySelector('svg');
-                if (liveSvg && typeof liveSvg.getBBox === 'function') {
-                    try {
-                        const bbox = liveSvg.getBBox();
-                        const pad = 60;
-                        const neededWidth = Math.ceil(bbox.x + bbox.width) + pad * 2;
-                        const neededHeight = Math.ceil(bbox.y + bbox.height) + pad * 2;
-                        if (neededWidth > finalWidth || neededHeight > finalHeight) {
-                            finalWidth = Math.max(finalWidth, neededWidth);
-                            finalHeight = Math.max(finalHeight, neededHeight);
-                            liveSvg.setAttribute('width', String(finalWidth));
-                            liveSvg.setAttribute('height', String(finalHeight));
-                            tempContainer.style.width = finalWidth + 'px';
-                            tempContainer.style.height = finalHeight + 'px';
-                            // Give the resize a frame to actually apply before capture.
-                            await new Promise(resolve => requestAnimationFrame(resolve));
+                if (liveSvg) {
+                    const vb = liveSvg.getAttribute('viewBox');
+                    if (vb) {
+                        const parts = vb.trim().split(/\s+/).map(Number);
+                        if (parts.length === 4) {
+                            const [vx, vy, vw, vh] = parts;
+                            liveSvg.setAttribute(
+                                'viewBox',
+                                `${vx - brutePadding} ${vy - brutePadding} ${vw + brutePadding * 2} ${vh + brutePadding * 2}`
+                            );
                         }
-                    } catch (bboxErr) {
-                        console.warn('getBBox measurement failed, using calculated size:', bboxErr);
                     }
+                    liveSvg.setAttribute('width', String(finalWidth));
+                    liveSvg.setAttribute('height', String(finalHeight));
                 }
+                tempContainer.style.width = finalWidth + 'px';
+                tempContainer.style.height = finalHeight + 'px';
+                await new Promise(resolve => requestAnimationFrame(resolve));
 
                 const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
                 const html2canvas = html2canvasModule.default;
