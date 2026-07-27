@@ -569,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 htmlLabels: false,
                 nodeSpacing: 70,
                 rankSpacing: 85,
-                padding: 32,
+                padding: 48,
                 curve: 'basis' // smooth curved connectors instead of sharp angles
             },
             themeVariables: {
@@ -665,11 +665,22 @@ document.addEventListener('DOMContentLoaded', function() {
         // !important, covers every way Mermaid might have originally
         // colored it (SVG presentation attribute vs CSS vs inline
         // style all have different precedence — this beats all three).
+        //
+        // FIX (arrows looked like thick green "leaf/wing" shapes, not
+        // thin lines): the edge paths had FILL set (not just stroke),
+        // which is what created that tapered filled-shape look — our
+        // earlier fix only forced stroke, so the fill stayed green and
+        // kept the wing shape. Setting fill:none turns it back into a
+        // normal thin stroked line.
         svgEl.querySelectorAll('path, line, polyline').forEach(p => {
             if (p.closest('marker')) return; // leave arrowhead shapes alone
             p.removeAttribute('style');
             p.setAttribute('stroke', '#8b6fd6');
+            p.setAttribute('fill', 'none');
+            p.setAttribute('stroke-width', '2.5');
             p.style.setProperty('stroke', '#8b6fd6', 'important');
+            p.style.setProperty('fill', 'none', 'important');
+            p.style.setProperty('stroke-width', '2.5px', 'important');
         });
     }
 

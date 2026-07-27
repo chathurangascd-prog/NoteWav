@@ -4,7 +4,7 @@
 // (/process-note, /tts, /ocr, /library/*) are NEVER cached — they
 // always need a live network request, so those are excluded here.
 
-const CACHE_NAME = 'notewav-shell-v5'; // bumped after brute-force PDF/arrow fixes
+const CACHE_NAME = 'notewav-shell-v6'; // bumped after arrow fill:none fix and node padding increase
 const SHELL_FILES = [
     '/',
     '/static/styles.css',
