@@ -282,52 +282,62 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
 5. Node id ලෙස ඉංග්‍රීසි අකුරු/සංඛ්‍යා පමණක් යොදන්න (උදා: A, B, C1) — Sinhala අකුරු
    node id එකට කිසිසේත් යොදන්න එපා, mermaid parser එකට එය parse කරගත නොහැක. Node id
    දෙකේම (si/en) එකම විය යුතුය.
-6. **Node වර්ග අනුව color-coding:** සෑම node එකක්ම පහත test 3 පිළිවෙළින් අසාගෙන,
-   පළමුවෙන්ම match වන එකට වර්ග කරන්න (test එකට match වුනොත් ඊළඟ test check කරන්න එපා):
-
-   a. **"මෙයින් අදහස් වන්නේ...", "එහි තේරුම...", "...යනු..."** වැනි ආකාරයට යමක් **අර්ථ
-      දක්වනවා (defines what a term means)** ද? → ":::definition" (උදා: "ප්‍රභාසංස්ලේෂණය
-      යනු ශාක ආලෝකය ශක්තියක් බවට පත් කරන ක්‍රියාවලියයි" වැනි නිර්වචනයක්)
-
-   b. එය **විශේෂිත, concrete instance/case** එකක් ද — නිශ්චිත නමක්, දිනයක්, පුද්ගලයෙක්,
-      සිද්ධියක්, වස්තුවක් සඳහන් කරන, "මේ වගේ දෙයක්" කියලා පෙන්වන කරුණක් ද? → ":::example"
-      (උදා: "1948 පෙබරවාරි 4" (independence date), "Isaac Newton" (specific person),
-      "සූර්ය ග්‍රහණය 2024" (specific event) වැනි)
-
-   c. එය පාඩමේ **core/central fact එකක්** ද — ඉගෙන ගැනීමට අත්‍යවශ්‍ය, විෂය මාතෘකාවේ
-      මූලික අංගයක් ද (නිර්වචනයක් හෝ උදාහරණයක් නොවන)? → ":::important" (උදා: "සූර්ය
-      ආලෝකය අවශ්‍යයි", "ප්‍රධාන හේතුව", "ප්‍රතිඵලය" වැනි core කරුණු)
-
-   d. ඉහත 3න් කිසිවකට match නොවේ නම් (සාමාන්‍ය category/grouping node එකක් නම්):
-      ":::className" කිසිවක් නොදා, plain label එකක් විතරක් දාන්න.
-
-   Root node එකට **හැමවිටම** ":::root" class එක දෙන්න (උදා: "Root[Label]:::root") —
-   එය visual විදිහට වෙනස් කර පෙන්වයි. ප්‍රධාන category nodes (කොන්දේසි/ක්‍රියාවලිය වැනි
-   grouping nodes) වලට කිසිම class එකක් **නොදෙන්න** — ඒවා structure/organization
-   විතරයි පෙන්වන්නේ, content කරුණු නොවේ.
+6. **Branch-based color-coding** (semantic type අනුව නොවේ — branch structure එක අනුව):
+   a. Root node එකට **හැමවිටම** ":::root" class එක දෙන්න (කොළ පාට වේ) — උදා:
+      "Root[Label]:::root".
+   b. Root node එකෙන් කෙලින්ම පටන්ගන්නා **ප්‍රධාන branch එකක්** (root එකේ direct child
+      එකක්, උදා: "කොන්දේසි", "ක්‍රියාවලිය") ට, "branch1", "branch2", "branch3",
+      "branch4", "branch5", "branch6" කියන class 6න් **එකක්** දෙන්න — පළමු ප්‍රධාන
+      branch එකට "branch1", දෙවෙනියට "branch2", මෙසේ පිළිවෙළින් (branch 6ට වඩා
+      තිබේ නම් "branch1" සිට නැවත පටන් ගන්න).
+   c. ඒ ප්‍රධාන branch එකට **යටින්ම ඇති සියලුම child/grandchild nodes** (එනම් එම
+      branch එකේ sub-nodes ඔක්කොම, කොපමණ level ගැඹුරු වුවත්) ට, **එම branch එකේම
+      "light" version එක** දෙන්න — උදා: "branch1" එකට යටින් ඇති nodes ඔක්කොම
+      "branch1light" class එක ගත යුතුය (parent branch එකේම color එකේ **halu/light
+      shade එකක්**, වෙනස් color එකක් නොවේ).
+   d. එකම branch එකේ සියලුම nodes (child, grandchild, ...) එකම light-class එකම
+      ගත යුතුය — deeper levels සඳහා වෙනස් shade එකක් අවශ්‍ය නැත.
 7. Node label එකේ විශේෂ අකුරු (", (, ), {{, }}, |, :) තිබේ නම් label එක quotes
-   ("...") තුළ දමන්න — උදා: A["සම්භවය (1948)"]:::example.
+   ("...") තුළ දමන්න — උදා: A["සම්භවය (1948)"]:::branch1.
 8. Syntax සම්පූර්ණයෙන්ම වලංගු (valid) බවට වගබලාගන්න.
-9. **හැම විටම අවසානයේ, මේ පේළි හතරම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
-   classDef root fill:#6b30ff,color:#ffffff,stroke:#a78bfa,stroke-width:3px,font-weight:bold
-   classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
-   classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
-   classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
+9. **හැම විටම අවසානයේ, මේ පේළි 13ම හරියටම මෙසේම එකතු කරන්න** (වෙනස් නොකර):
+   classDef root fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:3px,font-weight:bold
+   classDef branch1 fill:#3b82f6,color:#ffffff,stroke:#2563eb,stroke-width:2px
+   classDef branch1light fill:#bfdbfe,color:#1e3a5f,stroke:#3b82f6,stroke-width:1.5px
+   classDef branch2 fill:#f97316,color:#ffffff,stroke:#ea580c,stroke-width:2px
+   classDef branch2light fill:#fed7aa,color:#7c2d12,stroke:#f97316,stroke-width:1.5px
+   classDef branch3 fill:#ec4899,color:#ffffff,stroke:#db2777,stroke-width:2px
+   classDef branch3light fill:#fbcfe8,color:#831843,stroke:#ec4899,stroke-width:1.5px
+   classDef branch4 fill:#a855f7,color:#ffffff,stroke:#9333ea,stroke-width:2px
+   classDef branch4light fill:#e9d5ff,color:#581c87,stroke:#a855f7,stroke-width:1.5px
+   classDef branch5 fill:#14b8a6,color:#ffffff,stroke:#0d9488,stroke-width:2px
+   classDef branch5light fill:#99f6e4,color:#134e4a,stroke:#14b8a6,stroke-width:1.5px
+   classDef branch6 fill:#ef4444,color:#ffffff,stroke:#dc2626,stroke-width:2px
+   classDef branch6light fill:#fecaca,color:#7f1d1d,stroke:#ef4444,stroke-width:1.5px
 
 උදාහරණයක් (structure එක විතරයි, content එක ඔබේම පාඩම අනුව):
 flowchart TD
-  Root[ප්‍රභාසංස්ලේෂණය]:::root --> A[කොන්දේසි]
-  A --> A1[සූර්ය ආලෝකය]:::important
-  A --> A2[ජලය]:::important
-  Root --> B[ක්‍රියාවලිය]
-  B --> B1["ග්ලූකෝස් (C6H12O6) නිපදවීම"]:::definition
-  B --> B2[පත්‍ර වල සිදුවේ]:::example
-  Root --> C[ප්‍රතිඵල]
-  C --> C1[ඔක්සිජන් නිකුත් වීම]
-  classDef root fill:#6b30ff,color:#ffffff,stroke:#a78bfa,stroke-width:3px,font-weight:bold
-  classDef important fill:#8b5cf6,color:#ffffff,stroke:#6b30ff,stroke-width:2px
-  classDef example fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:2px
-  classDef definition fill:#f59e0b,color:#1a1a2e,stroke:#d97706,stroke-width:2px
+  Root[ප්‍රභාසංස්ලේෂණය]:::root --> A[කොන්දේසි]:::branch1
+  A --> A1[සූර්ය ආලෝකය]:::branch1light
+  A --> A2[ජලය]:::branch1light
+  Root --> B[ක්‍රියාවලිය]:::branch2
+  B --> B1["ග්ලූකෝස් (C6H12O6) නිපදවීම"]:::branch2light
+  B --> B2[පත්‍ර වල සිදුවේ]:::branch2light
+  Root --> C[ප්‍රතිඵල]:::branch3
+  C --> C1[ඔක්සිජන් නිකුත් වීම]:::branch3light
+  classDef root fill:#22c55e,color:#ffffff,stroke:#16a34a,stroke-width:3px,font-weight:bold
+  classDef branch1 fill:#3b82f6,color:#ffffff,stroke:#2563eb,stroke-width:2px
+  classDef branch1light fill:#bfdbfe,color:#1e3a5f,stroke:#3b82f6,stroke-width:1.5px
+  classDef branch2 fill:#f97316,color:#ffffff,stroke:#ea580c,stroke-width:2px
+  classDef branch2light fill:#fed7aa,color:#7c2d12,stroke:#f97316,stroke-width:1.5px
+  classDef branch3 fill:#ec4899,color:#ffffff,stroke:#db2777,stroke-width:2px
+  classDef branch3light fill:#fbcfe8,color:#831843,stroke:#ec4899,stroke-width:1.5px
+  classDef branch4 fill:#a855f7,color:#ffffff,stroke:#9333ea,stroke-width:2px
+  classDef branch4light fill:#e9d5ff,color:#581c87,stroke:#a855f7,stroke-width:1.5px
+  classDef branch5 fill:#14b8a6,color:#ffffff,stroke:#0d9488,stroke-width:2px
+  classDef branch5light fill:#99f6e4,color:#134e4a,stroke:#14b8a6,stroke-width:1.5px
+  classDef branch6 fill:#ef4444,color:#ffffff,stroke:#dc2626,stroke-width:2px
+  classDef branch6light fill:#fecaca,color:#7f1d1d,stroke:#ef4444,stroke-width:1.5px
 
 JSON object එක parse කළ නොහැකි නම් සම්පූර්ණ පද්ධතියම අසාර්ථක වන බැවින්, ඉහත format
 එකෙන් බැහැරව කිසිවක් නොදෙන්න.
