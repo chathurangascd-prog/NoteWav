@@ -939,7 +939,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let tempContainer = null;
             try {
-                const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
+                // FIX (PDF still showed the old thick green arrows even
+                // though on-screen was already fixed): html2canvas
+                // handles <svg> content specially (serializing it to an
+                // image internally) and wasn't picking up the JS-applied
+                // fixes from forceEdgeColor() on a freshly re-inserted
+                // copy of the SVG. Using the modal's LIVE svg element's
+                // outerHTML instead — which already has forceEdgeColor's
+                // fixes baked into its actual attributes/inline styles
+                // from when the modal opened — guarantees the export
+                // starts from already-correct markup.
+                const liveModalSvg = mindmapZoomWrapper.querySelector('svg');
+                const svgSource = liveModalSvg ? liveModalSvg.outerHTML : lastMindMapSvg;
+                const { svgString: fixedSvg, width, height } = prepareSvgForExport(svgSource);
 
                 tempContainer = document.createElement('div');
                 tempContainer.style.position = 'fixed';
@@ -950,19 +962,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 tempContainer.style.background = '#14141e';
                 tempContainer.innerHTML = fixedSvg;
                 document.body.appendChild(tempContainer);
-                forceEdgeColor(tempContainer);
+                forceEdgeColor(tempContainer); // safety net, in case the source svg above was the raw cache
 
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-                // FIX (still clipped after BOTH the viewBox-margin AND
-                // the getBBox-measurement attempts): rather than trying
-                // to precisely calculate or measure the "right" size —
-                // which kept being subtly wrong for Sinhala text and
-                // curved edges — just add a LARGE fixed safety margin
-                // on top of whatever size was calculated. A bit of
-                // extra blank space around the diagram is a much
-                // smaller problem than content getting cut off.
-                const brutePadding = 300;
+                // FIX (PDF file size ballooned to ~90MB): the earlier
+                // 300px brute-force padding plus scale:3 plus lossless
+                // PNG combined into a huge canvas with a huge losslessly
+                // -encoded image. Now that arrows are thin lines (not
+                // filled wing shapes), they don't overflow nearly as
+                // much, so a much smaller safety margin is enough —
+                // combined with a slightly lower (still high-quality)
+                // scale and switching to high-quality JPEG (much better
+                // compression than PNG for this kind of flat-color,
+                // shadowed content), the file size drops drastically
+                // with no visible quality loss.
+                const brutePadding = 60;
                 const finalWidth = width + brutePadding * 2;
                 const finalHeight = height + brutePadding * 2;
                 const liveSvg = tempContainer.querySelector('svg');
@@ -990,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const canvas = await html2canvas(tempContainer, {
                     backgroundColor: '#14141e',
-                    scale: 3,
+                    scale: 2.5,
                     width: finalWidth,
                     height: finalHeight,
                     logging: false,
@@ -999,12 +1014,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.body.removeChild(tempContainer);
                 tempContainer = null;
 
-                const imgData = canvas.toDataURL('image/png');
+                const imgData = canvas.toDataURL('image/jpeg', 0.93);
 
                 const { jsPDF } = window.jspdf;
                 const orientation = canvas.width >= canvas.height ? 'l' : 'p';
-                const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
-                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], compress: true });
+                pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
 
                 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
