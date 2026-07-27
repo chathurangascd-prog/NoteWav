@@ -595,6 +595,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 .edgePaths .path, .edgePath .path {
                     stroke-width: 2.5px;
                 }
+                /* FIX (arrows still green despite lineColor variable):
+                   the theme variable wasn't winning against Mermaid's
+                   own generated edge styles. Forcing the stroke color
+                   directly on every class name Mermaid has used for
+                   edge paths across versions, with !important, so it
+                   can't lose to anything else. */
+                .edgePath path,
+                .edgePaths path,
+                path.flowchart-link,
+                .flowchart-link,
+                .edge-thickness-normal,
+                .edge-thickness-thick,
+                .edge-pattern-solid,
+                .edge-pattern-dashed {
+                    stroke: #8b6fd6 !important;
+                }
                 .node.root-node rect, .node.root-node polygon {
                     filter: drop-shadow(0 6px 22px rgba(107, 48, 255, 0.5));
                 }
