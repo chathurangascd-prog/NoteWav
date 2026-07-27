@@ -573,7 +573,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 curve: 'basis' // smooth curved connectors instead of sharp angles
             },
             themeVariables: {
-                fontSize: '19px'
+                fontSize: '19px',
+                // FIX: arrows were using the theme's default line color,
+                // which happened to look the same green as the root
+                // node — confusing since arrows aren't meant to signal
+                // anything about branch color. A neutral, distinct
+                // color (matching the arrowhead fix below) makes
+                // arrows read as plain connectors regardless of which
+                // branch colors are in play.
+                lineColor: '#8b6fd6'
             },
             // Polish pass — rounded node corners + soft glow shadow
             // (matches the app's glass-card aesthetic elsewhere) and
@@ -823,11 +831,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const doc = parser.parseFromString(svgString, 'image/svg+xml');
         const svgEl = doc.documentElement;
 
-        let width = 0, height = 0;
+        let minX = 0, minY = 0, width = 0, height = 0;
         const viewBox = svgEl.getAttribute('viewBox');
         if (viewBox) {
             const parts = viewBox.trim().split(/\s+/).map(Number);
             if (parts.length === 4) {
+                minX = parts[0];
+                minY = parts[1];
                 width = parts[2];
                 height = parts[3];
             }
@@ -842,6 +852,22 @@ document.addEventListener('DOMContentLoaded', function() {
             height = height || 800;
         }
 
+        // FIX (rightmost/edge nodes got clipped in the exported PDF):
+        // curved ("basis") connector paths can bow slightly outside
+        // Mermaid's own calculated viewBox bounds — especially on wide
+        // diagrams with many parallel branches and the increased
+        // node/rank spacing — so exporting at the EXACT calculated
+        // size clipped that overflow. Add a safety margin on all sides
+        // and expand the viewBox to match (not just width/height, or
+        // the content would just get scaled instead of getting real
+        // breathing room), so edge content always has room to spare.
+        const margin = Math.max(40, Math.round(width * 0.04));
+        minX -= margin;
+        minY -= margin;
+        width += margin * 2;
+        height += margin * 2;
+
+        svgEl.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
         svgEl.setAttribute('width', String(width));
         svgEl.setAttribute('height', String(height));
 

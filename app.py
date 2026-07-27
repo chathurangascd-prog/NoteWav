@@ -449,19 +449,26 @@ def _clean_podcast_script(text):
     """FIX (chemical formulas showed up as literal "$H_2O$" in the
     readable/narrated script): despite being instructed not to,
     Gemini sometimes writes chemical formulas or math using LaTeX-style
-    notation ($...$ delimiters, _ for subscript, ^ for superscript).
-    That's meaningless as plain text — it reads oddly out loud via TTS
-    and looks broken on screen. This is a safety net: strip the $...$
-    math delimiters and normalize subscript/superscript characters to
-    plain digits, regardless of what the prompt asked for.
+    notation ($...$ delimiters, _ for subscript, ^ for superscript,
+    sometimes with {braces} for grouping too, e.g. "$H_{2}O$"). That's
+    meaningless as plain text — it reads oddly out loud via TTS and
+    looks broken on screen. This is a safety net: strip ALL LaTeX
+    syntax characters (_, ^, {, }, \\) from inside $...$ math sections,
+    then remove the $ delimiters themselves — leaving just the plain
+    alphanumeric content. Also catches stray _ / ^ markers that show up
+    OUTSIDE any $...$ wrapper, in case Gemini drops the delimiters but
+    keeps the subscript syntax.
     """
     if not text or not isinstance(text, str):
         return text
     text = text.translate(_SUBSCRIPT_SUPERSCRIPT_MAP)
-    # Remove LaTeX math delimiters ($...$) but keep the content inside,
-    # and drop stray underscore/caret subscript-superscript markers
-    # (e.g. "H_2O" -> "H2O", "x^2" -> "x2").
-    text = re.sub(r'\$([^$]+)\$', r'\1', text)
+
+    def strip_latex_markup(match):
+        inner = match.group(1)
+        return re.sub(r'[_^{}\\]', '', inner)
+
+    text = re.sub(r'\$([^$]+)\$', strip_latex_markup, text)
+    # Safety net for stray _ / ^ markers outside any $...$ wrapper.
     text = re.sub(r'(?<=[A-Za-z0-9])_(?=[A-Za-z0-9])', '', text)
     text = re.sub(r'(?<=[A-Za-z0-9])\^(?=[A-Za-z0-9])', '', text)
     return text
@@ -577,6 +584,11 @@ def call_gemini_structured(note_text, max_retries=3):
     data = _parse_json_loose(raw_text)
 
     podcast_script = _clean_podcast_script((data.get('podcast_script') or '').strip())
+    if '$' in podcast_script or '_' in podcast_script:
+        # Diagnostic only — helps confirm in Render's logs whether the
+        # cleanup actually ran and what (if anything) slipped through,
+        # without blocking the response.
+        print(f"⚠️ podcast_script still contains $ or _ after cleanup: {podcast_script[:200]!r}")
     mermaid_code_si = _clean_mermaid_code(data.get('mermaid_code_si'))
     mermaid_code_en = _clean_mermaid_code(data.get('mermaid_code_en'))
 
