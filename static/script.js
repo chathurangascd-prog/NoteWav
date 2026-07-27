@@ -950,61 +950,78 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let tempContainer = null;
             try {
-                // FIX now lives inside prepareSvgForExport() itself —
-                // it bakes the color/fill fix directly into the SVG
-                // markup TEXT via DOMParser+XMLSerializer, so the
-                // source string doesn't matter as much anymore; using
-                // lastMindMapSvg (the cached render) directly and
-                // consistently avoids the added complexity/uncertainty
-                // of trying to extract "the right" live DOM element.
-                const { svgString: fixedSvg, width, height } = prepareSvgForExport(lastMindMapSvg);
+                // FIX (arrows kept showing Mermaid's original green no
+                // matter what): Mermaid embeds its OWN <style> block
+                // INSIDE the SVG markup (with rules like ".edgePath
+                // path { stroke: green !important }"). ANY approach
+                // that goes through a STRING at some point — innerHTML,
+                // outerHTML, or DOMParser+XMLSerializer — carries that
+                // embedded stylesheet along with it, and its !important
+                // rules keep beating our attribute/inline-style changes
+                // every time we re-insert that markup. The fix: never
+                // re-serialize to a string at all. mindmapContainer's
+                // SVG (the small, un-enlarged preview) is already
+                // confirmed correct on screen — clone that LIVE DOM
+                // NODE directly with cloneNode(true), which copies its
+                // current attributes/inline-styles as real DOM state,
+                // not by re-parsing text. That preserves our earlier
+                // forceEdgeColor() fix (also inline-style, so it has
+                // equal-or-higher priority than the embedded
+                // stylesheet) instead of losing it.
+                const liveSvg = mindmapContainer.querySelector('svg');
+                if (!liveSvg) {
+                    showErrorBanner('Mind Map එක load වී නොමැත.');
+                    return;
+                }
+                const svgClone = liveSvg.cloneNode(true);
+
+                // Re-apply the color fix directly on the clone too, as
+                // a safety net (harmless if already correct).
+                svgClone.querySelectorAll('path, line, polyline').forEach(p => {
+                    if (p.closest('marker')) return;
+                    p.setAttribute('stroke', '#8b6fd6');
+                    p.setAttribute('fill', 'none');
+                    p.setAttribute('stroke-width', '2.5');
+                    p.style.setProperty('stroke', '#8b6fd6', 'important');
+                    p.style.setProperty('fill', 'none', 'important');
+                });
+
+                // Work out the real size from the clone's own viewBox/
+                // width/height (same logic as before, just without a
+                // string round-trip), then add a safety margin.
+                let width = 0, height = 0;
+                const vbAttr = svgClone.getAttribute('viewBox');
+                let vx = 0, vy = 0;
+                if (vbAttr) {
+                    const parts = vbAttr.trim().split(/\s+/).map(Number);
+                    if (parts.length === 4) {
+                        vx = parts[0]; vy = parts[1]; width = parts[2]; height = parts[3];
+                    }
+                }
+                const wAttr = svgClone.getAttribute('width');
+                const hAttr = svgClone.getAttribute('height');
+                if (wAttr && !wAttr.includes('%')) width = parseFloat(wAttr) || width;
+                if (hAttr && !hAttr.includes('%')) height = parseFloat(hAttr) || height;
+                if (!width || !height) { width = width || 1200; height = height || 800; }
+
+                const brutePadding = 60;
+                const finalWidth = width + brutePadding * 2;
+                const finalHeight = height + brutePadding * 2;
+                svgClone.setAttribute('viewBox', `${vx - brutePadding} ${vy - brutePadding} ${width + brutePadding * 2} ${height + brutePadding * 2}`);
+                svgClone.setAttribute('width', String(finalWidth));
+                svgClone.setAttribute('height', String(finalHeight));
 
                 tempContainer = document.createElement('div');
                 tempContainer.style.position = 'fixed';
                 tempContainer.style.left = '-99999px';
                 tempContainer.style.top = '0';
-                tempContainer.style.width = width + 'px';
-                tempContainer.style.height = height + 'px';
-                tempContainer.style.background = '#14141e';
-                tempContainer.innerHTML = fixedSvg;
-                document.body.appendChild(tempContainer);
-                forceEdgeColor(tempContainer); // safety net, in case the source svg above was the raw cache
-
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-                // FIX (PDF file size ballooned to ~90MB): the earlier
-                // 300px brute-force padding plus scale:3 plus lossless
-                // PNG combined into a huge canvas with a huge losslessly
-                // -encoded image. Now that arrows are thin lines (not
-                // filled wing shapes), they don't overflow nearly as
-                // much, so a much smaller safety margin is enough —
-                // combined with a slightly lower (still high-quality)
-                // scale and switching to high-quality JPEG (much better
-                // compression than PNG for this kind of flat-color,
-                // shadowed content), the file size drops drastically
-                // with no visible quality loss.
-                const brutePadding = 60;
-                const finalWidth = width + brutePadding * 2;
-                const finalHeight = height + brutePadding * 2;
-                const liveSvg = tempContainer.querySelector('svg');
-                if (liveSvg) {
-                    const vb = liveSvg.getAttribute('viewBox');
-                    if (vb) {
-                        const parts = vb.trim().split(/\s+/).map(Number);
-                        if (parts.length === 4) {
-                            const [vx, vy, vw, vh] = parts;
-                            liveSvg.setAttribute(
-                                'viewBox',
-                                `${vx - brutePadding} ${vy - brutePadding} ${vw + brutePadding * 2} ${vh + brutePadding * 2}`
-                            );
-                        }
-                    }
-                    liveSvg.setAttribute('width', String(finalWidth));
-                    liveSvg.setAttribute('height', String(finalHeight));
-                }
                 tempContainer.style.width = finalWidth + 'px';
                 tempContainer.style.height = finalHeight + 'px';
-                await new Promise(resolve => requestAnimationFrame(resolve));
+                tempContainer.style.background = '#14141e';
+                tempContainer.appendChild(svgClone); // appendChild the actual node — not innerHTML with a string
+                document.body.appendChild(tempContainer);
+
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
                 const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
                 const html2canvas = html2canvasModule.default;
