@@ -699,18 +699,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const mindmapZoomResetBtn = document.getElementById('mindmap-zoom-reset');
     const mindmapDownloadPdfBtn = document.getElementById('mindmap-download-pdf');
 
-    // NEW: mind maps opened at 100% were too small to read comfortably,
-    // so the modal now opens pre-zoomed to 400% actual scale — but that
-    // starting point is now RELABELED as "100%" (the new baseline), so
-    // the on-screen percentage still reads naturally and zooming in
-    // further from there goes progressively bigger still.
-    const MINDMAP_BASE_ZOOM = 4;
+    // FIX (wide diagrams got cut off at the sides): a fixed "always
+    // zoom to 400%" default was too aggressive for diagrams with many
+    // parallel branches — they overflowed the modal's visible width
+    // badly. Auto-fit instead: measure the diagram's actual rendered
+    // size and compute a scale that fits it within the modal's visible
+    // area (capped so small diagrams don't get absurdly huge either).
     let mindmapZoom = 1;
 
     function setMindMapZoom(level) {
-        mindmapZoom = Math.min(3, Math.max(0.4, level));
-        const actualScale = mindmapZoom * MINDMAP_BASE_ZOOM;
-        if (mindmapZoomWrapper) mindmapZoomWrapper.style.transform = `scale(${actualScale})`;
+        mindmapZoom = Math.min(4, Math.max(0.3, level));
+        if (mindmapZoomWrapper) mindmapZoomWrapper.style.transform = `scale(${mindmapZoom})`;
         if (mindmapZoomLevelEl) mindmapZoomLevelEl.textContent = `${Math.round(mindmapZoom * 100)}%`;
     }
 
@@ -720,8 +719,30 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         mindmapZoomWrapper.innerHTML = lastMindMapSvg;
-        setMindMapZoom(1); // "100%" now = 400% actual scale (see MINDMAP_BASE_ZOOM above)
         mindmapModalBackdrop.classList.remove('hidden');
+
+        // Measure after the modal is actually visible/laid out, then
+        // pick a zoom level that fits the diagram to the viewport
+        // (falls back to 100% if measurement isn't possible).
+        requestAnimationFrame(() => {
+            const svgEl = mindmapZoomWrapper.querySelector('svg');
+            if (svgEl && mindmapModalBody) {
+                const svgRect = svgEl.getBoundingClientRect();
+                const margin = 70;
+                const availableWidth = mindmapModalBody.clientWidth - margin;
+                const availableHeight = mindmapModalBody.clientHeight - margin;
+                if (svgRect.width > 0 && svgRect.height > 0) {
+                    const fitScale = Math.min(
+                        availableWidth / svgRect.width,
+                        availableHeight / svgRect.height,
+                        2.5 // don't over-zoom small/simple diagrams either
+                    );
+                    setMindMapZoom(fitScale);
+                    return;
+                }
+            }
+            setMindMapZoom(1);
+        });
     }
 
     function closeMindMapModal() {
