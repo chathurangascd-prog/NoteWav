@@ -699,8 +699,8 @@ document.addEventListener('DOMContentLoaded', function() {
             fontFamily: 'Plus Jakarta Sans, sans-serif',
             flowchart: {
                 htmlLabels: false,
-                nodeSpacing: 70,
-                rankSpacing: 85,
+                nodeSpacing: 35,
+                rankSpacing: 90,
                 padding: 48,
                 curve: 'basis' // smooth curved connectors instead of sharp angles
             },
@@ -1084,26 +1084,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return null;
         }
 
-        let tempContainer = null;
         try {
             // FIX (arrows kept showing Mermaid's original green no
             // matter what): Mermaid embeds its OWN <style> block
             // INSIDE the SVG markup (with rules like ".edgePath
-            // path { stroke: green !important }"). ANY approach
-            // that goes through a STRING at some point — innerHTML,
-            // outerHTML, or DOMParser+XMLSerializer — carries that
-            // embedded stylesheet along with it, and its !important
-            // rules keep beating our attribute/inline-style changes
-            // every time we re-insert that markup. The fix: never
-            // re-serialize to a string at all. mindmapContainer's
-            // SVG (the small, un-enlarged preview) is already
-            // confirmed correct on screen — clone that LIVE DOM
-            // NODE directly with cloneNode(true), which copies its
-            // current attributes/inline-styles as real DOM state,
-            // not by re-parsing text. That preserves our earlier
-            // forceEdgeColor() fix (also inline-style, so it has
-            // equal-or-higher priority than the embedded
-            // stylesheet) instead of losing it.
+            // path { stroke: green !important }"). Cloning the LIVE,
+            // already-correctly-styled DOM node with cloneNode(true)
+            // (rather than re-serializing to a string) preserves our
+            // forceEdgeColor() inline-style fix instead of losing it.
             const liveSvg = mindmapContainer.querySelector('svg');
             if (!liveSvg) {
                 showErrorBanner('Mind Map එක load වී නොමැත.');
@@ -1123,8 +1111,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             // Work out the real size from the clone's own viewBox/
-            // width/height (same logic as before, just without a
-            // string round-trip), then add a safety margin.
+            // width/height, then add a safety margin.
             let width = 0, height = 0;
             const vbAttr = svgClone.getAttribute('viewBox');
             let vx = 0, vy = 0;
@@ -1147,34 +1134,59 @@ document.addEventListener('DOMContentLoaded', function() {
             svgClone.setAttribute('width', String(finalWidth));
             svgClone.setAttribute('height', String(finalHeight));
 
-            tempContainer = document.createElement('div');
-            tempContainer.style.position = 'fixed';
-            tempContainer.style.left = '-99999px';
-            tempContainer.style.top = '0';
-            tempContainer.style.width = finalWidth + 'px';
-            tempContainer.style.height = finalHeight + 'px';
-            tempContainer.style.background = '#14141e';
-            tempContainer.appendChild(svgClone); // appendChild the actual node — not innerHTML with a string
-            document.body.appendChild(tempContainer);
+            // Give the SVG an explicit background rect so it's not
+            // transparent once rasterized (canvas has no CSS
+            // background to fall back on).
+            const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            bgRect.setAttribute('x', String(vx - brutePadding));
+            bgRect.setAttribute('y', String(vy - brutePadding));
+            bgRect.setAttribute('width', String(width + brutePadding * 2));
+            bgRect.setAttribute('height', String(height + brutePadding * 2));
+            bgRect.setAttribute('fill', '#14141e');
+            svgClone.insertBefore(bgRect, svgClone.firstChild);
 
-            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            // FIX (arrows were missing entirely on mobile PNG
+            // downloads, and quality was inconsistent): html2canvas
+            // re-implements its own approximation of SVG rendering,
+            // and that approximation behaves differently across
+            // browser engines — desktop Firefox/Chrome handled our
+            // edge paths fine, but mobile browsers' html2canvas code
+            // path apparently dropped them. Switching to the browser's
+            // OWN native SVG renderer instead — load the serialized
+            // SVG into a real <img>, then draw that onto a canvas —
+            // sidesteps html2canvas's SVG handling entirely and uses
+            // the exact same rendering engine that already draws the
+            // mind map correctly on screen, on every platform.
+            const svgString = new XMLSerializer().serializeToString(svgClone);
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const svgUrl = URL.createObjectURL(svgBlob);
 
-            const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
-            const html2canvas = html2canvasModule.default;
-
-            const canvas = await html2canvas(tempContainer, {
-                backgroundColor: '#14141e',
-                scale: 2.5,
-                width: finalWidth,
-                height: finalHeight,
-                logging: false,
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = svgUrl;
             });
 
-            document.body.removeChild(tempContainer);
-            tempContainer = null;
+            // Adaptive scale: stay under a safe max canvas dimension
+            // so mobile browsers (which often silently cap canvas
+            // size around 4096px per side) never hit that ceiling —
+            // past it, browsers quietly downsample/clip instead of
+            // erroring, which is what looked like "quality loss".
+            const SAFE_MAX_CANVAS_DIMENSION = 4000;
+            const desiredScale = 2.5;
+            const largestSide = Math.max(finalWidth, finalHeight);
+            const adaptiveScale = Math.min(desiredScale, SAFE_MAX_CANVAS_DIMENSION / largestSide);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(finalWidth * adaptiveScale);
+            canvas.height = Math.round(finalHeight * adaptiveScale);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            URL.revokeObjectURL(svgUrl);
             return canvas;
         } catch (err) {
-            if (tempContainer && tempContainer.parentNode) document.body.removeChild(tempContainer);
             console.error('Mind map canvas render error:', err);
             showErrorBanner('Mind map render කරගැනීම අසාර්ථක විය: ' + (err && err.message ? err.message : err));
             return null;
