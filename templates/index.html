@@ -125,6 +125,8 @@
         .app-header { position: relative; }
         .library-modal-card { width: 720px; }
         .library-search-row { display: flex; align-items: center; gap: 10px; padding: 14px 24px 0; color: var(--text-muted); }
+        .library-backup-row { display: flex; gap: 10px; padding: 12px 24px 0; }
+        .library-backup-row .btn-secondary { width: auto; padding: 8px 16px; font-size: 0.82rem; }
         .library-search-input { flex: 1; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font-size: 0.85rem; font-family: inherit; }
         .library-search-input:focus { outline: none; border-color: #6b30ff; }
         .library-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
@@ -390,6 +392,15 @@
                         <i class="fas fa-search"></i>
                         <input type="text" id="library-search-input" class="library-search-input" placeholder="Title/Subject එකෙන් හොයන්න..." data-i18n-placeholder="library_search_placeholder">
                     </div>
+                    <div class="library-backup-row">
+                        <button type="button" id="library-export-btn" class="btn-secondary">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                        <button type="button" id="library-import-btn" class="btn-secondary">
+                            <i class="fas fa-upload"></i> Import
+                        </button>
+                        <input type="file" id="library-import-input" accept="application/json" hidden>
+                    </div>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>
                     </div>
@@ -429,17 +440,6 @@
                         <div class="settings-lang-buttons">
                             <button type="button" class="lang-toggle-btn active" id="app-lang-si-btn" data-applang="si">🇱🇰 සිංහල</button>
                             <button type="button" class="lang-toggle-btn" id="app-lang-en-btn" data-applang="en">🇬🇧 English</button>
-                        </div>
-                        <hr class="menu-divider">
-                        <p class="settings-label">Library Backup</p>
-                        <div class="settings-lang-buttons">
-                            <button type="button" id="library-export-btn" class="btn-secondary" style="width:auto;">
-                                <i class="fas fa-download"></i> Export
-                            </button>
-                            <button type="button" id="library-import-btn" class="btn-secondary" style="width:auto;">
-                                <i class="fas fa-upload"></i> Import
-                            </button>
-                            <input type="file" id="library-import-input" accept="application/json" hidden>
                         </div>
                     </div>
                 </div>
