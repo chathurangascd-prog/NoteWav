@@ -2780,52 +2780,109 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const INFO_CONTENT = {
         about: {
-            title: 'ℹ️ NoteWav AI ගැන — App එක Use කරන විදිහ',
-            html: `
-                <h4>1️⃣ පාඩම් සටහන ඇතුළත් කරන්න</h4>
-                <p>ඔබේ පාඩම් සටහන type කරන්න, හෝ පාඩමේ රූපයක් (photo) upload කරන්න — app එක automatic ලෙස රූපයෙන් text එක උපුටාගනියි (OCR).</p>
-                <h4>2️⃣ Study Mode එකක් තෝරන්න</h4>
-                <p><b>Full Text Mode:</b> ඔබේ text එකම audio + mind map බවට හැරවෙනවා.<br><b>Smart Study:</b> AI මගින් podcast script එකක් සහ mind map එකක් සකසනවා.</p>
-                <h4>3️⃣ "Script එක සකසන්න" click කරන්න</h4>
-                <p>AI එක ඔබේ සටහන process කරයි. ඕන නම් script එක Edit කරන්න (Safety Check step එකේදී).</p>
-                <h4>4️⃣ Audio Generate කරන්න</h4>
-                <p>"තරංග උත්පාදනය කරන්න" click කරන්න — podcast-style audio එකක් සකසේවි, play/pause/speed/skip controls සමඟ.</p>
-                <h4>5️⃣ Mind Map එක බලන්න</h4>
-                <p>Visual mind map එකක් auto-generate වේ — click කර විශාල කර, PNG/PDF විදිහට download කරගන්න පුළුවන්.</p>
-                <h4>6️⃣ Library එකට Save කරන්න</h4>
-                <p>ඔබේ notes පසුව use කරන්න Library එකට save කරගන්න, subject එකකින් organize කරගන්න.</p>
-            `,
+            si: {
+                title: 'ℹ️ NoteWav AI ගැන — App එක Use කරන විදිහ',
+                html: `
+                    <h4>1️⃣ පාඩම් සටහන ඇතුළත් කරන්න</h4>
+                    <p>ඔබේ පාඩම් සටහන type කරන්න, හෝ පාඩමේ රූපයක් (photo) upload කරන්න — app එක automatic ලෙස රූපයෙන් text එක උපුටාගනියි (OCR).</p>
+                    <h4>2️⃣ Study Mode එකක් තෝරන්න</h4>
+                    <p><b>Smart Study:</b> AI මගින් podcast script එකක් සහ mind map එකක් සකසනවා.<br><b>Full Text Mode:</b> ඔබේ text එකම audio + mind map බවට හැරවෙනවා.</p>
+                    <h4>3️⃣ "Script එක සකසන්න" click කරන්න</h4>
+                    <p>AI එක ඔබේ සටහන process කරයි. ඕන නම් script එක Edit කරන්න (Safety Check step එකේදී).</p>
+                    <h4>4️⃣ Audio Generate කරන්න</h4>
+                    <p>"තරංග උත්පාදනය කරන්න" click කරන්න — podcast-style audio එකක් සකසේවි, play/pause/speed/skip controls සමඟ.</p>
+                    <h4>5️⃣ Mind Map එක බලන්න</h4>
+                    <p>Visual mind map එකක් auto-generate වේ — click කර විශාල කර, PNG/PDF විදිහට download කරගන්න පුළුවන්.</p>
+                    <h4>6️⃣ Library එකට Save කරන්න</h4>
+                    <p>ඔබේ notes පසුව use කරන්න Library එකට save කරගන්න, subject එකකින් organize කරගන්න.</p>
+                `,
+            },
+            en: {
+                title: 'ℹ️ About NoteWav AI — How to Use the App',
+                html: `
+                    <h4>1️⃣ Enter Your Note</h4>
+                    <p>Type your study note, or upload a photo of your lesson — the app automatically extracts the text from the image (OCR).</p>
+                    <h4>2️⃣ Choose a Study Mode</h4>
+                    <p><b>Smart Study:</b> AI prepares a podcast script and a mind map for you.<br><b>Full Text Mode:</b> Your own text becomes the audio + mind map directly.</p>
+                    <h4>3️⃣ Click "Prepare Script"</h4>
+                    <p>The AI processes your note. You can edit the script if needed (during the Safety Check step).</p>
+                    <h4>4️⃣ Generate Audio</h4>
+                    <p>Click "Generate Audio" — a podcast-style narration is created, with play/pause/speed/skip controls.</p>
+                    <h4>5️⃣ View the Mind Map</h4>
+                    <p>A visual mind map is auto-generated — click to enlarge it, and download it as a PNG or PDF.</p>
+                    <h4>6️⃣ Save to Library</h4>
+                    <p>Save your notes to the Library to use later, organized by subject.</p>
+                `,
+            },
         },
         support: {
-            title: '📩 Support — උදව්වක් ඕනද?',
-            html: `
-                <p>App එකේ ගැටලුවක් තිබේ නම්, feature request එකක් තිබේ නම්, හෝ වෙන කිසිම දෙයක් ගැන කතා කරන්න ඕන නම්, කරුණාකර පහත number එකට SMS/text message එකක් යවන්න:</p>
-                <div class="info-contact-box">
-                    <i class="fas fa-mobile-screen"></i>
-                    <div>
-                        <div>Sandun (SCD)</div>
-                        <div class="phone-number">+94 77 634 0009</div>
+            si: {
+                title: '📩 Support — උදව්වක් ඕනද?',
+                html: `
+                    <p>App එකේ ගැටලුවක් තිබේ නම්, feature request එකක් තිබේ නම්, හෝ වෙන කිසිම දෙයක් ගැන කතා කරන්න ඕන නම්, කරුණාකර පහත number එකට SMS/text message එකක් යවන්න:</p>
+                    <div class="info-contact-box">
+                        <i class="fas fa-mobile-screen"></i>
+                        <div>
+                            <div>Sandun (SCD)</div>
+                            <div class="phone-number">+94 77 634 0009</div>
+                        </div>
                     </div>
-                </div>
-                <a href="sms:+94776340009" class="info-sms-btn"><i class="fas fa-comment-sms"></i> Text Message එකක් යවන්න</a>
-            `,
+                    <a href="sms:+94776340009" class="info-sms-btn"><i class="fas fa-comment-sms"></i> Text Message එකක් යවන්න</a>
+                `,
+            },
+            en: {
+                title: '📩 Support — Need Help?',
+                html: `
+                    <p>If you run into an issue with the app, have a feature request, or want to talk about anything else, please send an SMS/text message to the number below:</p>
+                    <div class="info-contact-box">
+                        <i class="fas fa-mobile-screen"></i>
+                        <div>
+                            <div>Sandun (SCD)</div>
+                            <div class="phone-number">+94 77 634 0009</div>
+                        </div>
+                    </div>
+                    <a href="sms:+94776340009" class="info-sms-btn"><i class="fas fa-comment-sms"></i> Send a Text Message</a>
+                `,
+            },
         },
         privacy: {
-            title: '🔒 Privacy — ඔබේ දත්ත ගැන',
-            html: `
-                <p>NoteWav AI විසින් login/account එකක් අවශ්‍ය නොකරයි. පහත දේවල් දැනගන්න:</p>
-                <p><b>ඔබේ device එකේම (localStorage) save වන දේවල්:</b> Profile name/photo, study streak, font size preference, language preference — මේවා අපගේ server එකට යවන්නේ නෑ.</p>
-                <p><b>Server එකට යවන දේවල්:</b> Note text (AI processing සඳහා), Library එකට save කරන notes, generate කරන audio/mind map. Library data එක Render server එකේ temporary storage එකක save වේ.</p>
-                <p><b>Usage tracking:</b> App එක use කරන බව (anonymous device ID එකක් + ඔබ ලබාදෙන නම, තිබේ නම්) admin ට usage patterns බලාගන්න track කෙරේ — password, email වැනි කිසිදු sensitive දත්තයක් රැස් නොකෙරේ.</p>
-            `,
+            si: {
+                title: '🔒 Privacy — ඔබේ දත්ත ගැන',
+                html: `
+                    <p>NoteWav AI විසින් login/account එකක් අවශ්‍ය නොකරයි. පහත දේවල් දැනගන්න:</p>
+                    <p><b>ඔබේ device එකේම (localStorage) save වන දේවල්:</b> Profile name/photo, study streak, font size preference, language preference — මේවා අපගේ server එකට යවන්නේ නෑ.</p>
+                    <p><b>Server එකට යවන දේවල්:</b> Note text (AI processing සඳහා), Library එකට save කරන notes, generate කරන audio/mind map. Library data එක Render server එකේ temporary storage එකක save වේ.</p>
+                    <p><b>Usage tracking:</b> App එක use කරන බව (anonymous device ID එකක් + ඔබ ලබාදෙන නම, තිබේ නම්) admin ට usage patterns බලාගන්න track කෙරේ — password, email වැනි කිසිදු sensitive දත්තයක් රැස් නොකෙරේ.</p>
+                `,
+            },
+            en: {
+                title: '🔒 Privacy — About Your Data',
+                html: `
+                    <p>NoteWav AI does not require a login/account. Here's what you should know:</p>
+                    <p><b>Saved only on your own device (localStorage):</b> Profile name/photo, study streak, font size preference, language preference — these are never sent to our server.</p>
+                    <p><b>Sent to the server:</b> Note text (for AI processing), notes you save to the Library, generated audio/mind maps. Library data is stored in temporary storage on the Render server.</p>
+                    <p><b>Usage tracking:</b> That you use the app (an anonymous device ID + the name you provide, if any) is tracked so the admin can see usage patterns — no sensitive data like passwords or emails is collected.</p>
+                `,
+            },
         },
     };
+
+    function getCurrentInfoLang() {
+        try {
+            const stored = localStorage.getItem('notewav_app_language');
+            return (stored === 'en') ? 'en' : 'si';
+        } catch (e) {
+            return 'si';
+        }
+    }
 
     function openInfoModal(key) {
         const content = INFO_CONTENT[key];
         if (!content) return;
-        infoModalTitle.textContent = content.title;
-        infoModalBody.innerHTML = content.html;
+        const lang = getCurrentInfoLang();
+        const localized = content[lang] || content.si;
+        infoModalTitle.textContent = localized.title;
+        infoModalBody.innerHTML = localized.html;
         infoModalBackdrop.classList.remove('hidden');
     }
 
