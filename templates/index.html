@@ -464,6 +464,28 @@
             font-size: 0.85rem;
             font-weight: 700;
         }
+        .menu-nav-btn {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 1px solid rgba(107, 48, 255, 0.45);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .menu-nav-btn:hover {
+            background: rgba(107, 48, 255, 0.15);
+            border-color: #6b30ff;
+            color: #fff;
+        }
         @media (max-width: 640px) {
             .streak-badge {
                 position: static;
@@ -471,6 +493,94 @@
                 width: fit-content;
                 margin: 10px auto 0;
             }
+            .menu-nav-btn {
+                top: 20px;
+                left: 16px;
+            }
+        }
+        /* ===== SIDE MENU DRAWER (slides in from the left) ===== */
+        .menu-drawer-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 3000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .menu-drawer-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .menu-drawer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 300px;
+            max-width: 82vw;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            box-shadow: var(--shadow-lg);
+            transform: translateX(-100%);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        .menu-drawer-backdrop.open .menu-drawer {
+            transform: translateX(0);
+        }
+        .menu-drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 20px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .menu-drawer-header h3 {
+            font-size: 1.05rem;
+            color: var(--text-primary);
+        }
+        .menu-drawer-close {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .menu-drawer-close:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+        .menu-drawer-body {
+            padding: 22px 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .settings-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .settings-lang-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .settings-lang-buttons .lang-toggle-btn {
+            flex: 1;
+            justify-content: center;
+            display: flex;
+            padding: 12px;
+            font-size: 0.9rem;
         }
         .app-header {
             position: relative;
@@ -832,14 +942,17 @@
                 <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="NoteWav" class="logo-icon-img">
                 <h1>NoteWav <span class="badge">AI</span></h1>
             </div>
-            <p>Smart විදිහට පාඩම් අහන්න. NoteWav AI</p>
+            <p data-i18n="header_tagline">Smart විදිහට පාඩම් අහන්න. NoteWav AI</p>
             <div class="header-stats">
                 <span class="stat-badge"><i class="fas fa-language"></i> Sinhala OCR</span>
                 <span class="stat-badge"><i class="fas fa-podcast"></i> Podcast Narration</span>
                 <span class="stat-badge"><i class="fas fa-diagram-project"></i> Mind Maps</span>
             </div>
+            <button id="open-menu-btn" class="menu-nav-btn" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
             <button id="open-library-btn" class="library-nav-btn">
-                <i class="fas fa-book"></i> My Library
+                <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
             </button>
             <div id="streak-badge" class="streak-badge hidden" title="Daily study streak">
                 <i class="fas fa-fire"></i> <span id="streak-count">0</span>
@@ -851,20 +964,20 @@
             <div class="glass-card animate-fade card-step-1">
                 <div class="card-header">
                     <span class="step-num">01</span>
-                    <h2>ඔබේ සටහන ඇතුළත් කරන්න</h2>
+                    <h2 data-i18n="card1_title">ඔබේ සටහන ඇතුළත් කරන්න</h2>
                     <span class="step-subtitle">📝 Paste your notes here</span>
                 </div>
 
                 <div class="image-upload-section">
                     <p class="section-title">
                         <i class="fas fa-image"></i>
-                        රූපයක් මඟින් කරුණු ලබාදෙන්න (OCR):
+                        <span data-i18n="ocr_section_title">රූපයක් මඟින් කරුණු ලබාදෙන්න (OCR):</span>
                     </p>
                     <div class="upload-area-wrapper">
                         <div class="upload-area" id="upload-area" tabindex="0" role="button" aria-label="රූපයක් උඩුගත කරන්න">
                             <i class="fas fa-cloud-upload-alt"></i>
-                            <p>රූපයක් මෙතනට ඇද දමන්න හෝ ක්ලික් කරන්න</p>
-                            <span class="upload-hint">PNG, JPG, JPEG, WEBP ගොනු පමණයි (Max 5MB)</span>
+                            <p data-i18n="upload_area_text">රූපයක් මෙතනට ඇද දමන්න හෝ ක්ලික් කරන්න</p>
+                            <span class="upload-hint" data-i18n="upload_hint">PNG, JPG, JPEG, WEBP ගොනු පමණයි (Max 5MB)</span>
                             <input type="file" id="image-input" accept="image/*" hidden>
                         </div>
                         <div id="upload-source-menu" class="upload-source-menu hidden">
@@ -879,12 +992,12 @@
                     <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
                     <div id="ocr-status" class="ocr-status hidden">
                         <i class="fas fa-spinner fa-spin"></i>
-                        <span>පෙළ උපුටා ගැනීම සිදුවෙමින්...</span>
+                        <span data-i18n="ocr_status_text">පෙළ උපුටා ගැනීම සිදුවෙමින්...</span>
                     </div>
                 </div>
 
                 <div class="textarea-wrapper">
-                    <textarea id="note-input" placeholder="මෙතනට ඔබේ සිංහල හෝ ඉංග්‍රීසි පාඩම් සටහන ඇතුළත් කරන්න..." maxlength="2000"></textarea>
+                    <textarea id="note-input" placeholder="මෙතනට ඔබේ සිංහල හෝ ඉංග්‍රීසි පාඩම් සටහන ඇතුළත් කරන්න..." data-i18n-placeholder="note_input_placeholder" maxlength="2000"></textarea>
                     <div class="textarea-actions">
                         <button type="button" class="textarea-action-btn" id="note-input-clear-btn" aria-label="Clear">
                             <i class="fas fa-eraser"></i>
@@ -896,13 +1009,13 @@
                 </div>
 
                 <div class="character-count">
-                    <span id="char-count">0</span> / 2000 අක්ෂර
+                    <span id="char-count">0</span> <span data-i18n="char_count_suffix">/ 2000 අක්ෂර</span>
                 </div>
 
                 <div class="mode-selector">
                     <p class="section-title">
                         <i class="fas fa-graduation-cap"></i>
-                        අධ්‍යාපනික මාදිලිය (Study Mode):
+                        <span data-i18n="study_mode_title">අධ්‍යාපනික මාදිලිය (Study Mode):</span>
                     </p>
                     <div class="mode-options">
                         <label class="mode-box">
@@ -910,7 +1023,7 @@
                             <div class="mode-content">
                                 <span class="mode-icon">📄</span>
                                 <span class="mode-title">Full Text Mode</span>
-                                <span class="mode-desc">ඔබේ text එකම audio + mind map</span>
+                                <span class="mode-desc" data-i18n="mode_full_desc">ඔබේ text එකම audio + mind map</span>
                             </div>
                         </label>
                         <label class="mode-box">
@@ -918,7 +1031,7 @@
                             <div class="mode-content">
                                 <span class="mode-icon">🧠</span>
                                 <span class="mode-title">Smart Study</span>
-                                <span class="mode-desc">Podcast script + Mind Map දෙකම AI කරයි</span>
+                                <span class="mode-desc" data-i18n="mode_smart_desc">Podcast script + Mind Map දෙකම AI කරයි</span>
                                 <span class="mode-badge">✨ AI</span>
                             </div>
                         </label>
@@ -926,22 +1039,22 @@
                 </div>
 
                 <button id="process-btn" class="btn-primary">
-                    <i class="fas fa-magic"></i> Script එක සකසන්න
+                    <i class="fas fa-magic"></i> <span data-i18n="process_btn">Script එක සකසන්න</span>
                 </button>
             </div>
 
             <div id="safety-section" class="glass-card hidden animate-fade card-step-2">
                 <div class="card-header">
                     <span class="step-num">02</span>
-                    <h2>ආරක්ෂිත පරීක්ෂාව</h2>
+                    <h2 data-i18n="safety_title">ආරක්ෂිත පරීක්ෂාව</h2>
                     <span class="step-subtitle">🔍 Safety Check</span>
                 </div>
                 <p class="info-text">
                     <i class="fas fa-info-circle"></i>
-                    වැදගත් කරුණු මගහැරී ඇත්නම් ඔබට මෙය වෙනස් (Edit) කළ හැක:
+                    <span data-i18n="safety_info_text">වැදගත් කරුණු මගහැරී ඇත්නම් ඔබට මෙය වෙනස් (Edit) කළ හැක:</span>
                 </p>
                 <div class="font-size-controls">
-                    <span class="control-label"><i class="fas fa-text-height"></i> අකුරු ප්‍රමාණය:</span>
+                    <span class="control-label"><i class="fas fa-text-height"></i> <span data-i18n="font_size_label">අකුරු ප්‍රමාණය:</span></span>
                     <button type="button" id="font-size-decrease" class="control-btn-icon" aria-label="Decrease font size">
                         <i class="fas fa-minus"></i>
                     </button>
@@ -960,18 +1073,18 @@
                 </div>
 
                 <div class="library-save-row">
-                    <input type="text" id="library-subject-input" class="library-subject-input" placeholder="Subject (උදා: Biology, Physics)" maxlength="80">
+                    <input type="text" id="library-subject-input" class="library-subject-input" placeholder="Subject (උදා: Biology, Physics)" data-i18n-placeholder="subject_placeholder" maxlength="80">
                     <button id="save-to-library-btn" class="btn-secondary library-save-btn">
-                        <i class="fas fa-bookmark"></i> Library එකට Save කරන්න
+                        <i class="fas fa-bookmark"></i> <span data-i18n="save_to_library_btn">Library එකට Save කරන්න</span>
                     </button>
                 </div>
 
                 <div class="btn-group">
                     <button id="generate-audio-btn" class="btn-secondary">
-                        <i class="fas fa-microphone"></i> තරංග උත්පාදනය කරන්න
+                        <i class="fas fa-microphone"></i> <span data-i18n="generate_audio_btn">තරංග උත්පාදනය කරන්න</span>
                     </button>
                     <button id="reset-btn" class="btn-secondary btn-reset">
-                        <i class="fas fa-undo"></i> නැවත උත්සාහ කරන්න
+                        <i class="fas fa-undo"></i> <span data-i18n="reset_btn">නැවත උත්සාහ කරන්න</span>
                     </button>
                 </div>
             </div>
@@ -987,24 +1100,42 @@
                     <button type="button" class="lang-toggle-btn" data-lang="en" id="mindmap-lang-en-btn">🇬🇧 English</button>
                 </div>
                 <div id="mindmap-container" class="mindmap-container" tabindex="0" role="button" aria-label="Mind map එක විශාල කර බලන්න">
-                    <p class="mindmap-empty">Mind map එකක් තවම නෑ.</p>
+                    <p class="mindmap-empty" data-i18n="mindmap_empty">Mind map එකක් තවම නෑ.</p>
                 </div>
             </div>
 
             <div id="library-modal-backdrop" class="mindmap-modal-backdrop hidden">
                 <div id="library-modal-card" class="mindmap-modal-card library-modal-card">
                     <div class="mindmap-modal-header">
-                        <h3>📚 My Library</h3>
+                        <h3>📚 <span data-i18n="my_library">My Library</span></h3>
                         <button id="library-modal-close" class="mindmap-modal-close" aria-label="Close">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
                     <div class="library-search-row">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="library-search-input" class="library-search-input" placeholder="Title/Subject එකෙන් හොයන්න...">
+                        <input type="text" id="library-search-input" class="library-search-input" placeholder="Title/Subject එකෙන් හොයන්න..." data-i18n-placeholder="library_search_placeholder">
                     </div>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="menu-drawer-backdrop" class="menu-drawer-backdrop">
+                <div class="menu-drawer">
+                    <div class="menu-drawer-header">
+                        <h3><i class="fas fa-gear"></i> <span data-i18n="settings_title">Settings</span></h3>
+                        <button id="menu-drawer-close" class="menu-drawer-close" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="menu-drawer-body">
+                        <p class="settings-label" data-i18n="settings_language_label">App භාෂාව (Language)</p>
+                        <div class="settings-lang-buttons">
+                            <button type="button" class="lang-toggle-btn active" id="app-lang-si-btn" data-applang="si">🇱🇰 සිංහල</button>
+                            <button type="button" class="lang-toggle-btn" id="app-lang-en-btn" data-applang="en">🇬🇧 English</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1034,10 +1165,10 @@
                             </button>
                         </div>
                         <button id="mindmap-download-png" class="btn-secondary">
-                            <i class="fas fa-file-image"></i> PNG එකක් විදිහට Download කරන්න
+                            <i class="fas fa-file-image"></i> <span data-i18n="download_png_btn">PNG එකක් විදිහට Download කරන්න</span>
                         </button>
                         <button id="mindmap-download-pdf" class="btn-secondary">
-                            <i class="fas fa-file-pdf"></i> PDF එකක් විදිහට Download කරන්න
+                            <i class="fas fa-file-pdf"></i> <span data-i18n="download_pdf_btn">PDF එකක් විදිහට Download කරන්න</span>
                         </button>
                     </div>
                 </div>
@@ -1046,7 +1177,7 @@
             <div id="audio-section" class="glass-card hidden animate-fade card-step-3">
                 <div class="card-header">
                     <span class="step-num">03</span>
-                    <h2>NoteWav වාදකය</h2>
+                    <h2 data-i18n="audio_player_title">NoteWav වාදකය</h2>
                     <span class="step-subtitle">🎵 Audio Player</span>
                 </div>
 
@@ -1083,7 +1214,7 @@
 
                     <div class="player-extra-controls">
                         <div class="speed-control">
-                            <span class="control-label"><i class="fas fa-gauge-high"></i> වේගය:</span>
+                            <span class="control-label"><i class="fas fa-gauge-high"></i> <span data-i18n="speed_label">වේගය:</span></span>
                             <div class="speed-buttons">
                                 <button type="button" class="speed-btn" data-speed="0.75">0.75x</button>
                                 <button type="button" class="speed-btn active" data-speed="1">1x</button>
@@ -1092,7 +1223,7 @@
                             </div>
                         </div>
                         <div class="volume-control">
-                            <span class="control-label"><i class="fas fa-volume-high"></i> හඬ තීව්‍රතාව:</span>
+                            <span class="control-label"><i class="fas fa-volume-high"></i> <span data-i18n="volume_label">හඬ තීව්‍රතාව:</span></span>
                             <input type="range" id="volume-slider" min="0" max="100" value="100" step="1" aria-label="Volume">
                         </div>
                     </div>
@@ -1108,21 +1239,21 @@
 
                 <div class="player-download-row">
                     <button id="download-btn" class="btn-secondary">
-                        <i class="fas fa-download"></i> Audio Download කරන්න
+                        <i class="fas fa-download"></i> <span data-i18n="download_audio_btn">Audio Download කරන්න</span>
                     </button>
                     <div class="share-menu-wrapper">
                         <button id="share-btn" class="btn-secondary">
-                            <i class="fas fa-share-alt"></i> Share කරන්න
+                            <i class="fas fa-share-alt"></i> <span data-i18n="share_btn">Share කරන්න</span>
                         </button>
                         <div id="share-menu" class="share-menu hidden">
                             <button type="button" id="share-with-audio-btn" class="share-menu-item">
-                                <i class="fas fa-music"></i> Audio එකත් සමඟ Share කරන්න
+                                <i class="fas fa-music"></i> <span data-i18n="share_with_audio_btn">Audio එකත් සමඟ Share කරන්න</span>
                             </button>
                             <button type="button" id="share-whatsapp-btn" class="share-menu-item">
-                                <i class="fab fa-whatsapp"></i> WhatsApp (Text විතරයි)
+                                <i class="fab fa-whatsapp"></i> <span data-i18n="share_whatsapp_btn">WhatsApp (Text විතරයි)</span>
                             </button>
                             <button type="button" id="share-telegram-btn" class="share-menu-item">
-                                <i class="fab fa-telegram"></i> Telegram (Text විතරයි)
+                                <i class="fab fa-telegram"></i> <span data-i18n="share_telegram_btn">Telegram (Text විතරයි)</span>
                             </button>
                         </div>
                     </div>
@@ -1131,7 +1262,7 @@
                 <div class="lyrics-container">
                     <p id="highlight-text-container">
                         <i class="fas fa-quote-left" style="opacity: 0.3; margin-right: 8px;"></i>
-                        Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...
+                        <span data-i18n="lyrics_placeholder">Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...</span>
                     </p>
                 </div>
             </div>

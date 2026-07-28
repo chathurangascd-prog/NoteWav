@@ -359,6 +359,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ===== Side Menu Drawer (Settings, opens from the left) =====
+    const openMenuBtn = document.getElementById('open-menu-btn');
+    const menuDrawerBackdrop = document.getElementById('menu-drawer-backdrop');
+    const menuDrawerClose = document.getElementById('menu-drawer-close');
+    if (openMenuBtn && menuDrawerBackdrop) {
+        openMenuBtn.addEventListener('click', function() {
+            menuDrawerBackdrop.classList.add('open');
+        });
+    }
+    if (menuDrawerClose && menuDrawerBackdrop) {
+        menuDrawerClose.addEventListener('click', function() {
+            menuDrawerBackdrop.classList.remove('open');
+        });
+    }
+    if (menuDrawerBackdrop) {
+        menuDrawerBackdrop.addEventListener('click', function(e) {
+            if (e.target === menuDrawerBackdrop) menuDrawerBackdrop.classList.remove('open');
+        });
+    }
+
     if (saveToLibraryBtn) {
         saveToLibraryBtn.addEventListener('click', async function() {
             const noteText = noteInput.value.trim();
@@ -1942,4 +1962,87 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (e) {
         console.warn('Study streak tracking unavailable:', e);
     }
+});
+
+// ========================================
+// APP UI LANGUAGE (Sinhala / English toggle)
+// ========================================
+// Translates the app's own STATIC labels/buttons (not AI-generated
+// content like the podcast script or mind map, which already follow
+// the note's own language). Sinhala is the default/current style;
+// English is a full translation of every tagged string. Persisted in
+// localStorage so the choice survives across visits.
+const NOTEWAV_TRANSLATIONS = {
+    my_library: { si: 'මගේ පුස්තකාලය', en: 'My Library' },
+    settings_title: { si: 'සැකසුම්', en: 'Settings' },
+    settings_language_label: { si: 'App භාෂාව (Language)', en: 'App Language' },
+    library_search_placeholder: { si: 'Title/Subject එකෙන් හොයන්න...', en: 'Search by Title/Subject...' },
+    header_tagline: { si: 'Smart විදිහට පාඩම් අහන්න. NoteWav AI', en: 'Listen to your notes, the smart way. NoteWav AI' },
+    card1_title: { si: 'ඔබේ සටහන ඇතුළත් කරන්න', en: 'Enter Your Note' },
+    ocr_section_title: { si: 'රූපයක් මඟින් කරුණු ලබාදෙන්න (OCR):', en: 'Provide content via an image (OCR):' },
+    upload_area_text: { si: 'රූපයක් මෙතනට ඇද දමන්න හෝ ක්ලික් කරන්න', en: 'Drag an image here or click to browse' },
+    upload_hint: { si: 'PNG, JPG, JPEG, WEBP ගොනු පමණයි (Max 5MB)', en: 'PNG, JPG, JPEG, WEBP files only (Max 5MB)' },
+    ocr_status_text: { si: 'පෙළ උපුටා ගැනීම සිදුවෙමින්...', en: 'Extracting text...' },
+    note_input_placeholder: { si: 'මෙතනට ඔබේ සිංහල හෝ ඉංග්‍රීසි පාඩම් සටහන ඇතුළත් කරන්න...', en: 'Type your Sinhala or English study note here...' },
+    char_count_suffix: { si: '/ 2000 අක්ෂර', en: '/ 2000 characters' },
+    study_mode_title: { si: 'අධ්‍යාපනික මාදිලිය (Study Mode):', en: 'Study Mode:' },
+    mode_full_desc: { si: 'ඔබේ text එකම audio + mind map', en: 'Your text becomes audio + mind map' },
+    mode_smart_desc: { si: 'Podcast script + Mind Map දෙකම AI කරයි', en: 'AI creates both a podcast script + Mind Map' },
+    process_btn: { si: 'Script එක සකසන්න', en: 'Prepare Script' },
+    safety_title: { si: 'ආරක්ෂිත පරීක්ෂාව', en: 'Safety Check' },
+    safety_info_text: { si: 'වැදගත් කරුණු මගහැරී ඇත්නම් ඔබට මෙය වෙනස් (Edit) කළ හැක:', en: 'You can Edit this if important points are missing:' },
+    font_size_label: { si: 'අකුරු ප්‍රමාණය:', en: 'Font Size:' },
+    subject_placeholder: { si: 'Subject (උදා: Biology, Physics)', en: 'Subject (e.g: Biology, Physics)' },
+    save_to_library_btn: { si: 'Library එකට Save කරන්න', en: 'Save to Library' },
+    generate_audio_btn: { si: 'තරංග උත්පාදනය කරන්න', en: 'Generate Audio' },
+    reset_btn: { si: 'නැවත උත්සාහ කරන්න', en: 'Try Again' },
+    mindmap_empty: { si: 'Mind map එකක් තවම නෑ.', en: 'No mind map yet.' },
+    download_png_btn: { si: 'PNG එකක් විදිහට Download කරන්න', en: 'Download as PNG' },
+    download_pdf_btn: { si: 'PDF එකක් විදිහට Download කරන්න', en: 'Download as PDF' },
+    audio_player_title: { si: 'NoteWav වාදකය', en: 'NoteWav Player' },
+    speed_label: { si: 'වේගය:', en: 'Speed:' },
+    volume_label: { si: 'හඬ තීව්‍රතාව:', en: 'Volume:' },
+    download_audio_btn: { si: 'Audio Download කරන්න', en: 'Download Audio' },
+    share_btn: { si: 'Share කරන්න', en: 'Share' },
+    share_with_audio_btn: { si: 'Audio එකත් සමඟ Share කරන්න', en: 'Share with Audio' },
+    share_whatsapp_btn: { si: 'WhatsApp (Text විතරයි)', en: 'WhatsApp (Text only)' },
+    share_telegram_btn: { si: 'Telegram (Text විතරයි)', en: 'Telegram (Text only)' },
+    lyrics_placeholder: { si: 'Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...', en: 'Text will highlight here as the Audio plays...' },
+};
+
+function applyAppLanguage(lang) {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const entry = NOTEWAV_TRANSLATIONS[key];
+        if (entry && entry[lang]) el.textContent = entry[lang];
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        const entry = NOTEWAV_TRANSLATIONS[key];
+        if (entry && entry[lang]) el.setAttribute('placeholder', entry[lang]);
+    });
+    document.querySelectorAll('#app-lang-si-btn, #app-lang-en-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.applang === lang);
+    });
+    try {
+        localStorage.setItem('notewav_app_language', lang);
+    } catch (e) {
+        console.warn('Could not save app language preference:', e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    let savedLang = 'si';
+    try {
+        const stored = localStorage.getItem('notewav_app_language');
+        if (stored === 'si' || stored === 'en') savedLang = stored;
+    } catch (e) {
+        // ignore, use default
+    }
+    applyAppLanguage(savedLang);
+
+    const appLangSiBtn = document.getElementById('app-lang-si-btn');
+    const appLangEnBtn = document.getElementById('app-lang-en-btn');
+    if (appLangSiBtn) appLangSiBtn.addEventListener('click', () => applyAppLanguage('si'));
+    if (appLangEnBtn) appLangEnBtn.addEventListener('click', () => applyAppLanguage('en'));
 });
