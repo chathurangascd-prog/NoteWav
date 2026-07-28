@@ -727,6 +727,14 @@
             0%, 100% { transform: translateY(0px) rotate(0deg); }
             50% { transform: translateY(-8px) rotate(-3deg); }
         }
+        .camera-capture-btn {
+            width: 100%;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
     </style>
 </head>
 <body>
@@ -780,6 +788,10 @@
                         <span class="upload-hint">PNG, JPG, JPEG, WEBP ගොනු පමණයි (Max 5MB)</span>
                         <input type="file" id="image-input" accept="image/*" hidden>
                     </div>
+                    <button type="button" id="camera-capture-btn" class="btn-secondary camera-capture-btn">
+                        <i class="fas fa-camera"></i> කැමරාවෙන් ෆොටෝ එකක් ගන්න
+                    </button>
+                    <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
                     <div id="ocr-status" class="ocr-status hidden">
                         <i class="fas fa-spinner fa-spin"></i>
                         <span>පෙළ උපුටා ගැනීම සිදුවෙමින්...</span>
@@ -1036,7 +1048,7 @@
             <div class="footer-content">
                 <p>
                     <i class="fas fa-crown"></i>
-                    &copy; 2026 NoteWav AI — Education with Responsibility
+                    &copy; 2026 NoteWav AI — Develop by Sandun(SCD)
                 </p>
                 <div class="footer-links">
                     <a href="#" class="footer-link"><i class="fas fa-shield-alt"></i> Privacy</a>
