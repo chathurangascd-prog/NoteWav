@@ -9,7 +9,7 @@ import glob
 import sqlite3
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from google import genai
 from google.genai import types
 from gtts import gTTS
@@ -30,6 +30,18 @@ except Exception as e:
     print(f"⚠️ Could not rewrap stdout/stderr as UTF-8: {e}")
 
 app = Flask(__name__)
+
+# Needed for Flask's session cookies (used by the admin dashboard
+# login). Set ADMIN_SECRET_KEY in Render's environment variables for
+# a stable value — falling back to a random one is fine for local
+# testing, but would log everyone out of /admin on every restart in
+# production.
+app.secret_key = os.environ.get('ADMIN_SECRET_KEY', os.urandom(24).hex())
+
+# Simple password gate for the /admin usage dashboard. Set
+# ADMIN_PASSWORD in Render's environment variables — do NOT hardcode
+# a real password here in source control.
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme')
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 
@@ -57,6 +69,21 @@ def init_db():
             mermaid_code_si TEXT,
             mermaid_code_en TEXT,
             mode TEXT DEFAULT 'full',
+            created_at TEXT NOT NULL
+        )
+    """)
+    # Lightweight, anonymous usage tracking for the admin dashboard —
+    # NOT a real login/account system. "anon_id" is a random ID the
+    # browser generates once and stores in localStorage (so the same
+    # device is recognized across visits), paired with whatever
+    # display name the person entered in the app (if any). No
+    # passwords, emails, or other personal data are collected.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS usage_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anon_id TEXT NOT NULL,
+            user_name TEXT,
+            action TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
     """)
@@ -917,6 +944,99 @@ def health():
         'library': os.path.exists(DB_PATH),
         'max_text_length': MAX_TEXT_LENGTH,
     })
+
+
+# ========================================
+# LIGHTWEIGHT USAGE TRACKING (for the admin dashboard)
+# ========================================
+@app.route('/track', methods=['POST'])
+def track_event():
+    """Records a single anonymous usage event. Fails silently (never
+    breaks the actual feature the person is using) if anything goes
+    wrong here — tracking is a nice-to-have for the admin, not
+    something that should ever block a student's actual task."""
+    try:
+        data = request.get_json(silent=True) or {}
+        anon_id = (data.get('anon_id') or '').strip()[:64]
+        user_name = (data.get('user_name') or '').strip()[:80]
+        action = (data.get('action') or '').strip()[:40]
+        if not anon_id or not action:
+            return jsonify({'status': 'ignored'})
+
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO usage_events (anon_id, user_name, action, created_at) VALUES (?, ?, ?, ?)",
+            (anon_id, user_name, action, datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"⚠️ Track event failed (non-critical): {e}")
+        return jsonify({'status': 'error'}), 200  # 200 on purpose — never surface this as a real error to the client
+
+
+def _is_admin_logged_in():
+    return session.get('is_admin') is True
+
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == ADMIN_PASSWORD:
+            session['is_admin'] = True
+            return redirect(url_for('admin_dashboard'))
+        error = 'වැරදි password එකක්.'
+    return render_template('admin_login.html', error=error)
+
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('is_admin', None)
+    return redirect(url_for('admin_login'))
+
+
+@app.route('/admin')
+def admin_dashboard():
+    if not _is_admin_logged_in():
+        return redirect(url_for('admin_login'))
+
+    try:
+        conn = get_db()
+        # One row per distinct device/browser (anon_id), with their
+        # most recently used display name, first/last seen times, and
+        # a rough breakdown of what they've done.
+        users = conn.execute("""
+            SELECT
+                anon_id,
+                (SELECT user_name FROM usage_events ue2
+                 WHERE ue2.anon_id = ue1.anon_id AND ue2.user_name != ''
+                 ORDER BY ue2.created_at DESC LIMIT 1) AS latest_name,
+                MIN(created_at) AS first_seen,
+                MAX(created_at) AS last_seen,
+                COUNT(*) AS total_events,
+                SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed,
+                SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated
+            FROM usage_events ue1
+            GROUP BY anon_id
+            ORDER BY last_seen DESC
+        """).fetchall()
+
+        total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
+        conn.close()
+
+        users_list = [dict(row) for row in users]
+        return render_template(
+            'admin_dashboard.html',
+            users=users_list,
+            total_users=len(users_list),
+            total_notes_in_library=total_notes_in_library,
+        )
+    except Exception as e:
+        print(f"❌ Admin dashboard error: {e}")
+        return f"Dashboard load කරගැනීම අසාර්ථක විය: {e}", 500
 
 
 if __name__ == '__main__':

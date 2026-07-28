@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - NoteWav AI</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #0f0f17;
+            color: #e5e5e5;
+            padding: 30px;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        h1 {
+            font-size: 1.4rem;
+            color: #a78bfa;
+            margin: 0;
+        }
+        a.logout {
+            color: #f87171;
+            text-decoration: none;
+            font-size: 0.85rem;
+            border: 1px solid #f87171;
+            padding: 6px 14px;
+            border-radius: 20px;
+        }
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: #1a1a26;
+            border: 1px solid #2d2d3d;
+            border-radius: 12px;
+            padding: 16px 22px;
+            min-width: 140px;
+        }
+        .stat-card .num {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .stat-card .label {
+            font-size: 0.78rem;
+            color: #888;
+            margin-top: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1a26;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #2d2d3d;
+        }
+        th {
+            background: #14141e;
+            color: #a78bfa;
+            font-weight: 600;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .name-cell {
+            font-weight: 600;
+            color: #fff;
+        }
+        .name-cell.no-name {
+            color: #666;
+            font-style: italic;
+            font-weight: 400;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 NoteWav AI — Usage Dashboard</h1>
+        <a class="logout" href="{{ url_for('admin_logout') }}">Logout</a>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="num">{{ total_users }}</div>
+            <div class="label">Distinct devices/browsers</div>
+        </div>
+        <div class="stat-card">
+            <div class="num">{{ total_notes_in_library }}</div>
+            <div class="label">Total notes saved (Library)</div>
+        </div>
+    </div>
+
+    {% if users %}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>First seen</th>
+                <th>Last seen</th>
+                <th>Notes processed</th>
+                <th>Audio generated</th>
+                <th>Total actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
+                    {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
+                </td>
+                <td>{{ u.first_seen[:16].replace('T', ' ') }}</td>
+                <td>{{ u.last_seen[:16].replace('T', ' ') }}</td>
+                <td>{{ u.notes_processed }}</td>
+                <td>{{ u.audio_generated }}</td>
+                <td>{{ u.total_events }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">තවම usage data නෑ — students ලා app එක use කරන්න පටන් ගත්තහම මෙතන පේනවා.</div>
+    {% endif %}
+</body>
+</html>

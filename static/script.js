@@ -17,6 +17,53 @@ function autoResizeTextarea(el, maxHeightPx) {
     }
 }
 
+// ========================================
+// LIGHTWEIGHT ANONYMOUS USAGE TRACKING (for the admin dashboard)
+// ========================================
+// "anon_id" is a random ID generated once and stored in this
+// browser's localStorage — NOT a real account/login, just a way to
+// tell "this same device visited again" from "a different device".
+// Paired with whatever display name the person entered (if any) so
+// an admin can see, e.g., "Kasun's device processed 5 notes" without
+// requiring students to actually sign in anywhere.
+function getOrCreateAnonId() {
+    const KEY = 'notewav_anon_id';
+    try {
+        let id = localStorage.getItem(KEY);
+        if (!id) {
+            id = (crypto.randomUUID ? crypto.randomUUID() : 'anon-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+            localStorage.setItem(KEY, id);
+        }
+        return id;
+    } catch (e) {
+        return 'anon-fallback-' + Date.now();
+    }
+}
+
+function trackUsageEvent(action) {
+    try {
+        let userName = '';
+        const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+        if (profile.name) userName = profile.name.trim();
+
+        fetch('/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                anon_id: getOrCreateAnonId(),
+                user_name: userName,
+                action: action,
+            }),
+        }).catch(() => { /* tracking is best-effort only, never disrupt the actual feature */ });
+    } catch (e) {
+        // ignore — tracking must never break the app
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    trackUsageEvent('app_opened');
+});
+
 document.addEventListener('DOMContentLoaded', function() {
     // ===== DOM Elements =====
     const noteInput = document.getElementById('note-input');
@@ -1653,6 +1700,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 scriptOutput.value = data.processed_text;
                 safetySection.classList.remove('hidden');
                 audioSection.classList.add('hidden');
+                trackUsageEvent('note_processed');
 
                 if (data.ai_processed === false && data.warning) {
                     showErrorBanner(data.warning);
@@ -1716,6 +1764,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status === 'success') {
                 audioSection.classList.remove('hidden');
                 renderLyrics(text, data.sentence_timings);
+                trackUsageEvent('audio_generated');
 
                 if (audio) {
                     audio.pause();

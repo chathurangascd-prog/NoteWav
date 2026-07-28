@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - NoteWav AI</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #0f0f17;
+            color: #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .login-card {
+            background: #1a1a26;
+            border: 1px solid #2d2d3d;
+            border-radius: 16px;
+            padding: 40px 36px;
+            width: 320px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        }
+        h1 {
+            font-size: 1.3rem;
+            margin-bottom: 6px;
+            color: #a78bfa;
+        }
+        p.sub {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 24px;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #2d2d3d;
+            background: #14141e;
+            color: #fff;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #6b30ff;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%);
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .error {
+            color: #f87171;
+            font-size: 0.82rem;
+            margin-bottom: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>🔒 Admin Dashboard</h1>
+        <p class="sub">NoteWav AI Usage Tracker</p>
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        <form method="POST">
+            <input type="password" name="password" placeholder="Admin password" autofocus required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+</body>
+</html>
