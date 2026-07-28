@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let audio = null;
     let isPlaying = false;
     let isOCRRunning = false;
-    let lyricsLines = [];
+    let highlightUnits = [];
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
@@ -626,68 +626,140 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     // UPDATE HIGHLIGHT BASED ON CURRENT TIME
     // ========================================
+    // FIX (highlight timing was noticeably off): the old version
+    // assumed every sentence/line takes an EQUAL share of the total
+    // audio duration — very wrong for a mix of short and long
+    // sentences. Now uses the REAL per-sentence duration measured
+    // during TTS synthesis (sent back from the server), and
+    // highlights word-PAIRS within each sentence — proportioned by
+    // each pair's share of that sentence's character count — so the
+    // highlight moves roughly twice per sentence instead of once per
+    // whole line, closer to natural reading pace.
     function updateHighlight(currentTime) {
-        if (!lyricsLines || lyricsLines.length === 0) return;
+        if (!highlightUnits || highlightUnits.length === 0) return;
 
-        const totalDuration = audio.duration || 1;
-        const lineCount = lyricsLines.length;
-        const timePerLine = totalDuration / lineCount;
-
-        let currentLineIndex = Math.floor(currentTime / timePerLine);
-        if (currentLineIndex >= lineCount) {
-            currentLineIndex = lineCount - 1;
+        // Small linear scan is plenty fast for realistic transcript
+        // lengths (a few hundred units at most).
+        let activeIndex = -1;
+        for (let i = 0; i < highlightUnits.length; i++) {
+            if (currentTime >= highlightUnits[i].start && currentTime < highlightUnits[i].end) {
+                activeIndex = i;
+                break;
+            }
         }
+        // If between units (e.g. during a pause) or past the last
+        // one, keep whichever unit's start time is closest to (and
+        // not after) currentTime, so highlighting doesn't blank out
+        // during the natural pauses between sentences.
+        if (activeIndex === -1) {
+            for (let i = highlightUnits.length - 1; i >= 0; i--) {
+                if (currentTime >= highlightUnits[i].start) {
+                    activeIndex = i;
+                    break;
+                }
+            }
+        }
+        if (activeIndex === -1) return;
 
-        const lineElements = highlightContainer.querySelectorAll('.lyric-line');
-        lineElements.forEach(el => el.classList.remove('active'));
-
-        if (lineElements[currentLineIndex]) {
-            lineElements[currentLineIndex].classList.add('active');
-            lineElements[currentLineIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const unitElements = highlightContainer.querySelectorAll('.lyric-line');
+        unitElements.forEach(el => el.classList.remove('active'));
+        if (unitElements[activeIndex]) {
+            unitElements[activeIndex].classList.add('active');
+            unitElements[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
 
     // ========================================
-    // RENDER LYRICS WITH LINE-BY-LINE FORMAT
+    // RENDER LYRICS AS WORD-PAIR HIGHLIGHT UNITS
     // ========================================
-    function renderLyrics(text) {
+    // Builds highlightUnits from the REAL per-sentence timings the
+    // server measured while synthesizing audio. Falls back to the
+    // old naive equal-split-by-line approach only if timings weren't
+    // provided (e.g. an older cached response), so this never breaks
+    // outright.
+    function renderLyrics(text, sentenceTimings) {
         if (!text) {
             highlightContainer.innerHTML = '';
+            highlightUnits = [];
             return;
         }
 
-        lyricsLines = splitTextIntoLines(text);
+        highlightUnits = [];
 
-        if (lyricsLines.length === 0) {
+        if (Array.isArray(sentenceTimings) && sentenceTimings.length > 0) {
+            sentenceTimings.forEach(sentence => {
+                const words = sentence.text.trim().split(/\s+/).filter(Boolean);
+                if (words.length === 0) return;
+
+                // Group into pairs of 2 words each.
+                const pairs = [];
+                for (let i = 0; i < words.length; i += 2) {
+                    pairs.push(words.slice(i, i + 2).join(' '));
+                }
+
+                const sentenceDuration = sentence.end - sentence.start;
+                const totalChars = pairs.reduce((sum, p) => sum + p.length, 0) || 1;
+                let cursor = sentence.start;
+
+                pairs.forEach(pairText => {
+                    const share = pairText.length / totalChars;
+                    const duration = sentenceDuration * share;
+                    highlightUnits.push({
+                        text: pairText,
+                        start: cursor,
+                        end: cursor + duration,
+                    });
+                    cursor += duration;
+                });
+            });
+        }
+
+        if (highlightUnits.length === 0) {
+            // Fallback: no timing data available — split into lines
+            // and spread them evenly across the (unknown, filled in
+            // once metadata loads) audio duration, same as before.
+            const lines = splitTextIntoLines(text);
+            highlightUnits = lines.map((line, i) => ({ text: line, start: i, end: i + 1, _isFallback: true }));
+        }
+
+        if (highlightUnits.length === 0) {
             highlightContainer.innerHTML = `<p>${text}</p>`;
             return;
         }
 
         let html = '';
-        lyricsLines.forEach((line, index) => {
-            html += `<span class="lyric-line" data-index="${index}">${line}</span>`;
-            if (index < lyricsLines.length - 1) {
-                html += ' ';
-            }
+        highlightUnits.forEach((unit, index) => {
+            html += `<span class="lyric-line" data-index="${index}">${unit.text}</span> `;
         });
 
         highlightContainer.innerHTML = html;
     }
 
-    // NEW: click any line in the transcript to jump the audio to that
-    // point — uses the same proportional (duration / lineCount) timing
-    // math as the highlight-follow logic above, so it stays consistent
-    // with whichever line is currently shown as "active".
+    // NEW: click any word-pair in the transcript to jump the audio
+    // straight to that point — uses the SAME real timing data the
+    // highlight-follow logic uses, so clicking is exactly where the
+    // highlight will land, not an approximation.
     if (highlightContainer) {
         highlightContainer.addEventListener('click', function(e) {
             const lineEl = e.target.closest('.lyric-line');
-            if (!lineEl || !audio || !lyricsLines || lyricsLines.length === 0) return;
+            if (!lineEl || !audio || !highlightUnits || highlightUnits.length === 0) return;
             const index = parseInt(lineEl.dataset.index, 10);
-            if (isNaN(index)) return;
+            if (isNaN(index) || !highlightUnits[index]) return;
             const totalDuration = audio.duration || 0;
             if (!totalDuration) return;
-            const timePerLine = totalDuration / lyricsLines.length;
-            audio.currentTime = Math.min(totalDuration, index * timePerLine);
+
+            const unit = highlightUnits[index];
+            let seekTime;
+            if (unit._isFallback) {
+                // No real timing data (older cached response) — fall
+                // back to the old equal-share estimate.
+                const timePerUnit = totalDuration / highlightUnits.length;
+                seekTime = index * timePerUnit;
+            } else {
+                seekTime = unit.start;
+            }
+            audio.currentTime = Math.min(totalDuration, seekTime);
+
             if (audio.paused) {
                 audio.play().catch(() => {});
                 isPlaying = true;
@@ -1598,7 +1670,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     totalTimeEl.textContent = '0:00';
                     document.querySelector('.player-container').classList.remove('playing');
                     stopWaveformAnimation();
-                    lyricsLines = [];
+                    highlightUnits = [];
                 }
 
                 safetySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1643,7 +1715,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.status === 'success') {
                 audioSection.classList.remove('hidden');
-                renderLyrics(text);
+                renderLyrics(text, data.sentence_timings);
 
                 if (audio) {
                     audio.pause();
@@ -1826,7 +1898,7 @@ document.addEventListener('DOMContentLoaded', function() {
             totalTimeEl.textContent = '0:00';
             document.querySelector('.player-container').classList.remove('playing');
             stopWaveformAnimation();
-            lyricsLines = [];
+            highlightUnits = [];
         }
 
         safetySection.classList.add('hidden');

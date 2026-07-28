@@ -209,6 +209,14 @@ def _tts_sentence_to_segment(args):
 
 
 def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600, max_workers=5):
+    """Returns (combined_audio, sentence_timings) where sentence_timings
+    is a list of {"text": str, "start": float, "end": float} in
+    SECONDS — the real, measured duration of each sentence's own TTS
+    segment (not a naive equal-split-across-total-duration guess).
+    This lets the frontend highlight whichever sentence is actually
+    playing at any given moment, instead of assuming every line/
+    sentence takes the same amount of time to read aloud (which was
+    very inaccurate for a mix of short and long sentences)."""
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
@@ -228,14 +236,22 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     paragraph_silence = AudioSegment.silent(duration=paragraph_pause_ms, frame_rate=GTTS_FRAME_RATE)
     combined = AudioSegment.silent(duration=0, frame_rate=GTTS_FRAME_RATE)
 
+    sentence_timings = []
     total = len(flat_sentences)
-    for i, ((_, is_last_in_paragraph), segment) in enumerate(zip(flat_sentences, segments)):
+    for i, ((sentence_text, is_last_in_paragraph), segment) in enumerate(zip(flat_sentences, segments)):
+        start_ms = len(combined)
         combined += segment
+        end_ms = len(combined)
+        sentence_timings.append({
+            'text': sentence_text,
+            'start': round(start_ms / 1000, 3),
+            'end': round(end_ms / 1000, 3),
+        })
         if i == total - 1:
             break
         combined += paragraph_silence if is_last_in_paragraph else sentence_silence
 
-    return combined
+    return combined, sentence_timings
 
 
 class GeminiGenerationError(Exception):
@@ -716,12 +732,16 @@ def text_to_speech():
 
     try:
         print(f"🎙️ Requesting gTTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
-        audio_segment = synthesize_gtts_natural(formatted_text, lang=gtts_lang)
+        audio_segment, sentence_timings = synthesize_gtts_natural(formatted_text, lang=gtts_lang)
         unique_name = f"output_{uuid.uuid4().hex}.mp3"
         filename = os.path.join('static', unique_name)
         audio_segment.export(filename, format='mp3')
         print("✅ TTS Success!")
-        return jsonify({'status': 'success', 'audio_url': '/' + filename.replace('\\', '/')})
+        return jsonify({
+            'status': 'success',
+            'audio_url': '/' + filename.replace('\\', '/'),
+            'sentence_timings': sentence_timings,
+        })
     except Exception as e:
         print(f"❌ gTTS Error: {str(e)}")
         return jsonify({
