@@ -656,6 +656,30 @@ document.addEventListener('DOMContentLoaded', function() {
         highlightContainer.innerHTML = html;
     }
 
+    // NEW: click any line in the transcript to jump the audio to that
+    // point — uses the same proportional (duration / lineCount) timing
+    // math as the highlight-follow logic above, so it stays consistent
+    // with whichever line is currently shown as "active".
+    if (highlightContainer) {
+        highlightContainer.addEventListener('click', function(e) {
+            const lineEl = e.target.closest('.lyric-line');
+            if (!lineEl || !audio || !lyricsLines || lyricsLines.length === 0) return;
+            const index = parseInt(lineEl.dataset.index, 10);
+            if (isNaN(index)) return;
+            const totalDuration = audio.duration || 0;
+            if (!totalDuration) return;
+            const timePerLine = totalDuration / lyricsLines.length;
+            audio.currentTime = Math.min(totalDuration, index * timePerLine);
+            if (audio.paused) {
+                audio.play().catch(() => {});
+                isPlaying = true;
+                playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                document.querySelector('.player-container').classList.add('playing');
+                startWaveformAnimation();
+            }
+        });
+    }
+
     // ========================================
     // FEATURE 1: SMART MIND MAP (Mermaid.js)
     // ========================================
@@ -1572,6 +1596,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         updateProgress((current / duration) * 100);
                         updateHighlight(current);
                     }
+                    trackStudyTime(current);
                 });
 
                 audio.addEventListener('ended', function() {
@@ -2268,5 +2293,227 @@ document.addEventListener('DOMContentLoaded', function() {
     welcomeSkipBtn.addEventListener('click', function() {
         markOnboardingDone();
         closeWelcomeModal();
+    });
+});
+
+// ========================================
+// STUDY TIME TRACKER (minutes listened today)
+// ========================================
+// Accumulates real listening time via the natural small deltas
+// between consecutive 'timeupdate' events during normal playback —
+// deliberately ignores big jumps (seeks, skip buttons, new audio
+// loads) so a single skip doesn't get miscounted as minutes studied.
+// Resets each new calendar day, stored in localStorage like the
+// streak tracker.
+let lastTrackedAudioTime = null;
+
+function todayLocalDateString() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function trackStudyTime(currentAudioTime) {
+    if (lastTrackedAudioTime !== null) {
+        const delta = currentAudioTime - lastTrackedAudioTime;
+        if (delta > 0 && delta < 2) {
+            addStudyMinutes(delta / 60);
+        }
+    }
+    lastTrackedAudioTime = currentAudioTime;
+}
+
+function addStudyMinutes(minutesToAdd) {
+    try {
+        const STUDY_TIME_KEY = 'notewav_study_time';
+        const today = todayLocalDateString();
+        let data = JSON.parse(localStorage.getItem(STUDY_TIME_KEY) || '{}');
+        if (data.date !== today) {
+            data = { date: today, minutes: 0 };
+        }
+        data.minutes = (data.minutes || 0) + minutesToAdd;
+        localStorage.setItem(STUDY_TIME_KEY, JSON.stringify(data));
+        updateStudyTimeDisplay(data.minutes);
+    } catch (e) {
+        console.warn('Could not track study time:', e);
+    }
+}
+
+function updateStudyTimeDisplay(minutes) {
+    const el = document.getElementById('study-time-value');
+    if (el) el.textContent = Math.round(minutes) + ' min';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const STUDY_TIME_KEY = 'notewav_study_time';
+        const today = todayLocalDateString();
+        const data = JSON.parse(localStorage.getItem(STUDY_TIME_KEY) || '{}');
+        updateStudyTimeDisplay(data.date === today ? (data.minutes || 0) : 0);
+    } catch (e) {
+        updateStudyTimeDisplay(0);
+    }
+});
+
+// ========================================
+// VOICE INPUT (speak instead of type)
+// ========================================
+// Uses the browser's built-in Web Speech API — free, no server cost,
+// but support/quality varies by browser and language (works best in
+// Chrome; Sinhala recognition quality depends entirely on Google's
+// speech backend behind the scenes, so results may be imperfect —
+// treat this as a rough starting point students can then edit, not a
+// guaranteed-accurate transcription).
+document.addEventListener('DOMContentLoaded', function() {
+    const voiceBtn = document.getElementById('note-input-voice-btn');
+    const targetNoteInput = document.getElementById('note-input');
+    if (!voiceBtn || !targetNoteInput) return;
+
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+        voiceBtn.style.display = 'none'; // hide entirely if unsupported, rather than showing a dead button
+        return;
+    }
+
+    let recognition = null;
+    let isListening = false;
+
+    function startListening() {
+        recognition = new SpeechRecognitionCtor();
+        recognition.lang = 'si-LK';
+        recognition.continuous = true;
+        recognition.interimResults = false;
+
+        recognition.onstart = function() {
+            isListening = true;
+            voiceBtn.classList.add('copied'); // reuse the existing "active" green style
+        };
+        recognition.onresult = function(event) {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            if (transcript.trim()) {
+                const existing = targetNoteInput.value;
+                const needsSpace = existing && !existing.endsWith(' ') && !existing.endsWith('\n');
+                targetNoteInput.value = existing + (needsSpace ? ' ' : '') + transcript.trim() + ' ';
+                targetNoteInput.dispatchEvent(new Event('input'));
+            }
+        };
+        recognition.onerror = function(event) {
+            console.warn('Speech recognition error:', event.error);
+            stopListening();
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                showErrorBanner('Microphone access ලබා දෙන්න ඕන Voice Input use කරන්න.');
+            }
+        };
+        recognition.onend = function() {
+            stopListening();
+        };
+        recognition.start();
+    }
+
+    function stopListening() {
+        isListening = false;
+        voiceBtn.classList.remove('copied');
+        if (recognition) {
+            try { recognition.stop(); } catch (e) { /* already stopped */ }
+        }
+    }
+
+    voiceBtn.addEventListener('click', function() {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
+        }
+    });
+});
+
+// ========================================
+// LIBRARY BACKUP (Export / Import as JSON)
+// ========================================
+// The notes database isn't guaranteed to survive a redeploy on
+// Render's free tier — this lets a student download all their saved
+// notes as a single JSON file (real backup, kept on their own device)
+// and re-import it later if the server-side data is ever lost.
+document.addEventListener('DOMContentLoaded', function() {
+    const exportBtn = document.getElementById('library-export-btn');
+    const importBtn = document.getElementById('library-import-btn');
+    const importInput = document.getElementById('library-import-input');
+    if (!exportBtn || !importBtn || !importInput) return;
+
+    exportBtn.addEventListener('click', async function() {
+        try {
+            const res = await fetch('/library/export');
+            const data = await res.json();
+            if (data.status !== 'success') {
+                showErrorBanner('Export කිරීම අසාර්ථක විය.');
+                return;
+            }
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const dateStr = todayLocalDateString();
+            link.download = `notewav_library_backup_${dateStr}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Library export failed:', e);
+            showErrorBanner('Export කිරීම අසාර්ථක විය: ' + e.message);
+        }
+    });
+
+    importBtn.addEventListener('click', function() {
+        importInput.click();
+    });
+
+    importInput.addEventListener('change', async function() {
+        const file = this.files && this.files[0];
+        this.value = '';
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const parsed = JSON.parse(text);
+            const notes = parsed.notes;
+            if (!Array.isArray(notes) || notes.length === 0) {
+                showErrorBanner('Import file එකේ notes හමු නොවීය.');
+                return;
+            }
+
+            let successCount = 0;
+            for (const note of notes) {
+                try {
+                    const res = await fetch('/library/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            subject: note.subject || 'General',
+                            note_text: note.note_text || '',
+                            processed_text: note.processed_text || '',
+                            mermaid_code_si: note.mermaid_code_si || '',
+                            mermaid_code_en: note.mermaid_code_en || '',
+                            mode: note.mode || 'full',
+                        }),
+                    });
+                    const result = await res.json();
+                    if (result.status === 'success') successCount++;
+                } catch (innerErr) {
+                    console.warn('One note failed to import:', innerErr);
+                }
+            }
+
+            showErrorBanner(`${successCount} / ${notes.length} notes import කරගන්නා ලදී. Page එක refresh වෙනවා...`);
+            setTimeout(() => window.location.reload(), 1800);
+        } catch (e) {
+            console.error('Library import failed:', e);
+            showErrorBanner('Import කිරීම අසාර්ථක විය: ' + e.message);
+        }
     });
 });

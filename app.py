@@ -826,6 +826,27 @@ def library_list():
         return jsonify({'status': 'error', 'message': 'Library එක load කරගැනීම අසාර්ථක විය.'}), 500
 
 
+@app.route('/library/export', methods=['GET'])
+def library_export():
+    """Returns every saved note with FULL data (not just the summary
+    fields library_list gives) — used by the frontend's backup/export
+    feature, since the notes database on Render's free tier isn't
+    guaranteed to survive a redeploy. Downloading this as a JSON file
+    lets a student restore their notes later via /library/save."""
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            """SELECT subject, title, note_text, processed_text, mermaid_code_si,
+                      mermaid_code_en, mode, created_at FROM notes ORDER BY created_at DESC"""
+        ).fetchall()
+        conn.close()
+        notes = [dict(row) for row in rows]
+        return jsonify({'status': 'success', 'notes': notes, 'exported_at': datetime.now(timezone.utc).isoformat()})
+    except Exception as e:
+        print(f"❌ Library export error: {e}")
+        return jsonify({'status': 'error', 'message': 'Export කිරීම අසාර්ථක විය.'}), 500
+
+
 @app.route('/library/notes/<int:note_id>', methods=['GET'])
 def library_get(note_id):
     try:
