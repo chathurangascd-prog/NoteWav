@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== Image Upload Elements =====
     const uploadArea = document.getElementById('upload-area');
     const imageInput = document.getElementById('image-input');
+    const cameraInput = document.getElementById('camera-input');
     const ocrStatus = document.getElementById('ocr-status');
 
     // ===== Playback Speed / Volume Controls =====
@@ -1119,10 +1120,30 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     // IMAGE UPLOAD & OCR
     // ========================================
+    const uploadSourceMenu = document.getElementById('upload-source-menu');
+    const uploadSourceGallery = document.getElementById('upload-source-gallery');
+    const uploadSourceCamera = document.getElementById('upload-source-camera');
+
+    function closeUploadSourceMenu() {
+        if (uploadSourceMenu) uploadSourceMenu.classList.add('hidden');
+    }
+
+    function toggleUploadSourceMenu() {
+        if (uploadSourceMenu) uploadSourceMenu.classList.toggle('hidden');
+    }
+
+    // NEW: clicking the upload area no longer jumps straight into the
+    // OS's plain file picker — it shows a small "Gallery / Camera"
+    // choice menu instead. This is more reliable than depending on
+    // browsers to surface a camera option in their native picker
+    // (behavior for a bare <input type="file"> without "capture"
+    // varies a lot and wasn't consistently offering a camera choice),
+    // and it needs no separate always-visible camera button on the
+    // page — the choice only appears right when it's needed.
     uploadArea.addEventListener('click', function(e) {
         if (e.target.closest('.image-preview')) return;
         if (isOCRRunning) return;
-        imageInput.click();
+        toggleUploadSourceMenu();
     });
 
     uploadArea.addEventListener('keydown', function(e) {
@@ -1130,7 +1151,31 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         if (e.target.closest('.image-preview')) return;
         if (isOCRRunning) return;
-        imageInput.click();
+        toggleUploadSourceMenu();
+    });
+
+    if (uploadSourceGallery) {
+        uploadSourceGallery.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeUploadSourceMenu();
+            imageInput.click();
+        });
+    }
+    if (uploadSourceCamera) {
+        uploadSourceCamera.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeUploadSourceMenu();
+            cameraInput.click();
+        });
+    }
+
+    // Close the menu if the person clicks/taps anywhere else on the page.
+    document.addEventListener('click', function(e) {
+        if (uploadSourceMenu && !uploadSourceMenu.classList.contains('hidden')) {
+            if (!e.target.closest('.upload-area-wrapper')) {
+                closeUploadSourceMenu();
+            }
+        }
     });
 
     uploadArea.addEventListener('dragover', function(e) {
@@ -1146,6 +1191,7 @@ document.addEventListener('DOMContentLoaded', function() {
     uploadArea.addEventListener('drop', function(e) {
         e.preventDefault();
         this.classList.remove('dragover');
+        closeUploadSourceMenu();
         const files = e.dataTransfer.files;
         if (files.length > 0 && !isOCRRunning) {
             handleImage(files[0]);
@@ -1158,6 +1204,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         this.value = '';
     });
+
+    if (cameraInput) {
+        cameraInput.addEventListener('change', function(e) {
+            if (this.files.length > 0 && !isOCRRunning) {
+                handleImage(this.files[0]);
+            }
+            this.value = '';
+        });
+    }
 
     async function handleImage(file) {
         if (!file.type.startsWith('image/')) {
