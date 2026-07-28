@@ -428,9 +428,6 @@
             50% { transform: scaleY(1); opacity: 1; }
         }
         .library-nav-btn {
-            position: absolute;
-            top: 24px;
-            right: 24px;
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -449,10 +446,15 @@
             border-color: #6b30ff;
             color: #fff;
         }
-        .streak-badge {
+        .header-right-nav {
             position: absolute;
             top: 24px;
-            right: 175px;
+            right: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .streak-badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -465,10 +467,16 @@
             font-weight: 700;
         }
         .greeting-text {
-            font-size: 0.95rem;
+            display: inline-block;
+            font-size: 0.9rem;
             font-weight: 600;
-            color: #a78bfa;
-            margin-top: 10px;
+            color: #fde68a;
+            margin-top: 22px;
+            padding: 9px 20px;
+            border-radius: var(--radius-full);
+            background: rgba(250, 204, 21, 0.1);
+            border: 1px solid rgba(250, 204, 21, 0.35);
+            box-shadow: 0 0 18px rgba(250, 204, 21, 0.25);
         }
         .menu-nav-btn {
             position: absolute;
@@ -493,11 +501,11 @@
             color: #fff;
         }
         @media (max-width: 640px) {
-            .streak-badge {
+            .header-right-nav {
                 position: static;
-                display: flex;
+                justify-content: center;
                 width: fit-content;
-                margin: 10px auto 0;
+                margin: 16px auto 0;
             }
             .menu-nav-btn {
                 top: 20px;
@@ -659,6 +667,11 @@
             color: var(--text-secondary);
             margin-bottom: 18px;
         }
+        .welcome-subtitle-en {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
         .welcome-name-input {
             width: 100%;
             padding: 12px 14px;
@@ -710,14 +723,6 @@
         }
         .app-header {
             position: relative;
-        }
-        @media (max-width: 640px) {
-            .library-nav-btn {
-                position: static;
-                display: flex;
-                width: fit-content;
-                margin: 16px auto 0;
-            }
         }
         .library-modal-card {
             width: 720px;
@@ -1061,12 +1066,12 @@
             <div class="welcome-modal-body">
                 <div class="welcome-icon"><i class="fas fa-hand-sparkles"></i></div>
                 <h3 class="welcome-title">ආයුබෝවන්! 👋</h3>
-                <p class="welcome-subtitle">ඔබේ නම මොකක්ද?</p>
+                <p class="welcome-subtitle">ඔබේ නම මොකක්ද?<br><span class="welcome-subtitle-en">Your Name</span></p>
                 <input type="text" id="welcome-name-input" class="welcome-name-input" placeholder="ඔබේ නම මෙතන ලියන්න..." maxlength="40">
                 <button type="button" id="welcome-save-btn" class="btn-primary welcome-save-btn">
                     <i class="fas fa-check"></i> Save කරන්න
                 </button>
-                <button type="button" id="welcome-skip-btn" class="welcome-skip-btn">පසුව කියන්නම්</button>
+                <button type="button" id="welcome-skip-btn" class="welcome-skip-btn">පසුව කියන්නම් (Skip)</button>
             </div>
         </div>
     </div>
@@ -1093,11 +1098,13 @@
             <button id="open-menu-btn" class="menu-nav-btn" aria-label="Menu">
                 <i class="fas fa-bars"></i>
             </button>
-            <button id="open-library-btn" class="library-nav-btn">
-                <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
-            </button>
-            <div id="streak-badge" class="streak-badge hidden" title="Daily study streak">
-                <i class="fas fa-fire"></i> <span id="streak-count">0</span>
+            <div class="header-right-nav">
+                <button id="open-library-btn" class="library-nav-btn">
+                    <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
+                </button>
+                <div id="streak-badge" class="streak-badge hidden" title="Daily study streak">
+                    <i class="fas fa-fire"></i> <span id="streak-count">0</span>
+                </div>
             </div>
         </header>
 
