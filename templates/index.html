@@ -629,6 +629,68 @@
             border-top: 1px solid var(--border-color);
             margin: 0 0 18px;
         }
+        .welcome-modal-card {
+            width: 380px;
+            max-width: 92vw;
+        }
+        .welcome-modal-body {
+            padding: 34px 28px;
+            text-align: center;
+        }
+        .welcome-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: rgba(107, 48, 255, 0.15);
+            color: #a78bfa;
+            font-size: 1.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .welcome-title {
+            font-size: 1.3rem;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        .welcome-subtitle {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 18px;
+        }
+        .welcome-name-input {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: inherit;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .welcome-name-input:focus {
+            outline: none;
+            border-color: #6b30ff;
+        }
+        .welcome-save-btn {
+            width: 100%;
+            margin-bottom: 12px;
+        }
+        .welcome-skip-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            cursor: pointer;
+            text-decoration: underline;
+            font-family: inherit;
+        }
+        .welcome-skip-btn:hover {
+            color: var(--text-secondary);
+        }
         .settings-label {
             font-size: 0.85rem;
             font-weight: 700;
@@ -992,6 +1054,21 @@
         <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="" class="splash-icon">
         <h1 class="splash-text">NoteWav</h1>
         <p class="splash-subtitle">Smart විදිහට පාඩම් අහන්න</p>
+    </div>
+
+    <div id="welcome-modal-backdrop" class="mindmap-modal-backdrop hidden">
+        <div class="mindmap-modal-card welcome-modal-card">
+            <div class="welcome-modal-body">
+                <div class="welcome-icon"><i class="fas fa-hand-sparkles"></i></div>
+                <h3 class="welcome-title">ආයුබෝවන්! 👋</h3>
+                <p class="welcome-subtitle">ඔබේ නම මොකක්ද?</p>
+                <input type="text" id="welcome-name-input" class="welcome-name-input" placeholder="ඔබේ නම මෙතන ලියන්න..." maxlength="40">
+                <button type="button" id="welcome-save-btn" class="btn-primary welcome-save-btn">
+                    <i class="fas fa-check"></i> Save කරන්න
+                </button>
+                <button type="button" id="welcome-skip-btn" class="welcome-skip-btn">පසුව කියන්නම්</button>
+            </div>
+        </div>
     </div>
 
     <div id="error-banner" class="hidden" role="alert">

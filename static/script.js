@@ -2189,3 +2189,84 @@ function updateGreeting() {
 }
 
 document.addEventListener('DOMContentLoaded', updateGreeting);
+
+// ========================================
+// FIRST-VISIT WELCOME CARD (asks for the person's name once)
+// ========================================
+// Shows only when no name has been saved yet AND the person hasn't
+// already dismissed/skipped it before — so it never nags on repeat
+// visits, whether they filled it in or chose to skip.
+document.addEventListener('DOMContentLoaded', function() {
+    const PROFILE_KEY = 'notewav_profile';
+    const ONBOARDING_DONE_KEY = 'notewav_onboarding_done';
+
+    const welcomeBackdrop = document.getElementById('welcome-modal-backdrop');
+    const welcomeNameInput = document.getElementById('welcome-name-input');
+    const welcomeSaveBtn = document.getElementById('welcome-save-btn');
+    const welcomeSkipBtn = document.getElementById('welcome-skip-btn');
+    if (!welcomeBackdrop || !welcomeNameInput || !welcomeSaveBtn || !welcomeSkipBtn) return;
+
+    let existingName = '';
+    let onboardingDone = false;
+    try {
+        const profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+        existingName = (profile.name || '').trim();
+        onboardingDone = localStorage.getItem(ONBOARDING_DONE_KEY) === 'true';
+    } catch (e) {
+        // if storage is unreadable, just don't show the card rather
+        // than risk nagging every visit
+        onboardingDone = true;
+    }
+
+    if (existingName || onboardingDone) {
+        return; // already have a name, or the person already dismissed this once
+    }
+
+    // Small delay so it appears after the splash screen fades, not
+    // stacked on top of it.
+    setTimeout(() => {
+        welcomeBackdrop.classList.remove('hidden');
+        welcomeNameInput.focus();
+    }, 2200);
+
+    function markOnboardingDone() {
+        try {
+            localStorage.setItem(ONBOARDING_DONE_KEY, 'true');
+        } catch (e) {
+            console.warn('Could not save onboarding state:', e);
+        }
+    }
+
+    function closeWelcomeModal() {
+        welcomeBackdrop.classList.add('hidden');
+    }
+
+    function saveNameAndClose() {
+        const name = welcomeNameInput.value.trim();
+        if (name) {
+            try {
+                const current = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+                current.name = name;
+                localStorage.setItem(PROFILE_KEY, JSON.stringify(current));
+            } catch (e) {
+                console.warn('Could not save name:', e);
+            }
+            // Keep the menu drawer's profile field in sync too, in
+            // case the person opens it later in this same session.
+            const drawerNameInput = document.getElementById('profile-name-input');
+            if (drawerNameInput) drawerNameInput.value = name;
+            updateGreeting();
+        }
+        markOnboardingDone();
+        closeWelcomeModal();
+    }
+
+    welcomeSaveBtn.addEventListener('click', saveNameAndClose);
+    welcomeNameInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') saveNameAndClose();
+    });
+    welcomeSkipBtn.addEventListener('click', function() {
+        markOnboardingDone();
+        closeWelcomeModal();
+    });
+});
