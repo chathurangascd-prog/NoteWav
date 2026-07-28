@@ -1973,7 +1973,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // English is a full translation of every tagged string. Persisted in
 // localStorage so the choice survives across visits.
 const NOTEWAV_TRANSLATIONS = {
-    my_library: { si: 'මගේ පුස්තකාලය', en: 'My Library' },
+    my_library: { si: 'My Library', en: 'My Library' },
     settings_title: { si: 'සැකසුම්', en: 'Settings' },
     settings_language_label: { si: 'App භාෂාව (Language)', en: 'App Language' },
     library_search_placeholder: { si: 'Title/Subject එකෙන් හොයන්න...', en: 'Search by Title/Subject...' },
@@ -2000,8 +2000,8 @@ const NOTEWAV_TRANSLATIONS = {
     download_png_btn: { si: 'PNG එකක් විදිහට Download කරන්න', en: 'Download as PNG' },
     download_pdf_btn: { si: 'PDF එකක් විදිහට Download කරන්න', en: 'Download as PDF' },
     audio_player_title: { si: 'NoteWav වාදකය', en: 'NoteWav Player' },
-    speed_label: { si: 'වේගය:', en: 'Speed:' },
-    volume_label: { si: 'හඬ තීව්‍රතාව:', en: 'Volume:' },
+    speed_label: { si: 'Speed:', en: 'Speed:' },
+    volume_label: { si: 'Volume:', en: 'Volume:' },
     download_audio_btn: { si: 'Audio Download කරන්න', en: 'Download Audio' },
     share_btn: { si: 'Share කරන්න', en: 'Share' },
     share_with_audio_btn: { si: 'Audio එකත් සමඟ Share කරන්න', en: 'Share with Audio' },
