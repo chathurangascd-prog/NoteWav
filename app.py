@@ -1037,6 +1037,7 @@ def _get_admin_usage_data():
     conn.close()
 
     sl_offset = timedelta(hours=5, minutes=30)
+    now_utc = datetime.now(timezone.utc)
 
     def to_sl_time(iso_str):
         if not iso_str:
@@ -1047,9 +1048,20 @@ def _get_admin_usage_data():
         except Exception:
             return iso_str[:16].replace('T', ' ')
 
+    def is_online(iso_str):
+        """'Online now' = last activity within the last 5 minutes."""
+        if not iso_str:
+            return False
+        try:
+            dt = datetime.fromisoformat(iso_str)
+            return (now_utc - dt) <= timedelta(minutes=5)
+        except Exception:
+            return False
+
     users_list = []
     for row in users:
         u = dict(row)
+        u['is_online'] = is_online(u['last_seen'])
         u['first_seen'] = to_sl_time(u['first_seen'])
         u['last_seen'] = to_sl_time(u['last_seen'])
         users_list.append(u)
@@ -1059,6 +1071,40 @@ def _get_admin_usage_data():
         'total_users': len(users_list),
         'total_notes_in_library': total_notes_in_library,
     }
+
+
+def _get_daily_activity(days=7):
+    """Note/audio counts per calendar day (Sri Lanka time) for the
+    last N days — used for the simple activity bar chart."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT
+            substr(created_at, 1, 10) AS day,
+            SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes,
+            SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio
+        FROM usage_events
+        GROUP BY day
+        ORDER BY day DESC
+        LIMIT ?
+    """, (days,)).fetchall()
+    conn.close()
+    result = [dict(row) for row in rows]
+    result.reverse()  # oldest first, for a left-to-right chart
+    return result
+
+
+def _get_top_subjects(limit=8):
+    """Which subjects students are saving the most notes under."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT subject, COUNT(*) AS note_count
+        FROM notes
+        GROUP BY subject
+        ORDER BY note_count DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 @app.route('/admin/data')
@@ -1073,6 +1119,162 @@ def admin_data():
     except Exception as e:
         print(f"❌ Admin data error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/activity-chart')
+def admin_activity_chart():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        return jsonify({'status': 'success', 'days': _get_daily_activity()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/top-subjects')
+def admin_top_subjects():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        return jsonify({'status': 'success', 'subjects': _get_top_subjects()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/user-timeline/<anon_id>')
+def admin_user_timeline(anon_id):
+    """Every individual event for one specific device/browser, in
+    order — the "drill into this one user" view."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT action, user_name, created_at FROM usage_events WHERE anon_id = ? ORDER BY created_at DESC",
+            (anon_id,)
+        ).fetchall()
+        conn.close()
+
+        sl_offset = timedelta(hours=5, minutes=30)
+        events = []
+        for row in rows:
+            e = dict(row)
+            try:
+                dt = datetime.fromisoformat(e['created_at'])
+                e['created_at'] = (dt + sl_offset).strftime('%Y-%m-%d %H:%M')
+            except Exception:
+                pass
+            events.append(e)
+        return jsonify({'status': 'success', 'events': events})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/notes-list')
+def admin_notes_list():
+    """Library notes browser — lets the admin see/search/delete saved
+    notes without needing to go through the actual student-facing
+    app."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, subject, title, note_text, created_at FROM notes ORDER BY created_at DESC"
+        ).fetchall()
+        conn.close()
+
+        sl_offset = timedelta(hours=5, minutes=30)
+        notes = []
+        for row in rows:
+            n = dict(row)
+            snippet = (n.get('note_text') or '')[:120]
+            n['snippet'] = snippet + ('...' if len(n.get('note_text') or '') > 120 else '')
+            n.pop('note_text', None)
+            try:
+                dt = datetime.fromisoformat(n['created_at'])
+                n['created_at'] = (dt + sl_offset).strftime('%Y-%m-%d %H:%M')
+            except Exception:
+                pass
+            notes.append(n)
+        return jsonify({'status': 'success', 'notes': notes})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/notes/<int:note_id>/delete', methods=['POST'])
+def admin_delete_note(note_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/announcements-list')
+def admin_announcements_list():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, message, created_at FROM announcements ORDER BY id DESC LIMIT 30"
+        ).fetchall()
+        conn.close()
+
+        sl_offset = timedelta(hours=5, minutes=30)
+        items = []
+        for row in rows:
+            a = dict(row)
+            try:
+                dt = datetime.fromisoformat(a['created_at'])
+                a['created_at'] = (dt + sl_offset).strftime('%Y-%m-%d %H:%M')
+            except Exception:
+                pass
+            items.append(a)
+        return jsonify({'status': 'success', 'announcements': items})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/announcements/<int:ann_id>/delete', methods=['POST'])
+def admin_delete_announcement(ann_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM announcements WHERE id = ?", (ann_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/export-csv')
+def admin_export_csv():
+    if not _is_admin_logged_in():
+        return redirect(url_for('admin_login'))
+    try:
+        data = _get_admin_usage_data()
+        lines = ['Name,First Seen (LK),Last Seen (LK),Notes Processed,Audio Generated,Total Actions,Online Now']
+        for u in data['users']:
+            name = (u['latest_name'] or 'Unnamed').replace(',', ' ')
+            lines.append(
+                f"{name},{u['first_seen']},{u['last_seen']},{u['notes_processed']},"
+                f"{u['audio_generated']},{u['total_events']},{'Yes' if u['is_online'] else 'No'}"
+            )
+        csv_content = '\n'.join(lines)
+        response = app.response_class(csv_content, mimetype='text/csv')
+        response.headers['Content-Disposition'] = 'attachment; filename=notewav_usage.csv'
+        return response
+    except Exception as e:
+        return f"CSV export error: {e}", 500
 
 
 @app.route('/admin/announce', methods=['POST'])
