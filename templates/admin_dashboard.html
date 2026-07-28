@@ -25,6 +25,18 @@
             color: #a78bfa;
             margin: 0;
         }
+        .live-dot {
+            font-size: 0.7rem;
+            color: #4ade80;
+            vertical-align: middle;
+            margin-left: 8px;
+            font-weight: 400;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
         a.logout {
             color: #f87171;
             text-decoration: none;
@@ -95,50 +107,102 @@
 </head>
 <body>
     <div class="header">
-        <h1>📊 NoteWav AI — Usage Dashboard</h1>
+        <h1>📊 NoteWav AI — Usage Dashboard <span id="live-dot" class="live-dot" title="Auto-refreshing">🟢 Live</span></h1>
         <a class="logout" href="{{ url_for('admin_logout') }}">Logout</a>
     </div>
 
     <div class="stats-row">
         <div class="stat-card">
-            <div class="num">{{ total_users }}</div>
+            <div class="num" id="stat-total-users">{{ total_users }}</div>
             <div class="label">Distinct devices/browsers</div>
         </div>
         <div class="stat-card">
-            <div class="num">{{ total_notes_in_library }}</div>
+            <div class="num" id="stat-total-notes">{{ total_notes_in_library }}</div>
             <div class="label">Total notes saved (Library)</div>
         </div>
     </div>
 
-    {% if users %}
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>First seen</th>
-                <th>Last seen</th>
-                <th>Notes processed</th>
-                <th>Audio generated</th>
-                <th>Total actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for u in users %}
-            <tr>
-                <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
-                    {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
-                </td>
-                <td>{{ u.first_seen[:16].replace('T', ' ') }}</td>
-                <td>{{ u.last_seen[:16].replace('T', ' ') }}</td>
-                <td>{{ u.notes_processed }}</td>
-                <td>{{ u.audio_generated }}</td>
-                <td>{{ u.total_events }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty-state">තවම usage data නෑ — students ලා app එක use කරන්න පටන් ගත්තහම මෙතන පේනවා.</div>
-    {% endif %}
+    <div id="table-wrapper">
+        {% if users %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>First seen (LK time)</th>
+                    <th>Last seen (LK time)</th>
+                    <th>Notes processed</th>
+                    <th>Audio generated</th>
+                    <th>Total actions</th>
+                </tr>
+            </thead>
+            <tbody id="users-tbody">
+                {% for u in users %}
+                <tr>
+                    <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
+                        {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
+                    </td>
+                    <td>{{ u.first_seen }}</td>
+                    <td>{{ u.last_seen }}</td>
+                    <td>{{ u.notes_processed }}</td>
+                    <td>{{ u.audio_generated }}</td>
+                    <td>{{ u.total_events }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">තවම usage data නෑ — students ලා app එක use කරන්න පටන් ගත්තහම මෙතන පේනවා.</div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Polls the JSON version of this same data every few seconds
+        // and re-renders just the numbers/table — no full page
+        // reload, so scroll position and focus stay put, and there's
+        // no visible flash. Falls back to a full reload only if a
+        // poll ever fails (e.g. session expired), to force a clean
+        // re-login rather than silently going stale.
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function renderTable(users) {
+            const wrapper = document.getElementById('table-wrapper');
+            if (!users || users.length === 0) {
+                wrapper.innerHTML = '<div class="empty-state">තවම usage data නෑ — students ලා app එක use කරන්න පටන් ගත්තහම මෙතන පේනවා.</div>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Name</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>Notes processed</th><th>Audio generated</th><th>Total actions</th></tr></thead><tbody id="users-tbody">';
+            users.forEach(u => {
+                const nameClass = u.latest_name ? 'name-cell' : 'name-cell no-name';
+                const displayName = u.latest_name ? escapeHtml(u.latest_name) : 'Unnamed / Skipped';
+                html += `<tr><td class="${nameClass}">${displayName}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            wrapper.innerHTML = html;
+        }
+
+        async function pollDashboard() {
+            try {
+                const res = await fetch('/admin/data');
+                if (res.status === 401) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
+                const data = await res.json();
+                if (data.status !== 'success') return;
+
+                document.getElementById('stat-total-users').textContent = data.total_users;
+                document.getElementById('stat-total-notes').textContent = data.total_notes_in_library;
+                renderTable(data.users);
+            } catch (e) {
+                console.warn('Dashboard poll failed:', e);
+            }
+        }
+
+        setInterval(pollDashboard, 8000); // refresh every 8 seconds
+    </script>
 </body>
 </html>

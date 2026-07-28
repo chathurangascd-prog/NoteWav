@@ -7,7 +7,7 @@ import time
 import uuid
 import glob
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from google import genai
@@ -998,42 +998,80 @@ def admin_logout():
     return redirect(url_for('admin_login'))
 
 
+def _get_admin_usage_data():
+    """Shared by the dashboard page (initial load) and the /admin/data
+    JSON endpoint (used for live polling) so both always show
+    identical numbers. Converts timestamps from UTC (how they're
+    stored) to Sri Lanka time (UTC+5:30) for display — showing raw
+    UTC looked "wrong" to anyone checking from Sri Lanka, since it's
+    5.5 hours behind local time."""
+    conn = get_db()
+    users = conn.execute("""
+        SELECT
+            anon_id,
+            (SELECT user_name FROM usage_events ue2
+             WHERE ue2.anon_id = ue1.anon_id AND ue2.user_name != ''
+             ORDER BY ue2.created_at DESC LIMIT 1) AS latest_name,
+            MIN(created_at) AS first_seen,
+            MAX(created_at) AS last_seen,
+            COUNT(*) AS total_events,
+            SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed,
+            SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated
+        FROM usage_events ue1
+        GROUP BY anon_id
+        ORDER BY last_seen DESC
+    """).fetchall()
+
+    total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
+    conn.close()
+
+    sl_offset = timedelta(hours=5, minutes=30)
+
+    def to_sl_time(iso_str):
+        if not iso_str:
+            return ''
+        try:
+            dt = datetime.fromisoformat(iso_str)
+            return (dt + sl_offset).strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            return iso_str[:16].replace('T', ' ')
+
+    users_list = []
+    for row in users:
+        u = dict(row)
+        u['first_seen'] = to_sl_time(u['first_seen'])
+        u['last_seen'] = to_sl_time(u['last_seen'])
+        users_list.append(u)
+
+    return {
+        'users': users_list,
+        'total_users': len(users_list),
+        'total_notes_in_library': total_notes_in_library,
+    }
+
+
+@app.route('/admin/data')
+def admin_data():
+    """JSON version of the same dashboard data — polled by the
+    dashboard page's own JavaScript every few seconds so the numbers
+    update live without the person needing to hit refresh."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        return jsonify({'status': 'success', **_get_admin_usage_data()})
+    except Exception as e:
+        print(f"❌ Admin data error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/admin')
 def admin_dashboard():
     if not _is_admin_logged_in():
         return redirect(url_for('admin_login'))
 
     try:
-        conn = get_db()
-        # One row per distinct device/browser (anon_id), with their
-        # most recently used display name, first/last seen times, and
-        # a rough breakdown of what they've done.
-        users = conn.execute("""
-            SELECT
-                anon_id,
-                (SELECT user_name FROM usage_events ue2
-                 WHERE ue2.anon_id = ue1.anon_id AND ue2.user_name != ''
-                 ORDER BY ue2.created_at DESC LIMIT 1) AS latest_name,
-                MIN(created_at) AS first_seen,
-                MAX(created_at) AS last_seen,
-                COUNT(*) AS total_events,
-                SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed,
-                SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated
-            FROM usage_events ue1
-            GROUP BY anon_id
-            ORDER BY last_seen DESC
-        """).fetchall()
-
-        total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
-        conn.close()
-
-        users_list = [dict(row) for row in users]
-        return render_template(
-            'admin_dashboard.html',
-            users=users_list,
-            total_users=len(users_list),
-            total_notes_in_library=total_notes_in_library,
-        )
+        data = _get_admin_usage_data()
+        return render_template('admin_dashboard.html', **data)
     except Exception as e:
         print(f"❌ Admin dashboard error: {e}")
         return f"Dashboard load කරගැනීම අසාර්ථක විය: {e}", 500
