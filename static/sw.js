@@ -4,7 +4,7 @@
 // (/process-note, /tts, /ocr, /library/*) are NEVER cached — they
 // always need a live network request, so those are excluded here.
 
-const CACHE_NAME = 'notewav-shell-v10'; // bumped after switching mind map export from html2canvas to native SVG rendering (fixed missing arrows on mobile)
+const CACHE_NAME = 'notewav-shell-v11'; // bumped after fixing canvas taint (font stripping) and zoom scroll bug (flex overflow)
 const SHELL_FILES = [
     '/',
     '/static/styles.css',

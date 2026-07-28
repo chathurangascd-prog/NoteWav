@@ -902,10 +902,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // size and compute a scale that fits it within the modal's visible
     // area (capped so small diagrams don't get absurdly huge either).
     let mindmapZoom = 1;
+    let mindmapNaturalWidth = 0;
+    let mindmapNaturalHeight = 0;
 
+    // FIX (couldn't scroll to see content past the left/top edge once
+    // zoomed in): CSS transform:scale() only changes how something is
+    // PAINTED, not its actual layout box size — so a parent with
+    // overflow:auto never grows its scrollable area to match the
+    // visually-bigger content, no matter how zoomed in it looks.
+    // Setting real width/height (which the SVG then stretches to
+    // fill, since it has a viewBox) makes the container's actual
+    // layout size grow with zoom, so scrolling correctly reaches
+    // every part of the zoomed-in diagram.
     function setMindMapZoom(level) {
         mindmapZoom = Math.min(4, Math.max(0.3, level));
-        if (mindmapZoomWrapper) mindmapZoomWrapper.style.transform = `scale(${mindmapZoom})`;
+        if (mindmapZoomWrapper && mindmapNaturalWidth && mindmapNaturalHeight) {
+            mindmapZoomWrapper.style.width = (mindmapNaturalWidth * mindmapZoom) + 'px';
+            mindmapZoomWrapper.style.height = (mindmapNaturalHeight * mindmapZoom) + 'px';
+        }
         if (mindmapZoomLevelEl) mindmapZoomLevelEl.textContent = `${Math.round(mindmapZoom * 100)}%`;
     }
 
@@ -916,6 +930,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         mindmapZoomWrapper.innerHTML = lastMindMapSvg;
         forceEdgeColor(mindmapZoomWrapper);
+        mindmapZoomWrapper.style.transform = ''; // clear any old scale-based sizing
         mindmapModalBackdrop.classList.remove('hidden');
 
         // Measure after the modal is actually visible/laid out, then
@@ -924,14 +939,23 @@ document.addEventListener('DOMContentLoaded', function() {
         requestAnimationFrame(() => {
             const svgEl = mindmapZoomWrapper.querySelector('svg');
             if (svgEl && mindmapModalBody) {
+                // Measure the SVG's OWN natural size (its own width/
+                // height, not the wrapper's, since the wrapper hasn't
+                // been explicitly sized yet at this point) so later
+                // zoom changes always scale from the same baseline.
+                const widthAttr = parseFloat(svgEl.getAttribute('width'));
+                const heightAttr = parseFloat(svgEl.getAttribute('height'));
                 const svgRect = svgEl.getBoundingClientRect();
+                mindmapNaturalWidth = widthAttr || svgRect.width;
+                mindmapNaturalHeight = heightAttr || svgRect.height;
+
                 const margin = 70;
                 const availableWidth = mindmapModalBody.clientWidth - margin;
                 const availableHeight = mindmapModalBody.clientHeight - margin;
-                if (svgRect.width > 0 && svgRect.height > 0) {
+                if (mindmapNaturalWidth > 0 && mindmapNaturalHeight > 0) {
                     const fitScale = Math.min(
-                        availableWidth / svgRect.width,
-                        availableHeight / svgRect.height,
+                        availableWidth / mindmapNaturalWidth,
+                        availableHeight / mindmapNaturalHeight,
                         2.5 // don't over-zoom small/simple diagrams either
                     );
                     setMindMapZoom(fitScale);
@@ -1157,7 +1181,20 @@ document.addEventListener('DOMContentLoaded', function() {
             // sidesteps html2canvas's SVG handling entirely and uses
             // the exact same rendering engine that already draws the
             // mind map correctly on screen, on every platform.
-            const svgString = new XMLSerializer().serializeToString(svgClone);
+            // FIX ("Tainted canvases may not be exported" on mobile):
+            // the SVG's text uses font-family: 'Plus Jakarta Sans'
+            // (loaded from Google Fonts at the PAGE level). When that
+            // same SVG is rendered stand-alone via a blob URL + <img>,
+            // some mobile browsers try to fetch that external font to
+            // render the text and treat the canvas as tainted by
+            // cross-origin content afterward — even though the SVG
+            // itself came from a same-origin blob. Swapping to a
+            // built-in system font here removes any external
+            // resource dependency during the render, avoiding the
+            // taint entirely. (On-screen display is unaffected — this
+            // only touches this exported copy.)
+            let svgString = new XMLSerializer().serializeToString(svgClone);
+            svgString = svgString.replace(/Plus Jakarta Sans,?\s*/g, '');
             const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
             const svgUrl = URL.createObjectURL(svgBlob);
 
