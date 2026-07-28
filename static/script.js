@@ -1,3 +1,22 @@
+// FIX (textarea grew indefinitely tall on mobile as text was typed —
+// pushing everything below it further and further down the page,
+// making mobile scrolling awkward): cap the auto-grow height at a
+// reasonable max, and let the textarea scroll INTERNALLY (its own
+// scrollbar) once content exceeds that, instead of the whole page
+// growing without limit.
+function autoResizeTextarea(el, maxHeightPx) {
+    maxHeightPx = maxHeightPx || 320;
+    el.style.height = 'auto';
+    const neededHeight = el.scrollHeight;
+    if (neededHeight > maxHeightPx) {
+        el.style.height = maxHeightPx + 'px';
+        el.style.overflowY = 'auto';
+    } else {
+        el.style.height = neededHeight + 'px';
+        el.style.overflowY = 'hidden';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // ===== DOM Elements =====
     const noteInput = document.getElementById('note-input');
@@ -314,8 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const note = data.note;
             noteInput.value = note.note_text || '';
             noteInput.dispatchEvent(new Event('input'));
-            noteInput.style.height = 'auto';
-            noteInput.style.height = noteInput.scrollHeight + 'px';
+            autoResizeTextarea(noteInput);
 
             if (note.processed_text) {
                 scriptOutput.value = note.processed_text;
@@ -915,7 +933,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // layout size grow with zoom, so scrolling correctly reaches
     // every part of the zoomed-in diagram.
     function setMindMapZoom(level) {
-        mindmapZoom = Math.min(4, Math.max(0.3, level));
+        mindmapZoom = Math.min(10, Math.max(0.3, level));
         if (mindmapZoomWrapper && mindmapNaturalWidth && mindmapNaturalHeight) {
             mindmapZoomWrapper.style.width = (mindmapNaturalWidth * mindmapZoom) + 'px';
             mindmapZoomWrapper.style.height = (mindmapNaturalHeight * mindmapZoom) + 'px';
@@ -1487,8 +1505,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 noteInput.dispatchEvent(new Event('input'));
-                noteInput.style.height = 'auto';
-                noteInput.style.height = noteInput.scrollHeight + 'px';
+                autoResizeTextarea(noteInput);
 
                 showOcrStatus('success', `✅ පෙළ සාර්ථකව උපුටා ගන්නා ලදී! අක්ෂර ${extractedText.length} කි${langMsg}`);
                 noteInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1869,8 +1886,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     document.querySelectorAll('textarea').forEach(textarea => {
         textarea.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = this.scrollHeight + 'px';
+            autoResizeTextarea(this);
         });
     });
 
