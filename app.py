@@ -87,6 +87,17 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # Lets the admin push a short message that shows up as a
+    # notification badge for everyone using the app (checked
+    # periodically from the frontend) — a simple one-way broadcast,
+    # not per-user messaging.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS announcements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -1061,6 +1072,47 @@ def admin_data():
         return jsonify({'status': 'success', **_get_admin_usage_data()})
     except Exception as e:
         print(f"❌ Admin data error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/announce', methods=['POST'])
+def admin_announce():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()[:500]
+        if not message:
+            return jsonify({'status': 'error', 'message': 'Message එකක් ලියන්න.'}), 400
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO announcements (message, created_at) VALUES (?, ?)",
+            (message, datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"❌ Admin announce error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/announcements/latest')
+def announcements_latest():
+    """Public — every visitor's browser polls this periodically to
+    check for a new admin message. No auth needed since it's a
+    one-way broadcast, not sensitive data."""
+    try:
+        conn = get_db()
+        row = conn.execute(
+            "SELECT id, message, created_at FROM announcements ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'status': 'success', 'announcement': None})
+        return jsonify({'status': 'success', 'announcement': dict(row)})
+    except Exception as e:
+        print(f"❌ Announcements fetch error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 

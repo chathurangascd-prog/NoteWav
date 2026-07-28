@@ -84,6 +84,14 @@
         .library-nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: var(--radius-full); border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
         .library-nav-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
         .header-right-nav { position: absolute; top: 24px; right: 24px; display: flex; align-items: center; gap: 10px; }
+        .notification-bell-btn { position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; }
+        .notification-bell-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
+        .notification-badge { position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; border: 2px solid var(--bg-primary); }
+        .notification-popup { position: absolute; top: 70px; right: 24px; width: 300px; max-width: 85vw; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 16px 18px; z-index: 500; }
+        .notification-popup-title { font-size: 0.85rem; font-weight: 700; color: #a78bfa; margin: 0 0 8px; }
+        .notification-popup-message { font-size: 0.88rem; color: var(--text-primary); margin: 0 0 6px; line-height: 1.5; }
+        .notification-popup-time { font-size: 0.72rem; color: var(--text-muted); margin: 0; }
+        @media (max-width: 640px) { .notification-popup { right: 10px; top: 130px; } }
         .streak-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.08); color: #fb923c; font-size: 0.85rem; font-weight: 700; }
         .coins-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(250, 204, 21, 0.45); background: rgba(250, 204, 21, 0.08); color: #facc15; font-size: 0.85rem; font-weight: 700; }
         .drawer-stat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
@@ -109,6 +117,16 @@
         .profile-name-input:focus { outline: none; border-color: #6b30ff; }
         .menu-divider { border: none; border-top: 1px solid var(--border-color); margin: 0 0 18px; }
         .welcome-modal-card { width: 380px; max-width: 92vw; }
+        .info-modal-card { width: 460px; max-width: 92vw; height: auto; max-height: 80vh; }
+        .info-modal-body { padding: 24px; overflow-y: auto; font-size: 0.9rem; line-height: 1.7; color: var(--text-secondary); }
+        .info-modal-body h4 { color: #a78bfa; font-size: 0.95rem; margin: 18px 0 8px; }
+        .info-modal-body h4:first-child { margin-top: 0; }
+        .info-modal-body ol { padding-left: 20px; margin: 0; }
+        .info-modal-body ol li { margin-bottom: 10px; }
+        .info-contact-box { display: flex; align-items: center; gap: 14px; background: rgba(107, 48, 255, 0.1); border: 1px solid rgba(107, 48, 255, 0.35); border-radius: 12px; padding: 16px; margin-top: 16px; }
+        .info-contact-box i { font-size: 1.6rem; color: #a78bfa; }
+        .info-contact-box .phone-number { font-size: 1.1rem; font-weight: 700; color: #fff; }
+        .info-sms-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 20px; border-radius: var(--radius-full); background: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%); color: #fff; text-decoration: none; font-size: 0.88rem; font-weight: 600; }
         .welcome-modal-body { padding: 34px 28px; text-align: center; }
         .welcome-icon { width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%; background: rgba(107, 48, 255, 0.15); color: #a78bfa; font-size: 1.6rem; display: flex; align-items: center; justify-content: center; }
         .welcome-title { font-size: 1.3rem; color: var(--text-primary); margin-bottom: 6px; }
@@ -202,6 +220,18 @@
         </div>
     </div>
 
+    <div id="info-modal-backdrop" class="mindmap-modal-backdrop hidden">
+        <div class="mindmap-modal-card info-modal-card">
+            <div class="mindmap-modal-header">
+                <h3 id="info-modal-title"></h3>
+                <button id="info-modal-close" class="mindmap-modal-close" aria-label="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="info-modal-body" class="info-modal-body"></div>
+        </div>
+    </div>
+
     <div id="error-banner" class="hidden" role="alert">
         <i class="fas fa-triangle-exclamation"></i>
         <span id="error-banner-text"></span>
@@ -225,12 +255,21 @@
                 <i class="fas fa-bars"></i>
             </button>
             <div class="header-right-nav">
+                <button id="notification-bell-btn" class="notification-bell-btn" aria-label="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span id="notification-badge" class="notification-badge hidden"></span>
+                </button>
                 <button id="open-library-btn" class="library-nav-btn">
                     <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
                 </button>
                 <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
                     <i class="fas fa-coins"></i> <span id="coins-count">0</span>
                 </div>
+            </div>
+            <div id="notification-popup" class="notification-popup hidden">
+                <p class="notification-popup-title"><i class="fas fa-bullhorn"></i> Notification</p>
+                <p id="notification-popup-message" class="notification-popup-message"></p>
+                <p id="notification-popup-time" class="notification-popup-time"></p>
             </div>
         </header>
 
@@ -590,9 +629,9 @@
                     &copy; 2026 NoteWav AI — Develop by Sandun(SCD)
                 </p>
                 <div class="footer-links">
-                    <a href="#" class="footer-link"><i class="fas fa-shield-alt"></i> Privacy</a>
-                    <a href="#" class="footer-link"><i class="fas fa-info-circle"></i> About</a>
-                    <a href="#" class="footer-link"><i class="fas fa-envelope"></i> Support</a>
+                    <a href="#" class="footer-link" id="privacy-link"><i class="fas fa-shield-alt"></i> Privacy</a>
+                    <a href="#" class="footer-link" id="about-link"><i class="fas fa-info-circle"></i> About</a>
+                    <a href="#" class="footer-link" id="support-link"><i class="fas fa-envelope"></i> Support</a>
                 </div>
             </div>
         </footer>

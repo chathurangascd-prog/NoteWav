@@ -2767,3 +2767,152 @@ function addCoins(amount) {
 }
 
 document.addEventListener('DOMContentLoaded', updateCoinsDisplay);
+
+// ========================================
+// FOOTER INFO MODALS (About / Support / Privacy)
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    const infoModalBackdrop = document.getElementById('info-modal-backdrop');
+    const infoModalClose = document.getElementById('info-modal-close');
+    const infoModalTitle = document.getElementById('info-modal-title');
+    const infoModalBody = document.getElementById('info-modal-body');
+    if (!infoModalBackdrop || !infoModalTitle || !infoModalBody) return;
+
+    const INFO_CONTENT = {
+        about: {
+            title: 'ℹ️ NoteWav AI ගැන — App එක Use කරන විදිහ',
+            html: `
+                <h4>1️⃣ පාඩම් සටහන ඇතුළත් කරන්න</h4>
+                <p>ඔබේ පාඩම් සටහන type කරන්න, හෝ පාඩමේ රූපයක් (photo) upload කරන්න — app එක automatic ලෙස රූපයෙන් text එක උපුටාගනියි (OCR).</p>
+                <h4>2️⃣ Study Mode එකක් තෝරන්න</h4>
+                <p><b>Full Text Mode:</b> ඔබේ text එකම audio + mind map බවට හැරවෙනවා.<br><b>Smart Study:</b> AI මගින් podcast script එකක් සහ mind map එකක් සකසනවා.</p>
+                <h4>3️⃣ "Script එක සකසන්න" click කරන්න</h4>
+                <p>AI එක ඔබේ සටහන process කරයි. ඕන නම් script එක Edit කරන්න (Safety Check step එකේදී).</p>
+                <h4>4️⃣ Audio Generate කරන්න</h4>
+                <p>"තරංග උත්පාදනය කරන්න" click කරන්න — podcast-style audio එකක් සකසේවි, play/pause/speed/skip controls සමඟ.</p>
+                <h4>5️⃣ Mind Map එක බලන්න</h4>
+                <p>Visual mind map එකක් auto-generate වේ — click කර විශාල කර, PNG/PDF විදිහට download කරගන්න පුළුවන්.</p>
+                <h4>6️⃣ Library එකට Save කරන්න</h4>
+                <p>ඔබේ notes පසුව use කරන්න Library එකට save කරගන්න, subject එකකින් organize කරගන්න.</p>
+            `,
+        },
+        support: {
+            title: '📩 Support — උදව්වක් ඕනද?',
+            html: `
+                <p>App එකේ ගැටලුවක් තිබේ නම්, feature request එකක් තිබේ නම්, හෝ වෙන කිසිම දෙයක් ගැන කතා කරන්න ඕන නම්, කරුණාකර පහත number එකට SMS/text message එකක් යවන්න:</p>
+                <div class="info-contact-box">
+                    <i class="fas fa-mobile-screen"></i>
+                    <div>
+                        <div>Sandun (SCD)</div>
+                        <div class="phone-number">+94 77 634 0009</div>
+                    </div>
+                </div>
+                <a href="sms:+94776340009" class="info-sms-btn"><i class="fas fa-comment-sms"></i> Text Message එකක් යවන්න</a>
+            `,
+        },
+        privacy: {
+            title: '🔒 Privacy — ඔබේ දත්ත ගැන',
+            html: `
+                <p>NoteWav AI විසින් login/account එකක් අවශ්‍ය නොකරයි. පහත දේවල් දැනගන්න:</p>
+                <p><b>ඔබේ device එකේම (localStorage) save වන දේවල්:</b> Profile name/photo, study streak, font size preference, language preference — මේවා අපගේ server එකට යවන්නේ නෑ.</p>
+                <p><b>Server එකට යවන දේවල්:</b> Note text (AI processing සඳහා), Library එකට save කරන notes, generate කරන audio/mind map. Library data එක Render server එකේ temporary storage එකක save වේ.</p>
+                <p><b>Usage tracking:</b> App එක use කරන බව (anonymous device ID එකක් + ඔබ ලබාදෙන නම, තිබේ නම්) admin ට usage patterns බලාගන්න track කෙරේ — password, email වැනි කිසිදු sensitive දත්තයක් රැස් නොකෙරේ.</p>
+            `,
+        },
+    };
+
+    function openInfoModal(key) {
+        const content = INFO_CONTENT[key];
+        if (!content) return;
+        infoModalTitle.textContent = content.title;
+        infoModalBody.innerHTML = content.html;
+        infoModalBackdrop.classList.remove('hidden');
+    }
+
+    const aboutLink = document.getElementById('about-link');
+    const supportLink = document.getElementById('support-link');
+    const privacyLink = document.getElementById('privacy-link');
+    if (aboutLink) aboutLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('about'); });
+    if (supportLink) supportLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('support'); });
+    if (privacyLink) privacyLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('privacy'); });
+
+    if (infoModalClose) infoModalClose.addEventListener('click', () => infoModalBackdrop.classList.add('hidden'));
+    infoModalBackdrop.addEventListener('click', function(e) {
+        if (e.target === infoModalBackdrop) infoModalBackdrop.classList.add('hidden');
+    });
+});
+
+// ========================================
+// NOTIFICATION BELL (admin → users broadcast)
+// ========================================
+// Polls /announcements/latest periodically. If the latest
+// announcement's ID is newer than whatever ID this browser last
+// marked as "seen" (localStorage), a red dot badge appears on the
+// bell. Clicking the bell shows the message and marks it seen,
+// clearing the badge — same pattern as any simple notification
+// system, just without needing real user accounts.
+document.addEventListener('DOMContentLoaded', function() {
+    const SEEN_KEY = 'notewav_last_seen_announcement_id';
+    const bellBtn = document.getElementById('notification-bell-btn');
+    const badge = document.getElementById('notification-badge');
+    const popup = document.getElementById('notification-popup');
+    const popupMessage = document.getElementById('notification-popup-message');
+    const popupTime = document.getElementById('notification-popup-time');
+    if (!bellBtn || !badge || !popup) return;
+
+    let latestAnnouncement = null;
+
+    function getSeenId() {
+        try {
+            return parseInt(localStorage.getItem(SEEN_KEY) || '0', 10);
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    function markSeen(id) {
+        try {
+            localStorage.setItem(SEEN_KEY, String(id));
+        } catch (e) { /* ignore */ }
+        badge.classList.add('hidden');
+    }
+
+    async function checkForAnnouncement() {
+        try {
+            const res = await fetch('/announcements/latest');
+            const data = await res.json();
+            if (data.status !== 'success' || !data.announcement) return;
+            latestAnnouncement = data.announcement;
+            if (latestAnnouncement.id > getSeenId()) {
+                badge.classList.remove('hidden');
+            }
+        } catch (e) {
+            // silent — notifications are non-critical
+        }
+    }
+
+    bellBtn.addEventListener('click', function() {
+        if (!latestAnnouncement) {
+            popup.classList.toggle('hidden');
+            return;
+        }
+        popupMessage.textContent = latestAnnouncement.message;
+        try {
+            const dt = new Date(latestAnnouncement.created_at);
+            popupTime.textContent = dt.toLocaleString();
+        } catch (e) {
+            popupTime.textContent = '';
+        }
+        popup.classList.toggle('hidden');
+        markSeen(latestAnnouncement.id);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!popup.contains(e.target) && !bellBtn.contains(e.target)) {
+            popup.classList.add('hidden');
+        }
+    });
+
+    checkForAnnouncement();
+    setInterval(checkForAnnouncement, 30000); // check every 30 seconds
+});

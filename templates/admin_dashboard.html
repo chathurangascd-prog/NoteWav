@@ -103,6 +103,52 @@
             padding: 60px 20px;
             color: #666;
         }
+        .announce-card {
+            background: #1a1a26;
+            border: 1px solid #2d2d3d;
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin-bottom: 24px;
+        }
+        .announce-label {
+            font-size: 0.85rem;
+            color: #a78bfa;
+            font-weight: 600;
+            margin: 0 0 12px;
+        }
+        .announce-row {
+            display: flex;
+            gap: 10px;
+        }
+        #announce-input {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #2d2d3d;
+            background: #14141e;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+        #announce-input:focus {
+            outline: none;
+            border-color: #6b30ff;
+        }
+        #announce-send-btn {
+            padding: 10px 22px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%);
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .announce-status {
+            font-size: 0.78rem;
+            color: #4ade80;
+            margin: 10px 0 0;
+            min-height: 1em;
+        }
     </style>
 </head>
 <body>
@@ -120,6 +166,15 @@
             <div class="num" id="stat-total-notes">{{ total_notes_in_library }}</div>
             <div class="label">Total notes saved (Library)</div>
         </div>
+    </div>
+
+    <div class="announce-card">
+        <p class="announce-label">📢 Users ලාට Notification එකක් යවන්න</p>
+        <div class="announce-row">
+            <input type="text" id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500">
+            <button id="announce-send-btn">යවන්න</button>
+        </div>
+        <p id="announce-status" class="announce-status"></p>
     </div>
 
     <div id="table-wrapper">
@@ -203,6 +258,42 @@
         }
 
         setInterval(pollDashboard, 8000); // refresh every 8 seconds
+
+        // ===== Send announcement =====
+        const announceInput = document.getElementById('announce-input');
+        const announceBtn = document.getElementById('announce-send-btn');
+        const announceStatus = document.getElementById('announce-status');
+
+        async function sendAnnouncement() {
+            const message = announceInput.value.trim();
+            if (!message) return;
+            announceBtn.disabled = true;
+            try {
+                const res = await fetch('/admin/announce', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message }),
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    announceStatus.textContent = '✅ Sent! Users ලාට notification icon එකේ badge එකක් පේනවා.';
+                    announceInput.value = '';
+                } else {
+                    announceStatus.textContent = '❌ ' + (data.message || 'Failed to send.');
+                    announceStatus.style.color = '#f87171';
+                }
+            } catch (e) {
+                announceStatus.textContent = '❌ Network error.';
+                announceStatus.style.color = '#f87171';
+            }
+            announceBtn.disabled = false;
+            setTimeout(() => { announceStatus.textContent = ''; }, 5000);
+        }
+
+        announceBtn.addEventListener('click', sendAnnouncement);
+        announceInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') sendAnnouncement();
+        });
     </script>
 </body>
 </html>
