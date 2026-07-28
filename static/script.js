@@ -849,6 +849,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const mindmapZoomOutBtn = document.getElementById('mindmap-zoom-out');
     const mindmapZoomResetBtn = document.getElementById('mindmap-zoom-reset');
     const mindmapDownloadPdfBtn = document.getElementById('mindmap-download-pdf');
+    const mindmapDownloadPngBtn = document.getElementById('mindmap-download-png');
 
     // FIX (wide diagrams got cut off at the sides): a fixed "always
     // zoom to 400%" default was too aggressive for diagrams with many
@@ -1029,102 +1030,119 @@ document.addEventListener('DOMContentLoaded', function() {
         return { svgString: new XMLSerializer().serializeToString(svgEl), width, height };
     }
 
+    // Shared by both PDF and PNG export — renders the mind map to an
+    // off-screen canvas (cloneNode-based fix for colors, brute-force
+    // padding for clipping — see history below). Returns the canvas,
+    // or null (after showing an error banner) if it couldn't render.
+    async function generateMindMapCanvas() {
+        if (!lastMindMapSvg) {
+            showErrorBanner('Download කරන්න Mind Map එකක් නෑ.');
+            return null;
+        }
+
+        let tempContainer = null;
+        try {
+            // FIX (arrows kept showing Mermaid's original green no
+            // matter what): Mermaid embeds its OWN <style> block
+            // INSIDE the SVG markup (with rules like ".edgePath
+            // path { stroke: green !important }"). ANY approach
+            // that goes through a STRING at some point — innerHTML,
+            // outerHTML, or DOMParser+XMLSerializer — carries that
+            // embedded stylesheet along with it, and its !important
+            // rules keep beating our attribute/inline-style changes
+            // every time we re-insert that markup. The fix: never
+            // re-serialize to a string at all. mindmapContainer's
+            // SVG (the small, un-enlarged preview) is already
+            // confirmed correct on screen — clone that LIVE DOM
+            // NODE directly with cloneNode(true), which copies its
+            // current attributes/inline-styles as real DOM state,
+            // not by re-parsing text. That preserves our earlier
+            // forceEdgeColor() fix (also inline-style, so it has
+            // equal-or-higher priority than the embedded
+            // stylesheet) instead of losing it.
+            const liveSvg = mindmapContainer.querySelector('svg');
+            if (!liveSvg) {
+                showErrorBanner('Mind Map එක load වී නොමැත.');
+                return null;
+            }
+            const svgClone = liveSvg.cloneNode(true);
+
+            // Re-apply the color fix directly on the clone too, as
+            // a safety net (harmless if already correct).
+            svgClone.querySelectorAll('path, line, polyline').forEach(p => {
+                if (p.closest('marker')) return;
+                p.setAttribute('stroke', '#8b6fd6');
+                p.setAttribute('fill', 'none');
+                p.setAttribute('stroke-width', '2.5');
+                p.style.setProperty('stroke', '#8b6fd6', 'important');
+                p.style.setProperty('fill', 'none', 'important');
+            });
+
+            // Work out the real size from the clone's own viewBox/
+            // width/height (same logic as before, just without a
+            // string round-trip), then add a safety margin.
+            let width = 0, height = 0;
+            const vbAttr = svgClone.getAttribute('viewBox');
+            let vx = 0, vy = 0;
+            if (vbAttr) {
+                const parts = vbAttr.trim().split(/\s+/).map(Number);
+                if (parts.length === 4) {
+                    vx = parts[0]; vy = parts[1]; width = parts[2]; height = parts[3];
+                }
+            }
+            const wAttr = svgClone.getAttribute('width');
+            const hAttr = svgClone.getAttribute('height');
+            if (wAttr && !wAttr.includes('%')) width = parseFloat(wAttr) || width;
+            if (hAttr && !hAttr.includes('%')) height = parseFloat(hAttr) || height;
+            if (!width || !height) { width = width || 1200; height = height || 800; }
+
+            const brutePadding = 60;
+            const finalWidth = width + brutePadding * 2;
+            const finalHeight = height + brutePadding * 2;
+            svgClone.setAttribute('viewBox', `${vx - brutePadding} ${vy - brutePadding} ${width + brutePadding * 2} ${height + brutePadding * 2}`);
+            svgClone.setAttribute('width', String(finalWidth));
+            svgClone.setAttribute('height', String(finalHeight));
+
+            tempContainer = document.createElement('div');
+            tempContainer.style.position = 'fixed';
+            tempContainer.style.left = '-99999px';
+            tempContainer.style.top = '0';
+            tempContainer.style.width = finalWidth + 'px';
+            tempContainer.style.height = finalHeight + 'px';
+            tempContainer.style.background = '#14141e';
+            tempContainer.appendChild(svgClone); // appendChild the actual node — not innerHTML with a string
+            document.body.appendChild(tempContainer);
+
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+            const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
+            const html2canvas = html2canvasModule.default;
+
+            const canvas = await html2canvas(tempContainer, {
+                backgroundColor: '#14141e',
+                scale: 2.5,
+                width: finalWidth,
+                height: finalHeight,
+                logging: false,
+            });
+
+            document.body.removeChild(tempContainer);
+            tempContainer = null;
+            return canvas;
+        } catch (err) {
+            if (tempContainer && tempContainer.parentNode) document.body.removeChild(tempContainer);
+            console.error('Mind map canvas render error:', err);
+            showErrorBanner('Mind map render කරගැනීම අසාර්ථක විය: ' + (err && err.message ? err.message : err));
+            return null;
+        }
+    }
+
     if (mindmapDownloadPdfBtn) {
         mindmapDownloadPdfBtn.addEventListener('click', async function() {
-            if (!lastMindMapSvg) {
-                showErrorBanner('Download කරන්න Mind Map එකක් නෑ.');
-                return;
-            }
+            const canvas = await generateMindMapCanvas();
+            if (!canvas) return;
 
-            let tempContainer = null;
             try {
-                // FIX (arrows kept showing Mermaid's original green no
-                // matter what): Mermaid embeds its OWN <style> block
-                // INSIDE the SVG markup (with rules like ".edgePath
-                // path { stroke: green !important }"). ANY approach
-                // that goes through a STRING at some point — innerHTML,
-                // outerHTML, or DOMParser+XMLSerializer — carries that
-                // embedded stylesheet along with it, and its !important
-                // rules keep beating our attribute/inline-style changes
-                // every time we re-insert that markup. The fix: never
-                // re-serialize to a string at all. mindmapContainer's
-                // SVG (the small, un-enlarged preview) is already
-                // confirmed correct on screen — clone that LIVE DOM
-                // NODE directly with cloneNode(true), which copies its
-                // current attributes/inline-styles as real DOM state,
-                // not by re-parsing text. That preserves our earlier
-                // forceEdgeColor() fix (also inline-style, so it has
-                // equal-or-higher priority than the embedded
-                // stylesheet) instead of losing it.
-                const liveSvg = mindmapContainer.querySelector('svg');
-                if (!liveSvg) {
-                    showErrorBanner('Mind Map එක load වී නොමැත.');
-                    return;
-                }
-                const svgClone = liveSvg.cloneNode(true);
-
-                // Re-apply the color fix directly on the clone too, as
-                // a safety net (harmless if already correct).
-                svgClone.querySelectorAll('path, line, polyline').forEach(p => {
-                    if (p.closest('marker')) return;
-                    p.setAttribute('stroke', '#8b6fd6');
-                    p.setAttribute('fill', 'none');
-                    p.setAttribute('stroke-width', '2.5');
-                    p.style.setProperty('stroke', '#8b6fd6', 'important');
-                    p.style.setProperty('fill', 'none', 'important');
-                });
-
-                // Work out the real size from the clone's own viewBox/
-                // width/height (same logic as before, just without a
-                // string round-trip), then add a safety margin.
-                let width = 0, height = 0;
-                const vbAttr = svgClone.getAttribute('viewBox');
-                let vx = 0, vy = 0;
-                if (vbAttr) {
-                    const parts = vbAttr.trim().split(/\s+/).map(Number);
-                    if (parts.length === 4) {
-                        vx = parts[0]; vy = parts[1]; width = parts[2]; height = parts[3];
-                    }
-                }
-                const wAttr = svgClone.getAttribute('width');
-                const hAttr = svgClone.getAttribute('height');
-                if (wAttr && !wAttr.includes('%')) width = parseFloat(wAttr) || width;
-                if (hAttr && !hAttr.includes('%')) height = parseFloat(hAttr) || height;
-                if (!width || !height) { width = width || 1200; height = height || 800; }
-
-                const brutePadding = 60;
-                const finalWidth = width + brutePadding * 2;
-                const finalHeight = height + brutePadding * 2;
-                svgClone.setAttribute('viewBox', `${vx - brutePadding} ${vy - brutePadding} ${width + brutePadding * 2} ${height + brutePadding * 2}`);
-                svgClone.setAttribute('width', String(finalWidth));
-                svgClone.setAttribute('height', String(finalHeight));
-
-                tempContainer = document.createElement('div');
-                tempContainer.style.position = 'fixed';
-                tempContainer.style.left = '-99999px';
-                tempContainer.style.top = '0';
-                tempContainer.style.width = finalWidth + 'px';
-                tempContainer.style.height = finalHeight + 'px';
-                tempContainer.style.background = '#14141e';
-                tempContainer.appendChild(svgClone); // appendChild the actual node — not innerHTML with a string
-                document.body.appendChild(tempContainer);
-
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-                const html2canvasModule = await import('https://esm.sh/html2canvas@1.4.1');
-                const html2canvas = html2canvasModule.default;
-
-                const canvas = await html2canvas(tempContainer, {
-                    backgroundColor: '#14141e',
-                    scale: 2.5,
-                    width: finalWidth,
-                    height: finalHeight,
-                    logging: false,
-                });
-
-                document.body.removeChild(tempContainer);
-                tempContainer = null;
-
                 const imgData = canvas.toDataURL('image/jpeg', 0.93);
 
                 const { jsPDF } = window.jspdf;
@@ -1159,9 +1177,51 @@ document.addEventListener('DOMContentLoaded', function() {
                     pdf.save('notewav_mindmap.pdf');
                 }
             } catch (err) {
-                if (tempContainer && tempContainer.parentNode) document.body.removeChild(tempContainer);
                 console.error('PDF export error:', err);
                 showErrorBanner('PDF හදන්න බැරි උනා: ' + (err && err.message ? err.message : err));
+            }
+        });
+    }
+
+    // NEW: PNG export — same rendering pipeline as PDF, but downloads
+    // the raw image directly instead of wrapping it in a PDF page.
+    // Handy for pasting into a document/presentation, or when a
+    // plain image is more convenient to share than a PDF.
+    if (mindmapDownloadPngBtn) {
+        mindmapDownloadPngBtn.addEventListener('click', async function() {
+            const canvas = await generateMindMapCanvas();
+            if (!canvas) return;
+
+            try {
+                const imgData = canvas.toDataURL('image/png');
+                const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+                if (isMobile && navigator.share && navigator.canShare) {
+                    const pngBlob = await (await fetch(imgData)).blob();
+                    const pngFile = new File([pngBlob], 'notewav_mindmap.png', { type: 'image/png' });
+
+                    if (navigator.canShare({ files: [pngFile] })) {
+                        try {
+                            await navigator.share({ files: [pngFile], title: 'NoteWav Mind Map' });
+                        } catch (shareErr) {
+                            if (shareErr && shareErr.name !== 'AbortError') {
+                                console.error('Share failed:', shareErr);
+                                showErrorBanner('PNG share කරගැනීම අසාර්ථක විය: ' + shareErr.message);
+                            }
+                        }
+                        return;
+                    }
+                }
+
+                const link = document.createElement('a');
+                link.href = imgData;
+                link.download = 'notewav_mindmap.png';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (err) {
+                console.error('PNG export error:', err);
+                showErrorBanner('PNG හදන්න බැරි උනා: ' + (err && err.message ? err.message : err));
             }
         });
     }
@@ -1779,4 +1839,107 @@ window.addEventListener('appinstalled', function() {
     if (btn) btn.classList.add('hidden');
     deferredInstallPrompt = null;
     console.log('🎉 NoteWav AI installed as an app!');
+});
+
+// ========================================
+// SAFETY-CHECK TEXT FONT SIZE ADJUSTMENT
+// ========================================
+// Lets students bump the script-output textarea's font size up/down
+// for easier reading, persisted across visits via localStorage.
+document.addEventListener('DOMContentLoaded', function() {
+    const FONT_SIZE_KEY = 'notewav_script_font_size';
+    const MIN_PERCENT = 70;
+    const MAX_PERCENT = 160;
+    const STEP = 10;
+    const BASE_PX = 16; // the textarea's default font-size in px
+
+    const decreaseBtn = document.getElementById('font-size-decrease');
+    const increaseBtn = document.getElementById('font-size-increase');
+    const valueEl = document.getElementById('font-size-value');
+    const targetTextarea = document.getElementById('script-output');
+    if (!decreaseBtn || !increaseBtn || !valueEl || !targetTextarea) return;
+
+    function applyFontSize(percent) {
+        targetTextarea.style.fontSize = (BASE_PX * percent / 100) + 'px';
+        valueEl.textContent = percent + '%';
+        try {
+            localStorage.setItem(FONT_SIZE_KEY, String(percent));
+        } catch (e) {
+            console.warn('Could not save font size preference:', e);
+        }
+    }
+
+    let currentPercent = 100;
+    try {
+        const saved = parseInt(localStorage.getItem(FONT_SIZE_KEY), 10);
+        if (!isNaN(saved) && saved >= MIN_PERCENT && saved <= MAX_PERCENT) {
+            currentPercent = saved;
+        }
+    } catch (e) {
+        // ignore, fall back to default
+    }
+    applyFontSize(currentPercent);
+
+    decreaseBtn.addEventListener('click', function() {
+        currentPercent = Math.max(MIN_PERCENT, currentPercent - STEP);
+        applyFontSize(currentPercent);
+    });
+    increaseBtn.addEventListener('click', function() {
+        currentPercent = Math.min(MAX_PERCENT, currentPercent + STEP);
+        applyFontSize(currentPercent);
+    });
+});
+
+// ========================================
+// STUDY STREAK TRACKER
+// ========================================
+// Tracks consecutive-day usage entirely client-side (localStorage) —
+// no server/database needed. Visiting on a new calendar day that's
+// exactly one day after the last visit increments the streak; a
+// skipped day resets it back to 1.
+document.addEventListener('DOMContentLoaded', function() {
+    const STREAK_KEY = 'notewav_streak_data';
+    const streakBadge = document.getElementById('streak-badge');
+    const streakCountEl = document.getElementById('streak-count');
+    if (!streakBadge || !streakCountEl) return;
+
+    function todayLocalString() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function daysBetween(dateStrA, dateStrB) {
+        const a = new Date(dateStrA + 'T00:00:00');
+        const b = new Date(dateStrB + 'T00:00:00');
+        return Math.round((b - a) / (1000 * 60 * 60 * 24));
+    }
+
+    try {
+        const today = todayLocalString();
+        let data = null;
+        try {
+            data = JSON.parse(localStorage.getItem(STREAK_KEY));
+        } catch (e) {
+            data = null;
+        }
+
+        let streak;
+        if (!data || !data.lastDate) {
+            streak = 1;
+        } else if (data.lastDate === today) {
+            streak = data.streak || 1;
+        } else {
+            const gap = daysBetween(data.lastDate, today);
+            streak = gap === 1 ? (data.streak || 0) + 1 : 1;
+        }
+
+        localStorage.setItem(STREAK_KEY, JSON.stringify({ lastDate: today, streak }));
+        streakCountEl.textContent = String(streak);
+        streakBadge.classList.remove('hidden');
+    } catch (e) {
+        console.warn('Study streak tracking unavailable:', e);
+    }
 });
