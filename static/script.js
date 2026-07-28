@@ -46,6 +46,13 @@ function trackUsageEvent(action) {
         const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
         if (profile.name) userName = profile.name.trim();
 
+        let coins = null;
+        try {
+            coins = (typeof getCoinsBalance === 'function') ? getCoinsBalance() : null;
+        } catch (e) {
+            coins = null;
+        }
+
         fetch('/track', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -53,6 +60,7 @@ function trackUsageEvent(action) {
                 anon_id: getOrCreateAnonId(),
                 user_name: userName,
                 action: action,
+                coins: coins,
             }),
         }).catch(() => { /* tracking is best-effort only, never disrupt the actual feature */ });
     } catch (e) {
@@ -458,6 +466,12 @@ document.addEventListener('DOMContentLoaded', function() {
             saveToLibraryBtn.innerHTML = '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Saving...';
 
             try {
+                let profileName = '';
+                try {
+                    const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+                    if (profile.name) profileName = profile.name.trim();
+                } catch (e) { /* ignore */ }
+
                 const response = await fetch('/library/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -468,6 +482,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         mermaid_code_si: mermaidCodes.si || '',
                         mermaid_code_en: mermaidCodes.en || '',
                         mode,
+                        anon_id: (typeof getOrCreateAnonId === 'function') ? getOrCreateAnonId() : '',
+                        user_name: profileName,
                     }),
                 });
                 const data = await response.json();
@@ -2685,6 +2701,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             let successCount = 0;
+            let profileNameForImport = '';
+            try {
+                const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+                if (profile.name) profileNameForImport = profile.name.trim();
+            } catch (e) { /* ignore */ }
+
             for (const note of notes) {
                 try {
                     const res = await fetch('/library/save', {
@@ -2697,6 +2719,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             mermaid_code_si: note.mermaid_code_si || '',
                             mermaid_code_en: note.mermaid_code_en || '',
                             mode: note.mode || 'full',
+                            anon_id: (typeof getOrCreateAnonId === 'function') ? getOrCreateAnonId() : '',
+                            user_name: profileNameForImport,
                         }),
                     });
                     const result = await res.json();

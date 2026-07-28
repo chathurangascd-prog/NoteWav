@@ -72,6 +72,16 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # Added later: which device/browser saved this note, so the admin
+    # can see who created it. ALTER TABLE ... ADD COLUMN is wrapped in
+    # try/except since SQLite has no "IF NOT EXISTS" for columns, and
+    # this runs on every startup — the second and later times, the
+    # column already exists and the ALTER just fails harmlessly.
+    for column_def in ["anon_id TEXT", "user_name TEXT"]:
+        try:
+            conn.execute(f"ALTER TABLE notes ADD COLUMN {column_def}")
+        except Exception:
+            pass  # column already exists
     # Lightweight, anonymous usage tracking for the admin dashboard —
     # NOT a real login/account system. "anon_id" is a random ID the
     # browser generates once and stores in localStorage (so the same
@@ -85,6 +95,18 @@ def init_db():
             user_name TEXT,
             action TEXT NOT NULL,
             created_at TEXT NOT NULL
+        )
+    """)
+    # Tracks the latest known "coins" balance the frontend reports for
+    # each device — coins themselves live in the browser's
+    # localStorage (there's no real spend/earn logic server-side yet),
+    # this table just mirrors the last-seen value so the admin can see
+    # it without needing real accounts.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_state (
+            anon_id TEXT PRIMARY KEY,
+            coins INTEGER DEFAULT 0,
+            updated_at TEXT
         )
     """)
     # Lets the admin push a short message that shows up as a
@@ -849,6 +871,8 @@ def library_save():
     mermaid_code_si = data.get('mermaid_code_si') or ''
     mermaid_code_en = data.get('mermaid_code_en') or ''
     mode = data.get('mode') or 'full'
+    anon_id = (data.get('anon_id') or '').strip()[:64]
+    user_name = (data.get('user_name') or '').strip()[:80]
 
     if not note_text:
         return jsonify({'status': 'error', 'message': 'Save කරන්න note එකක් නෑ.'}), 400
@@ -868,10 +892,10 @@ def library_save():
         conn = get_db()
         conn.execute(
             """INSERT INTO notes
-               (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode, created_at, anon_id, user_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode,
-             datetime.now(timezone.utc).isoformat())
+             datetime.now(timezone.utc).isoformat(), anon_id, user_name)
         )
         conn.commit()
         new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -971,6 +995,7 @@ def track_event():
         anon_id = (data.get('anon_id') or '').strip()[:64]
         user_name = (data.get('user_name') or '').strip()[:80]
         action = (data.get('action') or '').strip()[:40]
+        coins = data.get('coins')
         if not anon_id or not action:
             return jsonify({'status': 'ignored'})
 
@@ -979,6 +1004,16 @@ def track_event():
             "INSERT INTO usage_events (anon_id, user_name, action, created_at) VALUES (?, ?, ?, ?)",
             (anon_id, user_name, action, datetime.now(timezone.utc).isoformat())
         )
+        # Mirror the frontend's coins balance (localStorage) here too,
+        # so the admin can see it — this doesn't create any real
+        # server-side spend/earn logic, just reports the last-seen
+        # value for visibility.
+        if isinstance(coins, int):
+            conn.execute(
+                """INSERT INTO user_state (anon_id, coins, updated_at) VALUES (?, ?, ?)
+                   ON CONFLICT(anon_id) DO UPDATE SET coins = excluded.coins, updated_at = excluded.updated_at""",
+                (anon_id, coins, datetime.now(timezone.utc).isoformat())
+            )
         conn.commit()
         conn.close()
         return jsonify({'status': 'success'})
@@ -1027,7 +1062,8 @@ def _get_admin_usage_data():
             MAX(created_at) AS last_seen,
             COUNT(*) AS total_events,
             SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed,
-            SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated
+            SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated,
+            (SELECT coins FROM user_state us WHERE us.anon_id = ue1.anon_id) AS coins
         FROM usage_events ue1
         GROUP BY anon_id
         ORDER BY last_seen DESC
@@ -1279,7 +1315,7 @@ def admin_notes_list():
     try:
         conn = get_db()
         rows = conn.execute(
-            "SELECT id, subject, title, note_text, created_at FROM notes ORDER BY created_at DESC"
+            "SELECT id, subject, title, note_text, created_at, user_name FROM notes ORDER BY created_at DESC"
         ).fetchall()
         conn.close()
 

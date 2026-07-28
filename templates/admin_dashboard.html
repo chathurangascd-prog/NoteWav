@@ -140,6 +140,7 @@
                         <th>Notes processed</th>
                         <th>Audio generated</th>
                         <th>Total actions</th>
+                        <th>🪙 Coins</th>
                     </tr>
                 </thead>
                 <tbody id="users-tbody">
@@ -154,6 +155,7 @@
                         <td>{{ u.notes_processed }}</td>
                         <td>{{ u.audio_generated }}</td>
                         <td>{{ u.total_events }}</td>
+                        <td>{{ u.coins if u.coins is not none else '—' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -210,12 +212,13 @@
                 wrapper.innerHTML = '<div class="empty-state">Match වෙන users කෙනෙක් නෑ.</div>';
                 return;
             }
-            let html = '<table><thead><tr><th>Name</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>Notes processed</th><th>Audio generated</th><th>Total actions</th></tr></thead><tbody id="users-tbody">';
+            let html = '<table><thead><tr><th>Name</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>Notes processed</th><th>Audio generated</th><th>Total actions</th><th>🪙 Coins</th></tr></thead><tbody id="users-tbody">';
             filtered.forEach(u => {
                 const nameClass = u.latest_name ? 'name-cell' : 'name-cell no-name';
                 const displayName = u.latest_name ? escapeHtml(u.latest_name) : 'Unnamed / Skipped';
                 const onlineDot = u.is_online ? '<span class="online-dot" title="Online now"></span>' : '';
-                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td></tr>`;
+                const coinsDisplay = (u.coins === null || u.coins === undefined) ? '—' : u.coins;
+                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td><td>${coinsDisplay}</td></tr>`;
             });
             html += '</tbody></table>';
             wrapper.innerHTML = html;
@@ -423,7 +426,7 @@
         function renderNotes() {
             const term = (document.getElementById('notes-search-input').value || '').toLowerCase();
             const filtered = term
-                ? allNotes.filter(n => (n.subject + ' ' + n.title).toLowerCase().includes(term))
+                ? allNotes.filter(n => (n.subject + ' ' + n.title + ' ' + (n.user_name || '')).toLowerCase().includes(term))
                 : allNotes;
 
             if (!filtered.length) {
@@ -432,10 +435,11 @@
             }
             let html = '';
             filtered.forEach(n => {
+                const savedBy = n.user_name ? escapeHtml(n.user_name) : 'Unknown';
                 html += `<div class="note-item">
                     <div class="note-item-info">
                         <div class="note-item-title">${escapeHtml(n.title || '(No title)')}</div>
-                        <div class="note-item-subject">${escapeHtml(n.subject)}</div>
+                        <div class="note-item-subject">${escapeHtml(n.subject)} · 👤 ${savedBy}</div>
                         <div class="note-item-snippet">${escapeHtml(n.snippet)}</div>
                         <div class="note-item-date">${n.created_at}</div>
                     </div>
