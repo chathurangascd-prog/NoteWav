@@ -90,6 +90,7 @@
             <div class="label">Total notes saved (Library)</div>
         </div>
         <a href="{{ url_for('admin_export_csv') }}" class="csv-export-btn"><i>⬇️</i> Export Usage as CSV</a>
+        <a href="{{ url_for('admin_full_backup') }}" class="csv-export-btn"><i>💾</i> Full Database Backup</a>
     </div>
 
     <div class="section-card">
@@ -108,6 +109,16 @@
             <span><span class="legend-dot" style="background:#8b5cf6;"></span> Notes Processed</span>
             <span><span class="legend-dot" style="background:#f59e0b;"></span> Audio Generated</span>
         </div>
+    </div>
+
+    <div class="section-card">
+        <h2 class="section-title">📈 User Growth (Cumulative, Last 14 Days)</h2>
+        <div id="growth-chart-wrap" class="chart-wrap"></div>
+    </div>
+
+    <div class="section-card">
+        <h2 class="section-title">🎯 Feature Usage Breakdown</h2>
+        <div id="feature-usage-wrap"></div>
     </div>
 
     <div class="section-card">
@@ -271,6 +282,8 @@
             // typed (they re-read the search input each time), so
             // typing to filter isn't disrupted by the refresh.
             loadActivityChart();
+            loadUserGrowth();
+            loadFeatureUsage();
             loadTopSubjects();
             loadNotes();
             loadAnnouncements();
@@ -329,6 +342,48 @@
                 document.getElementById('chart-wrap').innerHTML = html || '<div class="empty-state">No data yet.</div>';
             } catch (e) {
                 document.getElementById('chart-wrap').innerHTML = '<div class="empty-state">Chart load failed.</div>';
+            }
+        }
+
+        async function loadUserGrowth() {
+            try {
+                const res = await fetch('/admin/user-growth');
+                const data = await res.json();
+                if (data.status !== 'success' || !data.growth.length) {
+                    document.getElementById('growth-chart-wrap').innerHTML = '<div class="empty-state">No growth data yet.</div>';
+                    return;
+                }
+                const growth = data.growth;
+                const maxVal = Math.max(1, ...growth.map(g => g.cumulative));
+                let html = '';
+                growth.forEach(g => {
+                    const h = Math.round((g.cumulative / maxVal) * 100);
+                    const label = g.day ? g.day.slice(5) : '';
+                    html += `<div class="chart-col"><div class="chart-bars"><div class="chart-bar notes" style="height:${h}px" title="${g.cumulative} total users"></div></div><div class="chart-day-label">${label}</div></div>`;
+                });
+                document.getElementById('growth-chart-wrap').innerHTML = html;
+            } catch (e) {
+                document.getElementById('growth-chart-wrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
+            }
+        }
+
+        async function loadFeatureUsage() {
+            try {
+                const res = await fetch('/admin/feature-usage');
+                const data = await res.json();
+                if (data.status !== 'success' || !data.features.length) {
+                    document.getElementById('feature-usage-wrap').innerHTML = '<div class="empty-state">No feature usage data yet.</div>';
+                    return;
+                }
+                const maxCount = Math.max(...data.features.map(f => f.count));
+                let html = '';
+                data.features.forEach(f => {
+                    const pct = Math.round((f.count / maxCount) * 100);
+                    html += `<div class="subject-row"><div class="subject-name">${escapeHtml(f.action)}</div><div class="subject-bar-track"><div class="subject-bar-fill" style="width:${pct}%"></div></div><div class="subject-count">${f.count}</div></div>`;
+                });
+                document.getElementById('feature-usage-wrap').innerHTML = html;
+            } catch (e) {
+                document.getElementById('feature-usage-wrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
             }
         }
 
@@ -436,6 +491,8 @@
         }
 
         loadActivityChart();
+        loadUserGrowth();
+        loadFeatureUsage();
         loadTopSubjects();
         loadNotes();
         loadAnnouncements();

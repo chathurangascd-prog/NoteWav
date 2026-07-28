@@ -1379,6 +1379,7 @@ document.addEventListener('DOMContentLoaded', function() {
         mindmapDownloadPdfBtn.addEventListener('click', async function() {
             const canvas = await generateMindMapCanvas();
             if (!canvas) return;
+            trackUsageEvent('pdf_downloaded');
 
             try {
                 const imgData = canvas.toDataURL('image/jpeg', 0.93);
@@ -1429,6 +1430,7 @@ document.addEventListener('DOMContentLoaded', function() {
         mindmapDownloadPngBtn.addEventListener('click', async function() {
             const canvas = await generateMindMapCanvas();
             if (!canvas) return;
+            trackUsageEvent('png_downloaded');
 
             try {
                 const imgData = canvas.toDataURL('image/png');
@@ -2582,6 +2584,7 @@ document.addEventListener('DOMContentLoaded', function() {
         recognition.onstart = function() {
             isListening = true;
             voiceBtn.classList.add('copied'); // reuse the existing "active" green style
+            trackUsageEvent('voice_input_used');
         };
         recognition.onresult = function(event) {
             let transcript = '';
@@ -2639,6 +2642,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!exportBtn || !importBtn || !importInput) return;
 
     exportBtn.addEventListener('click', async function() {
+        trackUsageEvent('library_exported');
         try {
             const res = await fetch('/library/export');
             const data = await res.json();

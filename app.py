@@ -1107,6 +1107,105 @@ def _get_top_subjects(limit=8):
     return [dict(row) for row in rows]
 
 
+def _get_feature_usage():
+    """Counts every distinct action type ever tracked — shows which
+    features actually get used (voice input, PNG/PDF export, etc.),
+    not just the two headline stats (notes/audio)."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT action, COUNT(*) AS count
+        FROM usage_events
+        GROUP BY action
+        ORDER BY count DESC
+    """).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def _get_user_growth(days=14):
+    """Cumulative distinct-user growth over the last N days — for
+    each anon_id, its EARLIEST event counts as that device's "join
+    day"; grouping those join days and running a cumulative sum gives
+    a simple growth curve."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT substr(first_seen, 1, 10) AS day, COUNT(*) AS new_users
+        FROM (
+            SELECT anon_id, MIN(created_at) AS first_seen
+            FROM usage_events
+            GROUP BY anon_id
+        )
+        GROUP BY day
+        ORDER BY day ASC
+    """).fetchall()
+    conn.close()
+
+    all_days = [dict(row) for row in rows]
+    # Keep only the last N days but preserve the running total from
+    # everything before that window too.
+    running_total = 0
+    result = []
+    cutoff_days = all_days[-days:] if len(all_days) > days else all_days
+    earlier_total = sum(d['new_users'] for d in all_days[:-days]) if len(all_days) > days else 0
+    running_total = earlier_total
+    for d in cutoff_days:
+        running_total += d['new_users']
+        result.append({'day': d['day'], 'new_users': d['new_users'], 'cumulative': running_total})
+    return result
+
+
+@app.route('/admin/feature-usage')
+def admin_feature_usage():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        return jsonify({'status': 'success', 'features': _get_feature_usage()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/user-growth')
+def admin_user_growth():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        return jsonify({'status': 'success', 'growth': _get_user_growth()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/full-backup')
+def admin_full_backup():
+    """Downloads EVERY table (notes, usage_events, announcements) as
+    one JSON file — a genuine full backup, beyond the usage-only CSV
+    export, given the SQLite database isn't guaranteed to survive a
+    Render redeploy."""
+    if not _is_admin_logged_in():
+        return redirect(url_for('admin_login'))
+    try:
+        conn = get_db()
+        notes = [dict(row) for row in conn.execute('SELECT * FROM notes').fetchall()]
+        usage_events = [dict(row) for row in conn.execute('SELECT * FROM usage_events').fetchall()]
+        announcements = [dict(row) for row in conn.execute('SELECT * FROM announcements').fetchall()]
+        conn.close()
+
+        backup = {
+            'exported_at': datetime.now(timezone.utc).isoformat(),
+            'notes': notes,
+            'usage_events': usage_events,
+            'announcements': announcements,
+        }
+        response = app.response_class(
+            json.dumps(backup, indent=2, ensure_ascii=False),
+            mimetype='application/json'
+        )
+        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        response.headers['Content-Disposition'] = f'attachment; filename=notewav_full_backup_{date_str}.json'
+        return response
+    except Exception as e:
+        return f"Backup error: {e}", 500
+
+
 @app.route('/admin/data')
 def admin_data():
     """JSON version of the same dashboard data — polled by the
