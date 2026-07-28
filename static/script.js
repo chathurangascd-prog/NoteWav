@@ -46,8 +46,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== Image Upload Elements =====
     const uploadArea = document.getElementById('upload-area');
     const imageInput = document.getElementById('image-input');
-    const cameraCaptureBtn = document.getElementById('camera-capture-btn');
-    const cameraInput = document.getElementById('camera-input');
     const ocrStatus = document.getElementById('ocr-status');
 
     // ===== Playback Speed / Volume Controls =====
@@ -1160,24 +1158,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         this.value = '';
     });
-
-    // NEW: "Take a photo" button — opens the device camera directly
-    // (capture="environment" hints at the rear camera on phones)
-    // instead of only letting students pick an existing image from
-    // their gallery/files. Reuses the same handleImage() pipeline, so
-    // a captured photo goes through identical OCR processing.
-    if (cameraCaptureBtn && cameraInput) {
-        cameraCaptureBtn.addEventListener('click', function() {
-            if (isOCRRunning) return;
-            cameraInput.click();
-        });
-        cameraInput.addEventListener('change', function(e) {
-            if (this.files.length > 0 && !isOCRRunning) {
-                handleImage(this.files[0]);
-            }
-            this.value = '';
-        });
-    }
 
     async function handleImage(file) {
         if (!file.type.startsWith('image/')) {
