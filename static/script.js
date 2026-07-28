@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const generateAudioBtn = document.getElementById('generate-audio-btn');
     const playPauseBtn = document.getElementById('play-pause-btn');
     const stopBtn = document.getElementById('stop-btn');
+    const skipBackBtn = document.getElementById('skip-back-btn');
+    const skipForwardBtn = document.getElementById('skip-forward-btn');
     const downloadBtn = document.getElementById('download-btn');
     const resetBtn = document.getElementById('reset-btn');
     const highlightContainer = document.getElementById('highlight-text-container');
@@ -50,12 +52,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const speedButtons = document.querySelectorAll('.speed-btn');
     const volumeSlider = document.getElementById('volume-slider');
 
+    // NEW: remember the student's preferred speed across sessions —
+    // previously it always reset to the default (1.25x) every time,
+    // even if they'd changed it last time.
+    const SPEED_STORAGE_KEY = 'notewav_preferred_speed';
+    try {
+        const savedSpeed = localStorage.getItem(SPEED_STORAGE_KEY);
+        if (savedSpeed) {
+            const savedSpeedNum = parseFloat(savedSpeed);
+            const matchingBtn = Array.from(speedButtons).find(b => parseFloat(b.dataset.speed) === savedSpeedNum);
+            if (matchingBtn) {
+                playbackSpeed = savedSpeedNum;
+                speedButtons.forEach(b => b.classList.remove('active'));
+                matchingBtn.classList.add('active');
+            }
+        }
+    } catch (e) {
+        console.warn('Could not read saved playback speed:', e);
+    }
+
     speedButtons.forEach(btn => {
         btn.addEventListener('click', function() {
             playbackSpeed = parseFloat(this.dataset.speed);
             speedButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             if (audio) audio.playbackRate = playbackSpeed;
+            try {
+                localStorage.setItem(SPEED_STORAGE_KEY, String(playbackSpeed));
+            } catch (e) {
+                console.warn('Could not save playback speed preference:', e);
+            }
         });
     });
 
@@ -71,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isPlaying = false;
     let isOCRRunning = false;
     let lyricsLines = [];
-    let playbackSpeed = 1;
+    let playbackSpeed = 1.25;
     let playbackVolume = 1;
 
     const MAX_TEXT_LENGTH = 2000;
@@ -1459,6 +1485,20 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
         }
     });
+
+    // ========================================
+    // SKIP FORWARD / BACKWARD (10s) — podcast-style navigation
+    // ========================================
+    if (skipBackBtn) {
+        skipBackBtn.addEventListener('click', function() {
+            if (audio) audio.currentTime = Math.max(0, audio.currentTime - 10);
+        });
+    }
+    if (skipForwardBtn) {
+        skipForwardBtn.addEventListener('click', function() {
+            if (audio) audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 10);
+        });
+    }
 
     // ========================================
     // DOWNLOAD

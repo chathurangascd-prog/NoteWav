@@ -71,6 +71,14 @@
             justify-content: center;
             cursor: pointer;
             transition: all 0.2s ease;
+            position: relative;
+        }
+        .skip-btn-label {
+            position: absolute;
+            bottom: -2px;
+            font-size: 0.55rem;
+            font-weight: 700;
+            color: var(--text-secondary);
         }
         .control-btn-icon:hover {
             background: rgba(255, 255, 255, 0.1);
@@ -950,8 +958,16 @@
                         <button id="stop-btn" class="control-btn-icon" aria-label="Stop">
                             <i class="fas fa-stop"></i>
                         </button>
+                        <button id="skip-back-btn" class="control-btn-icon" aria-label="10 seconds ආපහු">
+                            <i class="fas fa-rotate-left"></i>
+                            <span class="skip-btn-label">10</span>
+                        </button>
                         <button id="play-pause-btn" class="control-btn-circular" aria-label="Play">
                             <i class="fas fa-play"></i>
+                        </button>
+                        <button id="skip-forward-btn" class="control-btn-icon" aria-label="10 seconds ඉදිරියට">
+                            <i class="fas fa-rotate-right"></i>
+                            <span class="skip-btn-label">10</span>
                         </button>
                     </div>
 
@@ -960,8 +976,8 @@
                             <span class="control-label"><i class="fas fa-gauge-high"></i> වේගය:</span>
                             <div class="speed-buttons">
                                 <button type="button" class="speed-btn" data-speed="0.75">0.75x</button>
-                                <button type="button" class="speed-btn active" data-speed="1">1x</button>
-                                <button type="button" class="speed-btn" data-speed="1.25">1.25x</button>
+                                <button type="button" class="speed-btn" data-speed="1">1x</button>
+                                <button type="button" class="speed-btn active" data-speed="1.25">1.25x</button>
                                 <button type="button" class="speed-btn" data-speed="1.5">1.5x</button>
                             </div>
                         </div>
