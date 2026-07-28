@@ -264,6 +264,16 @@
             } catch (e) {
                 console.warn('Dashboard poll failed:', e);
             }
+
+            // Refresh every other section too, so the whole dashboard
+            // stays live without a manual page reload. Each of these
+            // already preserves whatever search term is currently
+            // typed (they re-read the search input each time), so
+            // typing to filter isn't disrupted by the refresh.
+            loadActivityChart();
+            loadTopSubjects();
+            loadNotes();
+            loadAnnouncements();
         }
 
         setInterval(pollDashboard, 8000);
