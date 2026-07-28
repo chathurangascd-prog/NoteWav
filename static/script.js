@@ -1941,12 +1941,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // Tracks consecutive-day usage entirely client-side (localStorage) —
 // no server/database needed. Visiting on a new calendar day that's
 // exactly one day after the last visit increments the streak; a
-// skipped day resets it back to 1.
+// skipped day resets it back to 1. Now shown in the menu drawer
+// (moved out of the header to make room for the coins badge).
 document.addEventListener('DOMContentLoaded', function() {
     const STREAK_KEY = 'notewav_streak_data';
-    const streakBadge = document.getElementById('streak-badge');
-    const streakCountEl = document.getElementById('streak-count');
-    if (!streakBadge || !streakCountEl) return;
+    const streakCountEl = document.getElementById('streak-count-drawer');
+    if (!streakCountEl) return;
 
     function todayLocalString() {
         const now = new Date();
@@ -1982,8 +1982,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         localStorage.setItem(STREAK_KEY, JSON.stringify({ lastDate: today, streak }));
-        streakCountEl.textContent = String(streak);
-        streakBadge.classList.remove('hidden');
+        streakCountEl.textContent = `${streak} days`;
     } catch (e) {
         console.warn('Study streak tracking unavailable:', e);
     }
@@ -2517,3 +2516,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// ========================================
+// COINS SYSTEM (placeholder — for future paid features)
+// ========================================
+// NoteWav doesn't have any paid/coin-consuming features yet — this is
+// a forward-looking placeholder so the UI/UX for a future "coins"
+// economy already exists. Everyone currently gets a starting balance
+// of FREE coins (clearly labelled as such, not implying real currency
+// or a purchase). When real paid features are added later, hook into
+// spendCoins()/addCoins() here rather than building a new system from
+// scratch.
+const COINS_KEY = 'notewav_coins';
+const STARTING_FREE_COINS = 100;
+
+function getCoinsBalance() {
+    try {
+        const stored = localStorage.getItem(COINS_KEY);
+        if (stored === null) {
+            localStorage.setItem(COINS_KEY, String(STARTING_FREE_COINS));
+            return STARTING_FREE_COINS;
+        }
+        return parseInt(stored, 10) || 0;
+    } catch (e) {
+        return STARTING_FREE_COINS;
+    }
+}
+
+function updateCoinsDisplay() {
+    const el = document.getElementById('coins-count');
+    if (el) el.textContent = String(getCoinsBalance());
+}
+
+// Exposed globally so a future feature can call these directly, e.g.
+// spendCoins(10) before unlocking something paid.
+function spendCoins(amount) {
+    const current = getCoinsBalance();
+    if (current < amount) return false;
+    try {
+        localStorage.setItem(COINS_KEY, String(current - amount));
+    } catch (e) {
+        console.warn('Could not update coins balance:', e);
+    }
+    updateCoinsDisplay();
+    return true;
+}
+
+function addCoins(amount) {
+    const current = getCoinsBalance();
+    try {
+        localStorage.setItem(COINS_KEY, String(current + amount));
+    } catch (e) {
+        console.warn('Could not update coins balance:', e);
+    }
+    updateCoinsDisplay();
+}
+
+document.addEventListener('DOMContentLoaded', updateCoinsDisplay);

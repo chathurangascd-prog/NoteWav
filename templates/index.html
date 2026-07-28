@@ -85,6 +85,8 @@
         .library-nav-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
         .header-right-nav { position: absolute; top: 24px; right: 24px; display: flex; align-items: center; gap: 10px; }
         .streak-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.08); color: #fb923c; font-size: 0.85rem; font-weight: 700; }
+        .coins-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(250, 204, 21, 0.45); background: rgba(250, 204, 21, 0.08); color: #facc15; font-size: 0.85rem; font-weight: 700; }
+        .drawer-stat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
         .greeting-text { display: inline-block !important; font-size: 0.9rem; font-weight: 600; color: #fde68a; margin-top: 15px !important; padding: 9px 20px; border-radius: var(--radius-full); background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.35); box-shadow: 0 0 12px rgba(250, 204, 21, 0.25); }
         .menu-nav-btn { position: absolute; top: 24px; left: 24px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 1rem; cursor: pointer; transition: all 0.2s ease; }
         .menu-nav-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
@@ -222,8 +224,8 @@
                 <button id="open-library-btn" class="library-nav-btn">
                     <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
                 </button>
-                <div id="streak-badge" class="streak-badge hidden" title="Daily study streak">
-                    <i class="fas fa-fire"></i> <span id="streak-count">0</span>
+                <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
+                    <i class="fas fa-coins"></i> <span id="coins-count">0</span>
                 </div>
             </div>
         </header>
@@ -414,6 +416,10 @@
                             </div>
                         </div>
                         <hr class="menu-divider">
+                        <div class="study-stat-row">
+                            <span class="settings-label" style="margin-bottom:0;">🔥 Study Streak (දවස්)</span>
+                            <span id="streak-count-drawer" class="study-time-value">0 days</span>
+                        </div>
                         <div class="study-stat-row">
                             <span class="settings-label" style="margin-bottom:0;">📚 අද පාඩම් කරපු වෙලාව (Studied Today)</span>
                             <span id="study-time-value" class="study-time-value">0 min</span>
