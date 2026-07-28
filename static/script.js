@@ -420,10 +420,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // NEW: include a link back to the app itself in every share —
+    // when a student shares a note with a friend, the friend also
+    // gets a direct link to try NoteWav themselves (word-of-mouth
+    // growth), not just the note content.
+    const APP_SHARE_URL = 'https://notewav.onrender.com';
+
     function getShareText() {
         const script = (scriptOutput.value || '').trim();
         const snippet = script.length > 300 ? script.slice(0, 300) + '...' : script;
-        return `🎙️ NoteWav AI වලින් හදපු study note එකක්:\n\n${snippet}`;
+        return `🎙️ NoteWav AI වලින් හදපු study note එකක්:\n\n${snippet}\n\n👉 ඔයත් try කරන්න: ${APP_SHARE_URL}`;
     }
 
     if (shareWhatsappBtn) {
@@ -438,6 +444,49 @@ document.addEventListener('DOMContentLoaded', function() {
             const text = encodeURIComponent(getShareText());
             window.open(`https://t.me/share/url?url=&text=${text}`, '_blank');
             shareMenu.classList.add('hidden');
+        });
+    }
+
+    // NEW: "Audio එකත් සමඟ Share කරන්න" — the wa.me/t.me links above can
+    // only carry TEXT, not an actual audio file. To share the real
+    // audio, this uses the Web Share API (navigator.share) with the
+    // audio file attached, which opens the device's native share sheet
+    // — from there the student can pick WhatsApp, Telegram, or
+    // anything else, and the actual .mp3 goes along with the text.
+    // Not supported on most desktop browsers, so it's offered as an
+    // extra option alongside the text-only buttons, not a replacement.
+    const shareWithAudioBtn = document.getElementById('share-with-audio-btn');
+    if (shareWithAudioBtn) {
+        shareWithAudioBtn.addEventListener('click', async function() {
+            shareMenu.classList.add('hidden');
+            if (!audio || !audio.src) {
+                showErrorBanner('Share කරන්න Audio එකක් නෑ — කලින් Audio එකක් Generate කරන්න.');
+                return;
+            }
+            if (!navigator.share || !navigator.canShare) {
+                showErrorBanner('මේ browser එකේ Audio file share කිරීම support කරන්නේ නෑ — WhatsApp/Telegram (Text) option එක try කරන්න.');
+                return;
+            }
+            try {
+                const response = await fetch(audio.src);
+                const audioBlob = await response.blob();
+                const audioFile = new File([audioBlob], 'notewav_audio.mp3', { type: 'audio/mpeg' });
+
+                if (navigator.canShare({ files: [audioFile] })) {
+                    await navigator.share({
+                        files: [audioFile],
+                        title: 'NoteWav AI',
+                        text: getShareText(),
+                    });
+                } else {
+                    showErrorBanner('මේ device එකේ Audio file share කිරීම support කරන්නේ නෑ.');
+                }
+            } catch (shareErr) {
+                if (shareErr && shareErr.name !== 'AbortError') {
+                    console.error('Audio share failed:', shareErr);
+                    showErrorBanner('Audio share කරගැනීම අසාර්ථක විය: ' + shareErr.message);
+                }
+            }
         });
     }
 
