@@ -161,6 +161,7 @@
         @keyframes splashIconIn { to { opacity: 1; transform: scale(1); } }
         @keyframes splashTextIn { to { opacity: 1; transform: translateY(0); } }
         .splash-subtitle { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-top: -6px; opacity: 0; animation: splashSubtitleIn 0.9s ease forwards; animation-delay: 0.95s; }
+        .splash-credit { position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.78rem; font-weight: 500; color: rgba(255, 255, 255, 0.45); opacity: 0; animation: splashSubtitleIn 0.9s ease forwards; animation-delay: 1.3s; }
         @keyframes splashSubtitleIn { from { opacity: 0; letter-spacing: 8px; transform: translateY(6px); } to { opacity: 0.85; letter-spacing: 1px; transform: translateY(0); } }
         @keyframes splashFadeOut { to { opacity: 0; visibility: hidden; pointer-events: none; } }
         .logo-icon-img { width: 52px; height: 52px; border-radius: 12px; animation: logoFloat 3s ease-in-out infinite; filter: drop-shadow(0 0 20px rgba(107, 48, 255, 0.25)); transition: transform 0.3s ease; }
@@ -183,6 +184,7 @@
         <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="" class="splash-icon">
         <h1 class="splash-text">NoteWav</h1>
         <p class="splash-subtitle">Smart විදිහට පාඩම් අහන්න</p>
+        <p class="splash-credit">Powered by - SANDUN [SCD]</p>
     </div>
 
     <div id="welcome-modal-backdrop" class="mindmap-modal-backdrop hidden">
