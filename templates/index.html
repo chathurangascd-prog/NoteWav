@@ -467,11 +467,11 @@
             font-weight: 700;
         }
         .greeting-text {
-            display: inline-block;
+            display: inline-block !important;
             font-size: 0.9rem;
             font-weight: 600;
             color: #fde68a;
-            margin-top: 95px;
+            margin-top: 130px !important;
             padding: 9px 20px;
             border-radius: var(--radius-full);
             background: rgba(250, 204, 21, 0.1);
@@ -1094,7 +1094,7 @@
                 <span class="stat-badge"><i class="fas fa-podcast"></i> Podcast Narration</span>
                 <span class="stat-badge"><i class="fas fa-diagram-project"></i> Mind Maps</span>
             </div>
-            <p id="greeting-text" class="greeting-text hidden"></p>
+            <p id="greeting-text" class="greeting-text hidden" style="margin-top: 130px !important; display: inline-block !important;"></p>
             <button id="open-menu-btn" class="menu-nav-btn" aria-label="Menu">
                 <i class="fas fa-bars"></i>
             </button>
