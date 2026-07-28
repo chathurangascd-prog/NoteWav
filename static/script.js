@@ -2030,6 +2030,7 @@ function applyAppLanguage(lang) {
     } catch (e) {
         console.warn('Could not save app language preference:', e);
     }
+    if (typeof updateGreeting === 'function') updateGreeting();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -2137,3 +2138,54 @@ document.addEventListener('DOMContentLoaded', function() {
 
     loadProfile();
 });
+
+// ========================================
+// TIME-BASED GREETING (uses saved profile name)
+// ========================================
+// Exposed as a standalone global function (not just DOMContentLoaded-
+// scoped) so applyAppLanguage() can call it directly whenever the
+// language toggle changes — otherwise the greeting would only ever
+// reflect whatever language was active at the moment the page first
+// loaded, staying stale after a later language switch.
+const NOTEWAV_GREETINGS = {
+    morning: { si: 'සුබ උදෑසනක්', en: 'Good Morning' },
+    afternoon: { si: 'සුබ දහවලක්', en: 'Good Afternoon' },
+    evening: { si: 'සුබ සන්ධ්‍යාවක්', en: 'Good Evening' },
+    night: { si: 'සුබ රාත්‍රියක්', en: 'Good Night' },
+};
+
+function updateGreeting() {
+    const greetingEl = document.getElementById('greeting-text');
+    if (!greetingEl) return;
+
+    function getGreetingPeriod() {
+        const hour = new Date().getHours();
+        if (hour >= 5 && hour < 12) return 'morning';
+        if (hour >= 12 && hour < 17) return 'afternoon';
+        if (hour >= 17 && hour < 21) return 'evening';
+        return 'night';
+    }
+
+    let lang = 'si';
+    try {
+        const storedLang = localStorage.getItem('notewav_app_language');
+        if (storedLang === 'si' || storedLang === 'en') lang = storedLang;
+    } catch (e) {
+        // ignore, default to 'si'
+    }
+
+    let name = '';
+    try {
+        const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+        if (profile.name) name = profile.name.trim();
+    } catch (e) {
+        // ignore, no name
+    }
+
+    const period = getGreetingPeriod();
+    const greetingWord = NOTEWAV_GREETINGS[period][lang];
+    greetingEl.textContent = name ? `${greetingWord}, ${name}! 👋` : `${greetingWord}! 👋`;
+    greetingEl.classList.remove('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', updateGreeting);
