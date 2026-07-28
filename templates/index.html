@@ -49,7 +49,7 @@
         .mindmap-container:hover, .mindmap-container:focus-visible { border-color: #6b30ff; transform: translateY(-2px); outline: none; }
         .mindmap-container svg { max-width: 100%; height: auto; pointer-events: none; }
         .mindmap-empty, .mindmap-loading { color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 20px; }
-        .mindmap-modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(6px); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadeIn 0.2s ease; }
+        .mindmap-modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(3px); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadeIn 0.2s ease; }
         .mindmap-modal-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); max-width: 97vw; max-height: 94vh; height: 94vh; width: 1500px; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
         .mindmap-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border-color); }
         .mindmap-modal-header h3 { font-size: 1.1rem; color: var(--text-primary); }
@@ -68,11 +68,11 @@
         .textarea-wrapper textarea { padding-right: 80px; }
         .textarea-actions { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 2; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
         .textarea-wrapper:hover .textarea-actions, .textarea-wrapper:focus-within .textarea-actions, .textarea-actions:has(.copied) { opacity: 1; pointer-events: auto; }
-        .textarea-action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(20, 20, 30, 0.7); color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); transition: all 0.2s ease; }
+        .textarea-action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(20, 20, 30, 0.92); color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
         .textarea-action-btn:hover { background: rgba(107, 48, 255, 0.2); border-color: #6b30ff; color: #fff; }
         .textarea-action-btn.copied { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #22c55e; }
         .character-count.over-limit #char-count, .character-count.over-limit { color: #ef4444; font-weight: 700; }
-        #error-banner { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); max-width: 92%; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; padding: 14px 22px; border-radius: var(--radius-md); z-index: 1000; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; backdrop-filter: blur(20px); box-shadow: var(--shadow-lg); }
+        #error-banner { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); max-width: 92%; background: rgba(30, 15, 15, 0.95); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; padding: 14px 22px; border-radius: var(--radius-md); z-index: 1000; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; box-shadow: var(--shadow-lg); }
         #error-banner i { color: #ef4444; flex-shrink: 0; }
         .mini-wave { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; margin-right: 6px; vertical-align: middle; }
         .mini-wave span { width: 3px; background: currentColor; border-radius: 2px; animation: miniWaveAnim 0.8s ease-in-out infinite; }
@@ -95,11 +95,12 @@
         .streak-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.08); color: #fb923c; font-size: 0.85rem; font-weight: 700; }
         .coins-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(250, 204, 21, 0.45); background: rgba(250, 204, 21, 0.08); color: #facc15; font-size: 0.85rem; font-weight: 700; }
         .drawer-stat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-        .greeting-text { display: inline-block !important; font-size: 0.9rem; font-weight: 600; color: #fde68a; margin-top: 15px !important; padding: 9px 20px; border-radius: var(--radius-full); background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.35); box-shadow: 0 0 12px rgba(250, 204, 21, 0.25); }
+        .greeting-row { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 20px; }
+        .greeting-text { display: inline-block !important; font-size: 0.9rem; font-weight: 600; color: #fde68a; margin-top: 0 !important; padding: 9px 20px; border-radius: var(--radius-full); background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.35); box-shadow: 0 0 12px rgba(250, 204, 21, 0.25); }
         .menu-nav-btn { position: absolute; top: 24px; left: 24px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 1rem; cursor: pointer; transition: all 0.2s ease; }
         .menu-nav-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
         @media (max-width: 640px) { .header-right-nav { position: static; justify-content: center; width: fit-content; margin: 16px auto 0; } .menu-nav-btn { top: 20px; left: 16px; } }
-        .menu-drawer-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 3000; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+        .menu-drawer-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(2px); z-index: 3000; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
         .menu-drawer-backdrop.open { opacity: 1; pointer-events: auto; }
         .menu-drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 300px; max-width: 82vw; background: var(--bg-secondary); border-right: 1px solid var(--border-color); box-shadow: var(--shadow-lg); transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; }
         .menu-drawer-backdrop.open .menu-drawer { transform: translateX(0); }
@@ -169,7 +170,7 @@
         .share-menu-item .fa-whatsapp { color: #25D366; }
         .share-menu-item .fa-telegram { color: #229ED9; }
         .share-menu-item .fa-music { color: #a78bfa; }
-        .install-app-btn { position: fixed; bottom: 18px; left: 18px; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-full); border: 1px solid rgba(34, 197, 94, 0.5); background: rgba(20, 20, 30, 0.9); color: var(--text-secondary); font-size: 0.8rem; font-weight: 600; font-family: inherit; cursor: pointer; backdrop-filter: blur(10px); box-shadow: var(--shadow-md); transition: all 0.2s ease; }
+        .install-app-btn { position: fixed; bottom: 18px; left: 18px; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-full); border: 1px solid rgba(34, 197, 94, 0.5); background: rgba(15, 15, 22, 0.98); color: var(--text-secondary); font-size: 0.8rem; font-weight: 600; font-family: inherit; cursor: pointer; box-shadow: var(--shadow-md); transition: all 0.2s ease; }
         .install-app-btn:hover { background: rgba(107, 48, 255, 0.2); color: #fff; transform: translateY(-2px); }
         .install-app-btn i { color: #6b30ff; }
         @media (max-width: 640px) { .install-app-btn { bottom: 14px; left: 14px; padding: 9px 14px; font-size: 0.75rem; } }
@@ -250,21 +251,23 @@
                 <span class="stat-badge"><i class="fas fa-podcast"></i> Podcast Narration</span>
                 <span class="stat-badge"><i class="fas fa-diagram-project"></i> Mind Maps</span>
             </div>
-            <p id="greeting-text" class="greeting-text hidden" style="margin-top: 20px !important; display: inline-block !important;"></p>
+            <div class="greeting-row">
+                <p id="greeting-text" class="greeting-text hidden" style="margin-top: 0 !important; display: inline-block !important;"></p>
+                <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
+                    <i class="fas fa-coins"></i> <span id="coins-count">0</span>
+                </div>
+            </div>
             <button id="open-menu-btn" class="menu-nav-btn" aria-label="Menu">
                 <i class="fas fa-bars"></i>
             </button>
             <div class="header-right-nav">
+                <button id="open-library-btn" class="library-nav-btn">
+                    <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
+                </button>
                 <button id="notification-bell-btn" class="notification-bell-btn" aria-label="Notifications">
                     <i class="fas fa-bell"></i>
                     <span id="notification-badge" class="notification-badge hidden"></span>
                 </button>
-                <button id="open-library-btn" class="library-nav-btn">
-                    <i class="fas fa-book"></i> <span data-i18n="my_library">My Library</span>
-                </button>
-                <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
-                    <i class="fas fa-coins"></i> <span id="coins-count">0</span>
-                </div>
             </div>
             <div id="notification-popup" class="notification-popup hidden">
                 <p class="notification-popup-title"><i class="fas fa-bullhorn"></i> Notification</p>
