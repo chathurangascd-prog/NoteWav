@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isPlaying = false;
     let isOCRRunning = false;
     let lyricsLines = [];
-    let playbackSpeed = 1.25;
+    let playbackSpeed = 1;
     let playbackVolume = 1;
 
     // gTTS's base voice reads a bit slower than feels natural for a
