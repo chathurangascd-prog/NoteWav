@@ -565,6 +565,64 @@
             overflow-y: auto;
             flex: 1;
         }
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .profile-avatar-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid rgba(107, 48, 255, 0.5);
+            background: rgba(107, 48, 255, 0.1);
+            color: #a78bfa;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+        .profile-avatar-btn:hover {
+            border-color: #6b30ff;
+            transform: scale(1.05);
+        }
+        .profile-avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        .profile-name-wrapper {
+            flex: 1;
+            min-width: 0;
+        }
+        .profile-name-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: inherit;
+        }
+        .profile-name-input:focus {
+            outline: none;
+            border-color: #6b30ff;
+        }
+        .menu-divider {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 0 0 18px;
+        }
         .settings-label {
             font-size: 0.85rem;
             font-weight: 700;
@@ -1125,12 +1183,23 @@
             <div id="menu-drawer-backdrop" class="menu-drawer-backdrop">
                 <div class="menu-drawer">
                     <div class="menu-drawer-header">
-                        <h3><i class="fas fa-gear"></i> <span data-i18n="settings_title">Settings</span></h3>
+                        <h3><i class="fas fa-bars"></i> <span data-i18n="menu_title">මෙනුව (Menu)</span></h3>
                         <button id="menu-drawer-close" class="menu-drawer-close" aria-label="Close">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
                     <div class="menu-drawer-body">
+                        <div class="profile-section">
+                            <button type="button" id="profile-avatar-btn" class="profile-avatar-btn" aria-label="Change profile photo">
+                                <img id="profile-avatar-img" class="profile-avatar-img hidden" src="" alt="Profile">
+                                <i id="profile-avatar-placeholder" class="fas fa-user"></i>
+                            </button>
+                            <input type="file" id="profile-avatar-input" accept="image/*" hidden>
+                            <div class="profile-name-wrapper">
+                                <input type="text" id="profile-name-input" class="profile-name-input" placeholder="ඔබේ නම (Your name)" maxlength="40">
+                            </div>
+                        </div>
+                        <hr class="menu-divider">
                         <p class="settings-label" data-i18n="settings_language_label">App භාෂාව (Language)</p>
                         <div class="settings-lang-buttons">
                             <button type="button" class="lang-toggle-btn active" id="app-lang-si-btn" data-applang="si">🇱🇰 සිංහල</button>

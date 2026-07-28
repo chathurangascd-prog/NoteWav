@@ -1975,6 +1975,7 @@ document.addEventListener('DOMContentLoaded', function() {
 const NOTEWAV_TRANSLATIONS = {
     my_library: { si: 'My Library', en: 'My Library' },
     settings_title: { si: 'සැකසුම්', en: 'Settings' },
+    menu_title: { si: 'මෙනුව (Menu)', en: 'Menu' },
     settings_language_label: { si: 'App භාෂාව (Language)', en: 'App Language' },
     library_search_placeholder: { si: 'Title/Subject එකෙන් හොයන්න...', en: 'Search by Title/Subject...' },
     header_tagline: { si: 'Smart විදිහට පාඩම් අහන්න. NoteWav AI', en: 'Listen to your notes, the smart way. NoteWav AI' },
@@ -2045,4 +2046,94 @@ document.addEventListener('DOMContentLoaded', function() {
     const appLangEnBtn = document.getElementById('app-lang-en-btn');
     if (appLangSiBtn) appLangSiBtn.addEventListener('click', () => applyAppLanguage('si'));
     if (appLangEnBtn) appLangEnBtn.addEventListener('click', () => applyAppLanguage('en'));
+});
+
+// ========================================
+// LOCAL PROFILE (name + avatar photo)
+// ========================================
+// No login system exists yet — this is purely a device-local nicety
+// (like the streak tracker and font-size preference) so the person
+// can personalize their own view of the app: a display name and a
+// small profile photo, both saved in localStorage. Images are resized
+// down to a small square via canvas before storing, since localStorage
+// has limited space and a full-resolution photo would waste it.
+document.addEventListener('DOMContentLoaded', function() {
+    const PROFILE_KEY = 'notewav_profile';
+    const avatarBtn = document.getElementById('profile-avatar-btn');
+    const avatarImg = document.getElementById('profile-avatar-img');
+    const avatarPlaceholder = document.getElementById('profile-avatar-placeholder');
+    const avatarInput = document.getElementById('profile-avatar-input');
+    const nameInput = document.getElementById('profile-name-input');
+    if (!avatarBtn || !avatarImg || !avatarInput || !nameInput) return;
+
+    function loadProfile() {
+        try {
+            const data = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+            if (data.name) nameInput.value = data.name;
+            if (data.avatarDataUrl) {
+                avatarImg.src = data.avatarDataUrl;
+                avatarImg.classList.remove('hidden');
+                if (avatarPlaceholder) avatarPlaceholder.classList.add('hidden');
+            }
+        } catch (e) {
+            console.warn('Could not load saved profile:', e);
+        }
+    }
+
+    function saveProfile(partial) {
+        try {
+            const current = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+            const updated = Object.assign({}, current, partial);
+            localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
+        } catch (e) {
+            console.warn('Could not save profile:', e);
+        }
+    }
+
+    function resizeImageToDataUrl(file, maxDim) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                    canvas.width = Math.round(img.width * scale);
+                    canvas.height = Math.round(img.height * scale);
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.85));
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    avatarBtn.addEventListener('click', function() {
+        avatarInput.click();
+    });
+
+    avatarInput.addEventListener('change', async function() {
+        const file = this.files && this.files[0];
+        this.value = '';
+        if (!file || !file.type.startsWith('image/')) return;
+        try {
+            const dataUrl = await resizeImageToDataUrl(file, 200);
+            avatarImg.src = dataUrl;
+            avatarImg.classList.remove('hidden');
+            if (avatarPlaceholder) avatarPlaceholder.classList.add('hidden');
+            saveProfile({ avatarDataUrl: dataUrl });
+        } catch (e) {
+            console.warn('Profile photo processing failed:', e);
+        }
+    });
+
+    nameInput.addEventListener('input', function() {
+        saveProfile({ name: this.value });
+    });
+
+    loadProfile();
 });
