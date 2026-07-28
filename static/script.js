@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
             playbackSpeed = parseFloat(this.dataset.speed);
             speedButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            if (audio) audio.playbackRate = playbackSpeed;
+            if (audio) audio.playbackRate = getEffectivePlaybackRate();
             try {
                 localStorage.setItem(SPEED_STORAGE_KEY, String(playbackSpeed));
             } catch (e) {
@@ -99,6 +99,18 @@ document.addEventListener('DOMContentLoaded', function() {
     let lyricsLines = [];
     let playbackSpeed = 1.25;
     let playbackVolume = 1;
+
+    // gTTS's base voice reads a bit slower than feels natural for a
+    // study podcast, and gTTS itself has no "faster" generation option
+    // — so instead, permanently boost the ACTUAL applied playback rate
+    // a bit above whatever speed button is selected. The button labels
+    // (0.75x, 1x, 1.25x, 1.5x) stay the same for the student to
+    // understand, but "1x" now genuinely sounds like a comfortable
+    // normal pace instead of sluggish.
+    const SPEED_BOOST_MULTIPLIER = 1.15;
+    function getEffectivePlaybackRate() {
+        return playbackSpeed * SPEED_BOOST_MULTIPLIER;
+    }
 
     const MAX_TEXT_LENGTH = 2000;
 
@@ -1357,7 +1369,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 audio = new Audio(data.audio_url);
-                audio.playbackRate = playbackSpeed;
+                audio.playbackRate = getEffectivePlaybackRate();
                 audio.volume = playbackVolume;
                 setupAudioAnalyser(audio);
 
