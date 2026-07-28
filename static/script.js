@@ -1195,14 +1195,23 @@ document.addEventListener('DOMContentLoaded', function() {
             // only touches this exported copy.)
             let svgString = new XMLSerializer().serializeToString(svgClone);
             svgString = svgString.replace(/Plus Jakarta Sans,?\s*/g, '');
-            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-            const svgUrl = URL.createObjectURL(svgBlob);
+
+            // FIX (still tainted on mobile even after stripping the
+            // external font): blob: URLs are apparently still treated
+            // as "foreign" enough by some mobile browsers' canvas
+            // security checks to taint the canvas once drawn. A
+            // base64 data: URI is fully self-contained inline data
+            // with no indirection at all — this is the more
+            // consistently reliable fix documented for this exact
+            // "tainted canvas" issue with SVG-to-canvas rendering.
+            const svgBase64 = btoa(unescape(encodeURIComponent(svgString)));
+            const svgDataUrl = `data:image/svg+xml;base64,${svgBase64}`;
 
             const img = new Image();
             await new Promise((resolve, reject) => {
                 img.onload = resolve;
                 img.onerror = reject;
-                img.src = svgUrl;
+                img.src = svgDataUrl;
             });
 
             // Adaptive scale: stay under a safe max canvas dimension
@@ -1221,7 +1230,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            URL.revokeObjectURL(svgUrl);
             return canvas;
         } catch (err) {
             console.error('Mind map canvas render error:', err);

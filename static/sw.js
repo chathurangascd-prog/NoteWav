@@ -4,7 +4,7 @@
 // (/process-note, /tts, /ocr, /library/*) are NEVER cached — they
 // always need a live network request, so those are excluded here.
 
-const CACHE_NAME = 'notewav-shell-v11'; // bumped after fixing canvas taint (font stripping) and zoom scroll bug (flex overflow)
+const CACHE_NAME = 'notewav-shell-v12'; // bumped after switching blob URL to base64 data URL for the canvas taint fix
 const SHELL_FILES = [
     '/',
     '/static/styles.css',
