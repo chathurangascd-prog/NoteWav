@@ -87,10 +87,16 @@
         .notification-bell-btn { position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; }
         .notification-bell-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
         .notification-badge { position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; border: 2px solid var(--bg-primary); }
-        .notification-popup { position: absolute; top: 70px; right: 24px; width: 300px; max-width: 85vw; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 16px 18px; z-index: 500; }
-        .notification-popup-title { font-size: 0.85rem; font-weight: 700; color: #a78bfa; margin: 0 0 8px; }
-        .notification-popup-message { font-size: 0.88rem; color: var(--text-primary); margin: 0 0 6px; line-height: 1.5; }
-        .notification-popup-time { font-size: 0.72rem; color: var(--text-muted); margin: 0; }
+        .notification-popup { position: absolute; top: 70px; right: 24px; width: 320px; max-width: 85vw; background: linear-gradient(160deg, #1d1d2e 0%, #16161f 100%); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: 18px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(139, 92, 246, 0.08); padding: 0; z-index: 500; overflow: hidden; animation: notifPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes notifPopIn { from { opacity: 0; transform: translateY(-8px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .notification-popup-header { display: flex; align-items: center; gap: 10px; padding: 16px 18px; background: linear-gradient(135deg, rgba(107, 48, 255, 0.18) 0%, rgba(134, 19, 235, 0.1) 100%); border-bottom: 1px solid rgba(139, 92, 246, 0.2); }
+        .notification-popup-icon { width: 34px; height: 34px; border-radius: 50%; background: var(--primary-grad); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.9rem; flex-shrink: 0; box-shadow: 0 4px 14px rgba(107, 48, 255, 0.4); }
+        .notification-popup-title { font-size: 0.9rem; font-weight: 700; color: #fff; margin: 0; flex: 1; }
+        .notification-popup-close { background: rgba(255, 255, 255, 0.08); border: none; color: var(--text-muted); width: 26px; height: 26px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; flex-shrink: 0; transition: all 0.2s ease; }
+        .notification-popup-close:hover { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .notification-popup-body { padding: 18px; }
+        .notification-popup-message { font-size: 0.92rem; color: var(--text-primary); margin: 0 0 12px; line-height: 1.6; }
+        .notification-popup-time { font-size: 0.72rem; color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: 6px; }
         @media (max-width: 640px) { .notification-popup { right: 10px; top: 130px; } }
         .streak-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.08); color: #fb923c; font-size: 0.85rem; font-weight: 700; }
         .coins-badge { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-full); border: 1px solid rgba(250, 204, 21, 0.45); background: rgba(250, 204, 21, 0.08); color: #facc15; font-size: 0.85rem; font-weight: 700; }
@@ -270,9 +276,17 @@
                 </button>
             </div>
             <div id="notification-popup" class="notification-popup hidden">
-                <p class="notification-popup-title"><i class="fas fa-bullhorn"></i> Notification</p>
-                <p id="notification-popup-message" class="notification-popup-message"></p>
-                <p id="notification-popup-time" class="notification-popup-time"></p>
+                <div class="notification-popup-header">
+                    <div class="notification-popup-icon"><i class="fas fa-bullhorn"></i></div>
+                    <p class="notification-popup-title">Notification</p>
+                    <button type="button" id="notification-popup-close" class="notification-popup-close" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="notification-popup-body">
+                    <p id="notification-popup-message" class="notification-popup-message"></p>
+                    <p id="notification-popup-time" class="notification-popup-time"><i class="fas fa-clock"></i> <span id="notification-popup-time-text"></span></p>
+                </div>
             </div>
         </header>
 

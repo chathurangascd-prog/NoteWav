@@ -2857,7 +2857,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const badge = document.getElementById('notification-badge');
     const popup = document.getElementById('notification-popup');
     const popupMessage = document.getElementById('notification-popup-message');
-    const popupTime = document.getElementById('notification-popup-time');
+    const popupTimeText = document.getElementById('notification-popup-time-text');
+    const popupClose = document.getElementById('notification-popup-close');
     if (!bellBtn || !badge || !popup) return;
 
     let latestAnnouncement = null;
@@ -2899,13 +2900,20 @@ document.addEventListener('DOMContentLoaded', function() {
         popupMessage.textContent = latestAnnouncement.message;
         try {
             const dt = new Date(latestAnnouncement.created_at);
-            popupTime.textContent = dt.toLocaleString();
+            popupTimeText.textContent = dt.toLocaleString();
         } catch (e) {
-            popupTime.textContent = '';
+            popupTimeText.textContent = '';
         }
         popup.classList.toggle('hidden');
         markSeen(latestAnnouncement.id);
     });
+
+    if (popupClose) {
+        popupClose.addEventListener('click', function(e) {
+            e.stopPropagation();
+            popup.classList.add('hidden');
+        });
+    }
 
     document.addEventListener('click', function(e) {
         if (!popup.contains(e.target) && !bellBtn.contains(e.target)) {
