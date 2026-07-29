@@ -4,179 +4,497 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - NoteWav AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #0f0f17; color: #e5e5e5; padding: 30px; }
-        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-        h1 { font-size: 1.4rem; color: #a78bfa; margin: 0; }
-        h2.section-title { font-size: 1rem; color: #a78bfa; margin: 0 0 14px; }
-        .live-dot { font-size: 0.7rem; color: #4ade80; vertical-align: middle; margin-left: 8px; font-weight: 400; animation: pulse 2s ease-in-out infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        a.logout { color: #f87171; text-decoration: none; font-size: 0.85rem; border: 1px solid #f87171; padding: 6px 14px; border-radius: 20px; }
-        .stats-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
-        .stat-card { background: #1a1a26; border: 1px solid #2d2d3d; border-radius: 12px; padding: 16px 22px; min-width: 140px; }
-        .stat-card .num { font-size: 1.6rem; font-weight: 700; color: #fff; }
-        .stat-card .label { font-size: 0.78rem; color: #888; margin-top: 4px; }
-        .csv-export-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.4); color: #a78bfa; text-decoration: none; font-size: 0.85rem; font-weight: 600; }
-        .section-card { background: #1a1a26; border: 1px solid #2d2d3d; border-radius: 12px; padding: 20px 22px; margin-bottom: 24px; }
+        :root {
+            color-scheme: dark;
+            --bg: #0b0b13;
+            --surface: #15151f;
+            --surface-2: #1b1b28;
+            --surface-hover: #202030;
+            --border: #262637;
+            --accent: #7c5cff;
+            --accent-soft: rgba(124, 92, 255, 0.14);
+            --accent-grad: linear-gradient(135deg, #7c5cff 0%, #a855f7 100%);
+            --teal: #22d3ee;
+            --amber: #f59e0b;
+            --green: #4ade80;
+            --red: #f87171;
+            --text: #f3f3f7;
+            --text-dim: #9797ab;
+            --text-faint: #5c5c70;
+            --radius: 14px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;
+            background:
+                radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124, 92, 255, 0.10), transparent 60%),
+                radial-gradient(ellipse 700px 500px at 100% 0%, rgba(34, 211, 238, 0.06), transparent 55%),
+                var(--bg);
+            color: var(--text);
+            padding: 0 0 60px;
+        }
+        a { color: inherit; }
+
+        /* ===== TOP BAR ===== */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 32px;
+            background: rgba(11, 11, 19, 0.86);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+        }
+        .topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .topbar-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: var(--accent-grad);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            box-shadow: 0 6px 18px rgba(124, 92, 255, 0.35);
+            flex-shrink: 0;
+        }
+        .topbar-brand h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.2px;
+        }
+        .topbar-brand .eyebrow {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--green);
+            background: rgba(74, 222, 128, 0.10);
+            border: 1px solid rgba(74, 222, 128, 0.25);
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-left: 10px;
+        }
+        .live-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        a.logout {
+            color: var(--red);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            border: 1px solid rgba(248, 113, 113, 0.35);
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.15s ease;
+        }
+        a.logout:hover { background: rgba(248, 113, 113, 0.10); }
+
+        /* ===== QUICK NAV ===== */
+        .quicknav {
+            display: flex;
+            gap: 6px;
+            padding: 14px 32px 0;
+            flex-wrap: wrap;
+            max-width: 1180px;
+            margin: 0 auto;
+        }
+        .quicknav a {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-decoration: none;
+            padding: 7px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        .quicknav a:hover { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 24px 32px 0;
+        }
+
+        /* ===== STAT CARDS ===== */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card .stat-icon {
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem;
+            background: var(--accent-soft);
+            margin-bottom: 12px;
+        }
+        .stat-card .num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.7rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #c4b5fd 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-card .label { font-size: 0.76rem; color: var(--text-dim); margin-top: 4px; font-weight: 500; }
+        .stat-card.action-card {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .csv-export-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            height: 100%;
+            padding: 18px 16px;
+            color: var(--text);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            transition: background 0.15s ease;
+        }
+        .csv-export-btn:hover { background: var(--surface-hover); }
+        .csv-export-btn .ic { font-size: 1rem; }
+
+        /* ===== SECTION CARDS ===== */
+        .section-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px 26px;
+            margin-bottom: 20px;
+            scroll-margin-top: 90px;
+        }
+        .section-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .section-head .chip {
+            width: 28px; height: 28px;
+            border-radius: 8px;
+            background: var(--accent-soft);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+        h2.section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
+            margin: 0;
+            letter-spacing: -0.1px;
+        }
+
+        /* ===== ANNOUNCE ===== */
         .announce-row { display: flex; gap: 10px; }
-        #announce-input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #2d2d3d; background: #14141e; color: #fff; font-size: 0.9rem; }
-        #announce-input:focus { outline: none; border-color: #6b30ff; }
-        #announce-send-btn { padding: 10px 22px; border-radius: 8px; border: none; background: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%); color: #fff; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
-        .announce-status { font-size: 0.78rem; color: #4ade80; margin: 10px 0 0; min-height: 1em; }
-        table { width: 100%; border-collapse: collapse; background: #1a1a26; border-radius: 12px; overflow: hidden; }
-        th, td { padding: 12px 16px; text-align: left; font-size: 0.85rem; border-bottom: 1px solid #2d2d3d; }
-        th { background: #14141e; color: #a78bfa; font-weight: 600; }
+        #announce-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+        #announce-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+        #announce-send-btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            border: none;
+            background: var(--accent-grad);
+            color: #fff;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.15s ease;
+        }
+        #announce-send-btn:hover { transform: translateY(-1px); }
+        .announce-status { font-size: 0.78rem; color: var(--green); margin: 10px 0 0; min-height: 1em; font-weight: 600; }
+
+        /* ===== TABLE ===== */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 14px; text-align: left; font-size: 0.83rem; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-dim); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; }
+        td { color: var(--text); }
         tr:last-child td { border-bottom: none; }
-        tr.clickable-row { cursor: pointer; transition: background 0.15s ease; }
-        tr.clickable-row:hover { background: rgba(139, 92, 246, 0.08); }
-        .name-cell { font-weight: 600; color: #fff; }
-        .name-cell.no-name { color: #666; font-style: italic; font-weight: 400; }
-        .online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 6px; box-shadow: 0 0 6px #4ade80; }
-        .empty-state { text-align: center; padding: 40px 20px; color: #666; }
-        #search-input, #notes-search-input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid #2d2d3d; background: #14141e; color: #fff; font-size: 0.88rem; margin-bottom: 14px; box-sizing: border-box; }
-        #search-input:focus, #notes-search-input:focus { outline: none; border-color: #6b30ff; }
+        tr.clickable-row { cursor: pointer; transition: background 0.12s ease; }
+        tr.clickable-row:hover td { background: var(--surface-hover); }
+        .name-cell { font-weight: 600; color: var(--text); }
+        .name-cell.no-name { color: var(--text-faint); font-style: italic; font-weight: 400; }
+        .online-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 7px; box-shadow: 0 0 6px var(--green); }
+        .empty-state { text-align: center; padding: 44px 20px; color: var(--text-faint); font-size: 0.88rem; }
+        #search-input, #notes-search-input {
+            width: 100%;
+            padding: 11px 15px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 0.86rem;
+            margin-bottom: 16px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        #search-input:focus, #notes-search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+        /* ===== CHARTS ===== */
         .chart-wrap { display: flex; align-items: flex-end; gap: 10px; height: 140px; padding-top: 10px; }
         .chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
         .chart-bars { display: flex; gap: 3px; align-items: flex-end; height: 100px; }
-        .chart-bar { width: 12px; border-radius: 3px 3px 0 0; min-height: 2px; }
-        .chart-bar.notes { background: #8b5cf6; }
-        .chart-bar.audio { background: #f59e0b; }
-        .chart-day-label { font-size: 0.68rem; color: #777; }
-        .chart-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 0.75rem; color: #999; }
+        .chart-bar { width: 12px; border-radius: 4px 4px 0 0; min-height: 2px; }
+        .chart-bar.notes { background: linear-gradient(180deg, #a78bfa, var(--accent)); }
+        .chart-bar.audio { background: linear-gradient(180deg, #67e8f9, var(--teal)); }
+        .chart-day-label { font-size: 0.66rem; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; }
+        .chart-legend { display: flex; gap: 18px; margin-top: 14px; font-size: 0.75rem; color: var(--text-dim); }
         .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
-        .legend-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-        .subject-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .subject-name { width: 130px; font-size: 0.85rem; color: #ddd; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .subject-bar-track { flex: 1; background: #14141e; border-radius: 6px; height: 18px; overflow: hidden; }
-        .subject-bar-fill { height: 100%; background: linear-gradient(90deg, #6b30ff, #8613eb); border-radius: 6px; }
-        .subject-count { font-size: 0.8rem; color: #999; width: 30px; text-align: right; }
-        .note-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 14px; background: #14141e; border-radius: 8px; margin-bottom: 8px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+        .subject-row { display: flex; align-items: center; gap: 12px; margin-bottom: 11px; }
+        .subject-name { width: 140px; font-size: 0.84rem; color: var(--text); flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .subject-bar-track { flex: 1; background: var(--surface-2); border-radius: 6px; height: 16px; overflow: hidden; }
+        .subject-bar-fill { height: 100%; background: var(--accent-grad); border-radius: 6px; }
+        .subject-count { font-size: 0.8rem; color: var(--text-dim); width: 34px; text-align: right; font-family: 'JetBrains Mono', monospace; }
+
+        /* ===== NOTES / ANNOUNCEMENTS LIST ===== */
+        .note-item, .ann-item {
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+            padding: 14px 16px; background: var(--surface-2); border-radius: 10px; margin-bottom: 8px;
+            border: 1px solid transparent;
+            transition: border-color 0.15s ease;
+        }
+        .note-item:hover, .ann-item:hover { border-color: var(--border); }
         .note-item-info { min-width: 0; flex: 1; }
-        .note-item-title { font-size: 0.88rem; color: #fff; font-weight: 600; }
-        .note-item-subject { font-size: 0.72rem; color: #a78bfa; margin-top: 2px; }
-        .note-item-snippet { font-size: 0.78rem; color: #888; margin-top: 6px; line-height: 1.4; }
-        .note-item-date { font-size: 0.7rem; color: #666; margin-top: 6px; }
-        .note-delete-btn { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
-        .ann-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; background: #14141e; border-radius: 8px; margin-bottom: 8px; }
-        .ann-item-text { font-size: 0.85rem; color: #ddd; }
-        .ann-item-date { font-size: 0.7rem; color: #666; margin-top: 3px; }
-        .ann-delete-btn { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
-        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 999; }
+        .note-item-title { font-size: 0.9rem; color: var(--text); font-weight: 600; }
+        .note-item-subject { font-size: 0.72rem; color: var(--accent); margin-top: 3px; font-weight: 600; }
+        .note-item-snippet { font-size: 0.79rem; color: var(--text-dim); margin-top: 7px; line-height: 1.5; }
+        .note-item-date { font-size: 0.7rem; color: var(--text-faint); margin-top: 7px; font-family: 'JetBrains Mono', monospace; }
+        .note-delete-btn, .ann-delete-btn {
+            background: rgba(248, 113, 113, 0.10); border: 1px solid rgba(248, 113, 113, 0.28); color: var(--red);
+            width: 30px; height: 30px; border-radius: 8px; cursor: pointer; flex-shrink: 0;
+            transition: background 0.15s ease;
+        }
+        .note-delete-btn:hover, .ann-delete-btn:hover { background: rgba(248, 113, 113, 0.2); }
+        .ann-item-text { font-size: 0.86rem; color: var(--text); }
+        .ann-item-date { font-size: 0.7rem; color: var(--text-faint); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+        /* ===== MODAL ===== */
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(5, 5, 10, 0.75); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 999; }
         .modal-backdrop.open { display: flex; }
-        .modal-card { background: #1a1a26; border: 1px solid #2d2d3d; border-radius: 14px; width: 420px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #2d2d3d; }
-        .modal-header h3 { font-size: 0.95rem; color: #a78bfa; margin: 0; }
-        .modal-close { background: none; border: none; color: #888; font-size: 1.1rem; cursor: pointer; }
-        .modal-body { padding: 16px 20px; overflow-y: auto; }
-        .timeline-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #22222f; font-size: 0.82rem; }
+        .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 420px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+        .modal-header h3 { font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; color: var(--text); margin: 0; font-weight: 600; }
+        .modal-close { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); font-size: 1rem; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; }
+        .modal-close:hover { color: var(--text); }
+        .modal-body { padding: 18px 22px; overflow-y: auto; }
+        .timeline-item { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
         .timeline-item:last-child { border-bottom: none; }
-        .timeline-action { color: #ddd; }
-        .timeline-time { color: #777; }
+        .timeline-action { color: var(--text); }
+        .timeline-time { color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+
+        @media (max-width: 640px) {
+            .topbar { padding: 14px 18px; }
+            .quicknav, .page { padding-left: 18px; padding-right: 18px; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            table, th, td { font-size: 0.76rem; }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📊 NoteWav AI — Usage Dashboard <span id="live-dot" class="live-dot" title="Auto-refreshing">🟢 Live</span></h1>
+    <div class="topbar">
+        <div class="topbar-brand">
+            <div class="topbar-mark">📊</div>
+            <div>
+                <h1>NoteWav AI <span class="live-pill"><span class="dot"></span>Live</span></h1>
+                <div class="eyebrow">Usage & Content Dashboard</div>
+            </div>
+        </div>
         <a class="logout" href="{{ url_for('admin_logout') }}">Logout</a>
     </div>
 
-    <div class="stats-row">
-        <div class="stat-card">
-            <div class="num" id="stat-total-users">{{ total_users }}</div>
-            <div class="label">Distinct devices/browsers</div>
+    <nav class="quicknav">
+        <a href="#section-users">👥 Users</a>
+        <a href="#section-activity">📈 Activity</a>
+        <a href="#section-growth">📈 Growth</a>
+        <a href="#section-features">🎯 Features</a>
+        <a href="#section-subjects">📚 Subjects</a>
+        <a href="#section-notes">📖 Library</a>
+        <a href="#section-announcements">📜 Announcements</a>
+    </nav>
+
+    <div class="page">
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="num" id="stat-total-users">{{ total_users }}</div>
+                <div class="label">Distinct devices/browsers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📝</div>
+                <div class="num" id="stat-total-notes">{{ total_notes_in_library }}</div>
+                <div class="label">Notes saved (Library)</div>
+            </div>
+            <div class="stat-card action-card">
+                <a href="{{ url_for('admin_export_csv') }}" class="csv-export-btn"><span class="ic">⬇️</span> Export Usage CSV</a>
+            </div>
+            <div class="stat-card action-card">
+                <a href="{{ url_for('admin_full_backup') }}" class="csv-export-btn"><span class="ic">💾</span> Full DB Backup</a>
+            </div>
         </div>
-        <div class="stat-card">
-            <div class="num" id="stat-total-notes">{{ total_notes_in_library }}</div>
-            <div class="label">Total notes saved (Library)</div>
+
+        <div class="section-card">
+            <div class="section-head">
+                <div class="chip">📢</div>
+                <h2 class="section-title">Users ලාට Notification එකක් යවන්න</h2>
+            </div>
+            <div class="announce-row">
+                <input type="text" id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500">
+                <button id="announce-send-btn">යවන්න</button>
+            </div>
+            <p id="announce-status" class="announce-status"></p>
         </div>
-        <a href="{{ url_for('admin_export_csv') }}" class="csv-export-btn"><i>⬇️</i> Export Usage as CSV</a>
-        <a href="{{ url_for('admin_full_backup') }}" class="csv-export-btn"><i>💾</i> Full Database Backup</a>
-    </div>
 
-    <div class="section-card">
-        <p style="color:#a78bfa; font-size:0.85rem; font-weight:600; margin:0 0 12px;">📢 Users ලාට Notification එකක් යවන්න</p>
-        <div class="announce-row">
-            <input type="text" id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500">
-            <button id="announce-send-btn">යවන්න</button>
+        <div class="section-card" id="section-users">
+            <div class="section-head">
+                <div class="chip">👥</div>
+                <h2 class="section-title">Users</h2>
+            </div>
+            <input type="text" id="search-input" placeholder="Name එකෙන් search කරන්න...">
+            <div id="table-wrapper">
+                {% if users %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Device</th>
+                            <th>First seen (LK time)</th>
+                            <th>Last seen (LK time)</th>
+                            <th>Notes processed</th>
+                            <th>Audio generated</th>
+                            <th>Total actions</th>
+                            <th>🪙 Coins</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        {% for u in users %}
+                        <tr class="clickable-row" data-anon-id="{{ u.anon_id }}" data-name="{{ u.latest_name or 'Unnamed / Skipped' }}">
+                            <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
+                                {% if u.is_online %}<span class="online-dot" title="Online now"></span>{% endif %}
+                                {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
+                            </td>
+                            <td>{{ u.device_info if u.device_info else '—' }}</td>
+                            <td>{{ u.first_seen }}</td>
+                            <td>{{ u.last_seen }}</td>
+                            <td>{{ u.notes_processed }}</td>
+                            <td>{{ u.audio_generated }}</td>
+                            <td>{{ u.total_events }}</td>
+                            <td>{{ u.coins if u.coins is not none else '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">තවම usage data නෑ — students ලා app එක use කරන්න පටන් ගත්තහම මෙතන පේනවා.</div>
+                {% endif %}
+            </div>
         </div>
-        <p id="announce-status" class="announce-status"></p>
-    </div>
 
-    <div class="section-card">
-        <h2 class="section-title">👥 Users</h2>
-        <input type="text" id="search-input" placeholder="Name එකෙන් search කරන්න...">
-        <div id="table-wrapper">
-            {% if users %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Device</th>
-                        <th>First seen (LK time)</th>
-                        <th>Last seen (LK time)</th>
-                        <th>Notes processed</th>
-                        <th>Audio generated</th>
-                        <th>Total actions</th>
-                        <th>🪙 Coins</th>
-                    </tr>
-                </thead>
-                <tbody id="users-tbody">
-                    {% for u in users %}
-                    <tr class="clickable-row" data-anon-id="{{ u.anon_id }}" data-name="{{ u.latest_name or 'Unnamed / Skipped' }}">
-                        <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
-                            {% if u.is_online %}<span class="online-dot" title="Online now"></span>{% endif %}
-                            {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
-                        </td>
-                        <td>{{ u.device_info if u.device_info else '—' }}</td>
-                        <td>{{ u.first_seen }}</td>
-                        <td>{{ u.last_seen }}</td>
-                        <td>{{ u.notes_processed }}</td>
-                        <td>{{ u.audio_generated }}</td>
-                        <td>{{ u.total_events }}</td>
-                        <td>{{ u.coins if u.coins is not none else '—' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">තවම usage data නෑ — students ලා app එක use කරන්න පටන් ගත්තහම මෙතන පේනවා.</div>
-            {% endif %}
+        <div class="section-card" id="section-activity">
+            <div class="section-head">
+                <div class="chip">📈</div>
+                <h2 class="section-title">Daily Activity (Last 7 Days)</h2>
+            </div>
+            <div id="chart-wrap" class="chart-wrap"></div>
+            <div class="chart-legend">
+                <span><span class="legend-dot" style="background:#a78bfa;"></span> Notes Processed</span>
+                <span><span class="legend-dot" style="background:#22d3ee;"></span> Audio Generated</span>
+            </div>
         </div>
-    </div>
 
-    <div class="section-card">
-        <h2 class="section-title">📈 Daily Activity (Last 7 Days)</h2>
-        <div id="chart-wrap" class="chart-wrap"></div>
-        <div class="chart-legend">
-            <span><span class="legend-dot" style="background:#8b5cf6;"></span> Notes Processed</span>
-            <span><span class="legend-dot" style="background:#f59e0b;"></span> Audio Generated</span>
+        <div class="section-card" id="section-growth">
+            <div class="section-head">
+                <div class="chip">📈</div>
+                <h2 class="section-title">User Growth (Cumulative, Last 14 Days)</h2>
+            </div>
+            <div id="growth-chart-wrap" class="chart-wrap"></div>
         </div>
-    </div>
 
-    <div class="section-card">
-        <h2 class="section-title">📈 User Growth (Cumulative, Last 14 Days)</h2>
-        <div id="growth-chart-wrap" class="chart-wrap"></div>
-    </div>
+        <div class="section-card" id="section-features">
+            <div class="section-head">
+                <div class="chip">🎯</div>
+                <h2 class="section-title">Feature Usage Breakdown</h2>
+            </div>
+            <div id="feature-usage-wrap"></div>
+        </div>
 
-    <div class="section-card">
-        <h2 class="section-title">🎯 Feature Usage Breakdown</h2>
-        <div id="feature-usage-wrap"></div>
-    </div>
+        <div class="section-card" id="section-subjects">
+            <div class="section-head">
+                <div class="chip">📚</div>
+                <h2 class="section-title">Top Subjects</h2>
+            </div>
+            <div id="subjects-wrap"></div>
+        </div>
 
-    <div class="section-card">
-        <h2 class="section-title">📚 Top Subjects</h2>
-        <div id="subjects-wrap"></div>
-    </div>
+        <div class="section-card" id="section-notes">
+            <div class="section-head">
+                <div class="chip">📖</div>
+                <h2 class="section-title">Library Notes Browser</h2>
+            </div>
+            <input type="text" id="notes-search-input" placeholder="Subject/Title එකෙන් search කරන්න...">
+            <div id="notes-wrap"></div>
+        </div>
 
-    <div class="section-card">
-        <h2 class="section-title">📖 Library Notes Browser</h2>
-        <input type="text" id="notes-search-input" placeholder="Subject/Title එකෙන් search කරන්න...">
-        <div id="notes-wrap"></div>
-    </div>
-
-    <div class="section-card">
-        <h2 class="section-title">📜 Announcement History</h2>
-        <div id="announcements-wrap"></div>
+        <div class="section-card" id="section-announcements">
+            <div class="section-head">
+                <div class="chip">📜</div>
+                <h2 class="section-title">Announcement History</h2>
+            </div>
+            <div id="announcements-wrap"></div>
+        </div>
     </div>
 
     <div id="timeline-modal" class="modal-backdrop">
