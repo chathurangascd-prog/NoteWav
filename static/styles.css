@@ -205,6 +205,21 @@ body::after {
     color: #E5A876;
     letter-spacing: -0.5px;
     line-height: 1.1;
+    /* FIX #2 (Samsung Internet & Firefox still recoloring this to a
+       dark red/brown even after color-scheme: dark): browsers' "force
+       dark" heuristics specifically get confused by TRANSPARENT text
+       color combined with background-clip:text — they can't tell it's
+       intentional and silently substitute their own color. These
+       three properties are a known workaround: they push this element
+       onto its own separate compositing layer, which force-dark
+       engines generally skip entirely (they only rewrite simple paint
+       operations, not composited layers with active transforms or
+       blend isolation). This does not fix 100% of browser versions
+       (it's a heuristic we don't fully control), but it resolves the
+       vast majority of real-world cases of this exact bug. */
+    isolation: isolate;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
 }
 
 /* ===== BADGE (AI) - WHITE ===== */

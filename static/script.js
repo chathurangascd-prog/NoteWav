@@ -1845,8 +1845,34 @@ window.addEventListener('load', function() {
 // header for extra safety), and registered here with an explicit
 // scope of '/' so it can control the entire site as the manifest
 // intends.
+// NEW: a mobile-device check shared by both install-button code paths
+// below. The person only wants the "Install app" button to ever show
+// up on phones/tablets — desktop browsers (even ones that technically
+// support PWA install, like desktop Chrome/Edge) should never show it.
+function isMobileDeviceForInstall() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
+        // FIX (Samsung Internet still not showing install prompt after
+        // the scope fix): a PREVIOUS visit may have already registered
+        // the old, wrongly-scoped worker at '/static/sw.js' before this
+        // fix was deployed. That stale registration doesn't just go
+        // away on its own — the browser can end up tracking two
+        // registrations for the same site. Explicitly finding and
+        // unregistering any worker whose scope still contains
+        // '/static/' clears that leftover confusion before registering
+        // the correctly-scoped one at '/'.
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+            registrations.forEach((reg) => {
+                if (reg.scope && reg.scope.includes('/static/')) {
+                    console.log('🧹 Unregistering stale /static/-scoped service worker:', reg.scope);
+                    reg.unregister();
+                }
+            });
+        }).catch(() => { /* non-critical, ignore */ });
+
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then((reg) => console.log('✅ Service worker registered:', reg.scope))
             .catch((err) => console.warn('⚠️ Service worker registration failed:', err));
@@ -1861,6 +1887,10 @@ let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e) {
     e.preventDefault();
     deferredInstallPrompt = e;
+    // NEW: only ever surface the button on mobile, per request — even
+    // though Chromium desktop browsers CAN fire this event and support
+    // installing, the person doesn't want the button appearing there.
+    if (!isMobileDeviceForInstall()) return;
     const btn = document.getElementById('install-app-btn');
     if (btn) btn.classList.remove('hidden');
 });
@@ -1899,7 +1929,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     const btn = document.getElementById('install-app-btn');
-    if (!btn || !isFirefox || isStandalone) return;
+    // NEW: mobile-only, same as the Chromium install button above —
+    // this fallback used to show on desktop Firefox too.
+    if (!btn || !isFirefox || isStandalone || !isMobileDeviceForInstall()) return;
 
     setTimeout(() => {
         btn.classList.remove('hidden');

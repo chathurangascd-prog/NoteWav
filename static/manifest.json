@@ -3,6 +3,7 @@
   "short_name": "NoteWav",
   "description": "Turn your study notes into audio podcasts and mind maps",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#14141e",
   "theme_color": "#6b30ff",
