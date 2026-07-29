@@ -97,6 +97,15 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # Added later: a short, human-readable device/browser summary
+    # (e.g. "Samsung Internet · Android · Mobile"), derived from the
+    # request's User-Agent header at track time — lets the admin see
+    # which devices/browsers are actually being used, for spotting
+    # patterns like "reports of slowness are mostly one browser".
+    try:
+        conn.execute("ALTER TABLE usage_events ADD COLUMN device_info TEXT")
+    except Exception:
+        pass  # column already exists
     # Tracks the latest known "coins" balance the frontend reports for
     # each device — coins themselves live in the browser's
     # localStorage (there's no real spend/earn logic server-side yet),
@@ -178,6 +187,71 @@ SAFETY_SETTINGS = [
     types.SafetySetting(category='HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
     types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
 ]
+
+
+def parse_device_info(user_agent):
+    """Turns a raw User-Agent string into a short, readable summary like
+    'Samsung Internet · Android · Mobile' or 'Chrome · Windows · Desktop'.
+    This is a lightweight, regex-based heuristic (no external library) —
+    it won't be 100% perfect for every obscure browser/device, but it
+    covers the common cases well enough for the admin dashboard to be
+    useful for spotting patterns (e.g. "most of our slow-device reports
+    are Samsung Internet on Android").
+
+    ORDER MATTERS below: Samsung Internet's UA also contains the word
+    "Chrome" (since it's Chromium-based), and new Edge's UA also
+    contains "Chrome" and "Safari" — so the more specific/newer browser
+    checks must run BEFORE the generic ones they'd otherwise be
+    misidentified as.
+    """
+    if not user_agent:
+        return 'Unknown'
+
+    ua = user_agent
+
+    # ---- Browser name (most specific first) ----
+    if 'SamsungBrowser' in ua:
+        browser = 'Samsung Internet'
+    elif 'EdgA' in ua or 'EdgiOS' in ua or 'Edg/' in ua:
+        browser = 'Edge'
+    elif 'OPR' in ua or 'Opera' in ua:
+        browser = 'Opera'
+    elif 'FxiOS' in ua:
+        browser = 'Firefox (iOS)'
+    elif 'Firefox' in ua:
+        browser = 'Firefox'
+    elif 'CriOS' in ua:
+        browser = 'Chrome (iOS)'
+    elif 'Chrome' in ua:
+        browser = 'Chrome'
+    elif 'Safari' in ua and 'Version' in ua:
+        browser = 'Safari'
+    else:
+        browser = 'Other'
+
+    # ---- Operating system ----
+    if 'Android' in ua:
+        os_name = 'Android'
+    elif 'iPhone' in ua or 'iPad' in ua or 'iPod' in ua:
+        os_name = 'iOS'
+    elif 'Windows' in ua:
+        os_name = 'Windows'
+    elif 'Mac OS X' in ua or 'Macintosh' in ua:
+        os_name = 'Mac'
+    elif 'Linux' in ua:
+        os_name = 'Linux'
+    else:
+        os_name = 'Unknown'
+
+    # ---- Device type ----
+    if 'iPad' in ua or ('Android' in ua and 'Mobile' not in ua):
+        device_type = 'Tablet'
+    elif 'Mobile' in ua or 'iPhone' in ua or 'Android' in ua:
+        device_type = 'Mobile'
+    else:
+        device_type = 'Desktop'
+
+    return f'{browser} · {os_name} · {device_type}'
 
 
 def detect_language(text):
@@ -965,9 +1039,15 @@ def track_event():
             return jsonify({'status': 'ignored'})
 
         conn = get_db()
+        # The User-Agent header comes from the browser itself with every
+        # request — no extra permission or frontend change needed to
+        # read it. Parsed into a short summary and stored alongside the
+        # event so the admin dashboard can show which device/browser
+        # each user is on.
+        device_info = parse_device_info(request.headers.get('User-Agent', ''))
         conn.execute(
-            "INSERT INTO usage_events (anon_id, user_name, action, created_at) VALUES (?, ?, ?, ?)",
-            (anon_id, user_name, action, datetime.now(timezone.utc).isoformat())
+            "INSERT INTO usage_events (anon_id, user_name, action, created_at, device_info) VALUES (?, ?, ?, ?, ?)",
+            (anon_id, user_name, action, datetime.now(timezone.utc).isoformat(), device_info)
         )
         if isinstance(coins, int):
             conn.execute(
@@ -1013,6 +1093,9 @@ def _get_admin_usage_data():
             (SELECT user_name FROM usage_events ue2
              WHERE ue2.anon_id = ue1.anon_id AND ue2.user_name != ''
              ORDER BY ue2.created_at DESC LIMIT 1) AS latest_name,
+            (SELECT device_info FROM usage_events ue3
+             WHERE ue3.anon_id = ue1.anon_id AND ue3.device_info IS NOT NULL
+             ORDER BY ue3.created_at DESC LIMIT 1) AS device_info,
             MIN(created_at) AS first_seen,
             MAX(created_at) AS last_seen,
             COUNT(*) AS total_events,
