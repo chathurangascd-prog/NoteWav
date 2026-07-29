@@ -392,6 +392,62 @@ class GeminiGenerationError(Exception):
     pass
 
 
+def build_system_instruction(output_language):
+    """Returns the full Gemini system instruction, with the podcast
+    script's language rule swapped based on the person's chosen OUTPUT
+    language — independent of whatever language the note itself was
+    written in. Previously the instruction always told Gemini to match
+    the note's own language; now the person explicitly picks Sinhala or
+    English for the narration/script output via a toggle in the UI, and
+    Gemini is told to always write in that language regardless of the
+    input note's language. The mind maps (mermaid_code_si/en) are
+    unaffected — both language versions are still always generated.
+    """
+    if output_language == 'en':
+        json_line = (
+            '  "podcast_script": "<full podcast script, written entirely in English '
+            'regardless of the note\'s own language>",'
+        )
+        language_rule = (
+            '2. **භාෂාව (Output Language):** "podcast_script" එක **සම්පූර්ණයෙන්ම '
+            'English භාෂාවෙන්ම** ලියන්න — පාඩම Sinhala, Tamil, හෝ English කුමන '
+            'භාෂාවකින් ලියා තිබුණත්, output එක සැමවිටම English විය යුතුය (පාඩමේ '
+            'භාෂාව මෙතනදී අදාළ නොවේ). ස්වාභාවික, කථනාත්මක, podcast-style English '
+            'වචන/expressions ("you know", "let\'s dive in", "here\'s the thing", '
+            '"next up") යොදාගෙන ගලායන කතාවක් ලෙස ලියන්න, නිවැරදි English '
+            'ව්‍යාකරණයෙන්.'
+        )
+    else:  # 'si' (default)
+        json_line = (
+            '  "podcast_script": "<සම්පූර්ණ පොඩ්කාස්ට් script එක, සම්පූර්ණයෙන්ම '
+            'සිංහල භාෂාවෙන්ම>",'
+        )
+        language_rule = (
+            '2. **භාෂාව (Output Language):** "podcast_script" එක **සම්පූර්ණයෙන්ම '
+            'සිංහල භාෂාවෙන්ම** ලියන්න — පාඩම Sinhala, Tamil, හෝ English කුමන '
+            'භාෂාවකින් ලියා තිබුණත්, output එක සැමවිටම සිංහල විය යුතුය (පාඩමේ '
+            'භාෂාව මෙතනදී අදාළ නොවේ). "යාලුවනේ", "ඔයාලා දන්නවාද?", "ඊළඟට", "මෙන්න", '
+            '"දැන් බලමු" වැනි වදන් යොදාගෙන ගලායන කතාවක් ලෙස ලියන්න, නිවැරදි සිංහල '
+            'ව්‍යාකරණයෙන් සහ අක්ෂර වින්‍යාසයෙන්.'
+        )
+
+    instruction = SYSTEM_INSTRUCTION
+    instruction = instruction.replace(
+        '  "podcast_script": "<සම්පූර්ණ පොඩ්කාස්ට් script එක, පාඩම ලියැවී ඇති භාෂාවෙන්ම (Sinhala නම් Sinhala, Tamil නම් Tamil)>",',
+        json_line
+    )
+    instruction = instruction.replace(
+        '2. **භාෂාව:** පාඩම ලියැවී ඇති භාෂාවෙන්ම ලියන්න — පාඩම Sinhala නම් Sinhala වලින්, Tamil\n'
+        '   නම් Tamil වලින් (පාඩම mix වී ඇත්නම් වැඩිපුර පවතින භාෂාව භාවිත කරන්න). Sinhala\n'
+        '   ලියද්දී "යාලුවනේ", "ඔයාලා දන්නවාද?", "ඊළඟට", "මෙන්න", "දැන් බලමු" වැනි වදන්\n'
+        '   යොදාගෙන ගලායන කතාවක් ලෙස ලියන්න. Tamil ලියද්දී ඒ හා සමාන ස්වාභාවික, කථනාත්මක,\n'
+        '   podcast-style Tamil වචන/සිතුවිලි යොදාගෙන ලියන්න.\n'
+        '3. සිංහල හෝ Tamil ව්‍යාකරණ සහ අක්ෂර වින්‍යාසය නිවැරදිව යොදන්න.',
+        language_rule
+    )
+    return instruction
+
+
 SYSTEM_INSTRUCTION = f"""
 ඔබ ශ්‍රී ලංකාවේ සිටින ඉතා දක්ෂ, සහයෝගී අධ්‍යාපන AI සහායකයෙකි. ඔබට ලැබෙන පාඩම් සටහන
 (Sinhala, Tamil, හෝ English) සකසා, **JSON object එකක් විතරක්** output කරන්න — වෙන කිසිදු
@@ -626,7 +682,7 @@ def _is_rate_limit_error(exc):
     return '429' in msg or 'RESOURCE_EXHAUSTED' in msg or 'QUOTA' in msg
 
 
-def call_gemini_structured(note_text, max_retries=3):
+def call_gemini_structured(note_text, output_language='si', max_retries=3):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -635,6 +691,8 @@ def call_gemini_structured(note_text, max_retries=3):
 {note_text}
 """
 
+    system_instruction = build_system_instruction(output_language)
+
     last_error = None
     for attempt in range(1, max_retries + 1):
         try:
@@ -642,7 +700,7 @@ def call_gemini_structured(note_text, max_retries=3):
                 model='gemini-flash-latest',
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
+                    system_instruction=system_instruction,
                     temperature=0.3,
                     max_output_tokens=8000,
                     response_mime_type='application/json',
@@ -868,6 +926,13 @@ def process_note():
     data = request.get_json(silent=True) or {}
     note_text = (data.get('text') or '').strip()
     mode = data.get('mode', 'full')
+    # NEW: the person now explicitly chooses the OUTPUT language for the
+    # podcast script via a toggle in the UI ('si' or 'en') — independent
+    # of whatever language the note itself is written in. Defaults to
+    # 'si' if not provided (e.g. an older cached frontend).
+    output_language = data.get('output_language', 'si')
+    if output_language not in ('si', 'en'):
+        output_language = 'si'
 
     if not note_text:
         return jsonify({'status': 'error', 'message': 'කරුණාකර පාඩම් සටහනක් ඇතුළත් කරන්න.'}), 400
@@ -887,7 +952,7 @@ def process_note():
         })
 
     try:
-        podcast_script, mermaid_code_si, mermaid_code_en = call_gemini_structured(note_text)
+        podcast_script, mermaid_code_si, mermaid_code_en = call_gemini_structured(note_text, output_language)
     except GeminiGenerationError as e:
         print(f"Gemini Error: {e}")
         return jsonify({

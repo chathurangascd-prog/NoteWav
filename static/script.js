@@ -67,6 +67,40 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
+    // ===== Output Language Toggle (podcast script/audio language) =====
+    // NEW: lets the person explicitly choose whether the generated
+    // podcast script (and therefore the audio, since TTS auto-detects
+    // language from the final text) comes out in Sinhala or English —
+    // independent of whatever language they typed the note in. Only
+    // affects Smart Study mode (Full Text Mode passes the original
+    // text through untouched, so there's nothing to translate there).
+    let outputLanguage = 'si';
+    const outputLangSiBtn = document.getElementById('output-lang-si-btn');
+    const outputLangEnBtn = document.getElementById('output-lang-en-btn');
+
+    function setOutputLanguageUI(lang) {
+        outputLanguage = lang;
+        if (outputLangSiBtn) outputLangSiBtn.classList.toggle('active', lang === 'si');
+        if (outputLangEnBtn) outputLangEnBtn.classList.toggle('active', lang === 'en');
+        try {
+            localStorage.setItem('notewav_output_language', lang);
+        } catch (e) {
+            console.warn('Could not save output language preference:', e);
+        }
+    }
+
+    try {
+        const savedOutputLang = localStorage.getItem('notewav_output_language');
+        if (savedOutputLang === 'si' || savedOutputLang === 'en') {
+            setOutputLanguageUI(savedOutputLang);
+        }
+    } catch (e) {
+        // ignore, default to 'si'
+    }
+
+    if (outputLangSiBtn) outputLangSiBtn.addEventListener('click', () => setOutputLanguageUI('si'));
+    if (outputLangEnBtn) outputLangEnBtn.addEventListener('click', () => setOutputLanguageUI('en'));
+
     // ===== DOM Elements =====
     const noteInput = document.getElementById('note-input');
     const processBtn = document.getElementById('process-btn');
@@ -1494,7 +1528,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/process-note', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, mode }),
+                body: JSON.stringify({ text, mode, output_language: outputLanguage }),
             });
 
             const data = await response.json();
@@ -2057,6 +2091,8 @@ const NOTEWAV_TRANSLATIONS = {
     note_input_placeholder: { si: 'මෙතනට ඔබේ සටහන් ඇතුළත් කරන්න. නැතිනම් කැමති ප්‍රශ්නයක් අහන්න...', en: 'Type your notes here, or ask any question you like...' },
     char_count_suffix: { si: '/ 2000 අක්ෂර', en: '/ 2000 characters' },
     study_mode_title: { si: 'අධ්‍යාපනික මාදිලිය (Study Mode):', en: 'Study Mode:' },
+    output_lang_title: { si: 'Output භාෂාව (Podcast Script/Audio):', en: 'Output Language (Podcast Script/Audio):' },
+    output_lang_hint: { si: 'Smart Study mode එකේදී විතරයි අදාළ වන්නේ — ඔබ ලියන භාෂාව කුමක් වුවත්, script/audio එක තෝරගත් භාෂාවෙන්ම එයි.', en: 'Only applies to Smart Study mode — whatever language you type in, the script/audio will come out in your chosen language.' },
     mode_full_desc: { si: 'ඔබේ text එකම audio + mind map', en: 'Your text becomes audio + mind map' },
     mode_smart_desc: { si: 'Podcast script + Mind Map දෙකම AI කරයි', en: 'AI creates both a podcast script + Mind Map' },
     process_btn: { si: 'Script එක සකසන්න', en: 'Prepare Script' },
