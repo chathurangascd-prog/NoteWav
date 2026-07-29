@@ -165,6 +165,14 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # Added later: if set, this announcement is PRIVATE — only the one
+    # device with this anon_id will ever see it. NULL (the default,
+    # unchanged from before) means a broadcast everyone sees, exactly
+    # as announcements worked originally.
+    try:
+        conn.execute("ALTER TABLE announcements ADD COLUMN target_anon_id TEXT")
+    except Exception:
+        pass  # column already exists
     # Real signed-in accounts (Google Sign-In). Guests who never log in
     # never get a row here — their coins/streak/profile stay exactly as
     # before (device-local, localStorage only). Once someone signs in,
@@ -1497,9 +1505,13 @@ def _get_admin_usage_data():
             (SELECT device_info FROM usage_events ue3
              WHERE ue3.anon_id = ue1.anon_id AND ue3.device_info IS NOT NULL
              ORDER BY ue3.created_at DESC LIMIT 1) AS device_info,
-            (SELECT user_email FROM usage_events ue4
-             WHERE ue4.anon_id = ue1.anon_id AND ue4.user_email IS NOT NULL
-             ORDER BY ue4.created_at DESC LIMIT 1) AS user_email,
+            (SELECT GROUP_CONCAT(email_col, '||') FROM (
+                SELECT user_email AS email_col, MAX(created_at) AS last_ts
+                FROM usage_events ue4
+                WHERE ue4.anon_id = ue1.anon_id AND ue4.user_email IS NOT NULL
+                GROUP BY user_email
+                ORDER BY last_ts DESC
+            )) AS email_history,
             MIN(created_at) AS first_seen,
             MAX(created_at) AS last_seen,
             COUNT(*) AS total_events,
@@ -1541,6 +1553,15 @@ def _get_admin_usage_data():
         u['is_online'] = is_online(u['last_seen'])
         u['first_seen'] = to_sl_time(u['first_seen'])
         u['last_seen'] = to_sl_time(u['last_seen'])
+        # Splits the '||'-joined, most-recent-first email history into
+        # the CURRENT email (whichever account is signed in on this
+        # device right now — shown in green) and any OLDER emails this
+        # same device has logged into before (shown in red), so the
+        # admin can see when a device switched accounts.
+        raw_history = u.pop('email_history', None)
+        emails = [e for e in (raw_history.split('||') if raw_history else []) if e]
+        u['current_email'] = emails[0] if emails else None
+        u['old_emails'] = emails[1:] if len(emails) > 1 else []
         users_list.append(u)
 
     return {
@@ -1775,7 +1796,7 @@ def admin_announcements_list():
     try:
         conn = get_db()
         rows = conn.execute(
-            "SELECT id, message, created_at FROM announcements ORDER BY id DESC LIMIT 30"
+            "SELECT id, message, created_at, target_anon_id FROM announcements ORDER BY id DESC LIMIT 30"
         ).fetchall()
         conn.close()
 
@@ -1836,12 +1857,16 @@ def admin_announce():
     try:
         data = request.get_json(silent=True) or {}
         message = (data.get('message') or '').strip()[:500]
+        # NEW: optional — if provided, this notification is PRIVATE to
+        # just that one device (anon_id). Left out/empty, it broadcasts
+        # to everyone exactly as announcements always have.
+        target_anon_id = (data.get('target_anon_id') or '').strip()[:64] or None
         if not message:
             return jsonify({'status': 'error', 'message': 'Message එකක් ලියන්න.'}), 400
         conn = get_db()
         conn.execute(
-            "INSERT INTO announcements (message, created_at) VALUES (?, ?)",
-            (message, datetime.now(timezone.utc).isoformat())
+            "INSERT INTO announcements (message, created_at, target_anon_id) VALUES (?, ?, ?)",
+            (message, datetime.now(timezone.utc).isoformat(), target_anon_id)
         )
         conn.commit()
         conn.close()
@@ -1853,11 +1878,27 @@ def admin_announce():
 
 @app.route('/announcements/latest')
 def announcements_latest():
+    """Public — every visitor's browser polls this periodically to
+    check for a new admin message. NEW: also considers PRIVATE
+    (per-device) notifications — a device's own anon_id is passed as a
+    query param, and this returns whichever announcement is most
+    recent between the global broadcasts and that device's own private
+    messages. No anon_id provided (e.g. an older cached frontend) falls
+    back to broadcast-only, the original behavior."""
     try:
+        anon_id = (request.args.get('anon_id') or '').strip()[:64]
         conn = get_db()
-        row = conn.execute(
-            "SELECT id, message, created_at FROM announcements ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        if anon_id:
+            row = conn.execute(
+                "SELECT id, message, created_at FROM announcements "
+                "WHERE target_anon_id IS NULL OR target_anon_id = ? "
+                "ORDER BY id DESC LIMIT 1",
+                (anon_id,)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id, message, created_at FROM announcements WHERE target_anon_id IS NULL ORDER BY id DESC LIMIT 1"
+            ).fetchone()
         conn.close()
         if not row:
             return jsonify({'status': 'success', 'announcement': None})

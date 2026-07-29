@@ -427,7 +427,10 @@
                                 {% if u.is_online %}<span class="online-dot" title="Online now"></span>{% endif %}
                                 {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
                             </td>
-                            <td>{{ u.user_email if u.user_email else '—' }}</td>
+                            <td>
+                                {% if u.current_email %}<span style="color:#4ade80; font-weight:600;">{{ u.current_email }}</span>{% else %}—{% endif %}
+                                {% for old_e in u.old_emails %}<br><span style="color:#f87171; font-size:0.76rem;">{{ old_e }}</span>{% endfor %}
+                            </td>
                             <td>{{ u.device_info if u.device_info else '—' }}</td>
                             <td>{{ u.first_seen }}</td>
                             <td>{{ u.last_seen }}</td>
@@ -505,7 +508,14 @@
                 <h3 id="timeline-modal-title">User Timeline</h3>
                 <button class="modal-close" id="timeline-modal-close">✕</button>
             </div>
-            <div class="modal-body" id="timeline-modal-body"></div>
+            <div class="modal-body">
+                <div style="display:flex; gap:8px; margin-bottom:14px;">
+                    <input type="text" id="private-announce-input" placeholder="මේ user ට විතරක් message එකක්..." maxlength="500" style="flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.82rem; font-family:inherit;">
+                    <button id="private-announce-send-btn" style="padding:9px 16px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;">යවන්න</button>
+                </div>
+                <p id="private-announce-status" style="font-size:0.74rem; color:var(--green); margin:0 0 14px; min-height:1em; font-weight:600;"></p>
+                <div id="timeline-modal-body"></div>
+            </div>
         </div>
     </div>
 
@@ -541,7 +551,13 @@
                 const onlineDot = u.is_online ? '<span class="online-dot" title="Online now"></span>' : '';
                 const coinsDisplay = (u.coins === null || u.coins === undefined) ? '—' : u.coins;
                 const deviceDisplay = u.device_info ? escapeHtml(u.device_info) : '—';
-                const emailDisplay = u.user_email ? escapeHtml(u.user_email) : '—';
+                let emailDisplay = '—';
+                if (u.current_email) {
+                    emailDisplay = `<span style="color:#4ade80; font-weight:600;">${escapeHtml(u.current_email)}</span>`;
+                    (u.old_emails || []).forEach(oldE => {
+                        emailDisplay += `<br><span style="color:#f87171; font-size:0.76rem;">${escapeHtml(oldE)}</span>`;
+                    });
+                }
                 html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td><td>${coinsDisplay}</td></tr>`;
             });
             html += '</tbody></table>';
@@ -557,9 +573,14 @@
             });
         }
 
+        let currentTimelineAnonId = null;
+
         async function openTimeline(anonId, name) {
+            currentTimelineAnonId = anonId;
             document.getElementById('timeline-modal-title').textContent = name + ' — Timeline';
             document.getElementById('timeline-modal-body').innerHTML = 'Loading...';
+            document.getElementById('private-announce-input').value = '';
+            document.getElementById('private-announce-status').textContent = '';
             document.getElementById('timeline-modal').classList.add('open');
             try {
                 const res = await fetch('/admin/user-timeline/' + encodeURIComponent(anonId));
@@ -577,6 +598,35 @@
                 document.getElementById('timeline-modal-body').innerHTML = 'Error loading timeline.';
             }
         }
+
+        document.getElementById('private-announce-send-btn').addEventListener('click', async function() {
+            const input = document.getElementById('private-announce-input');
+            const status = document.getElementById('private-announce-status');
+            const message = input.value.trim();
+            if (!message || !currentTimelineAnonId) return;
+            this.disabled = true;
+            try {
+                const res = await fetch('/admin/announce', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, target_anon_id: currentTimelineAnonId }),
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    status.textContent = '✅ මේ user ට විතරක් යැව්වා!';
+                    status.style.color = '#4ade80';
+                    input.value = '';
+                    loadAnnouncements();
+                } else {
+                    status.textContent = '❌ ' + (data.message || 'Failed to send.');
+                    status.style.color = '#f87171';
+                }
+            } catch (e) {
+                status.textContent = '❌ Network error.';
+                status.style.color = '#f87171';
+            }
+            this.disabled = false;
+        });
 
         document.getElementById('timeline-modal-close').addEventListener('click', () => {
             document.getElementById('timeline-modal').classList.remove('open');
@@ -789,9 +839,12 @@
                 }
                 let html = '';
                 data.announcements.forEach(a => {
+                    const tag = a.target_anon_id
+                        ? '<span style="color:#f59e0b; font-size:0.68rem; font-weight:700;">🔒 PRIVATE</span>'
+                        : '<span style="color:#4ade80; font-size:0.68rem; font-weight:700;">📢 BROADCAST</span>';
                     html += `<div class="ann-item">
                         <div>
-                            <div class="ann-item-text">${escapeHtml(a.message)}</div>
+                            <div class="ann-item-text">${tag} ${escapeHtml(a.message)}</div>
                             <div class="ann-item-date">${a.created_at}</div>
                         </div>
                         <button class="ann-delete-btn" onclick="deleteAnnouncement(${a.id})" title="Delete">🗑️</button>

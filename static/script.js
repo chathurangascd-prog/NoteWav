@@ -2863,7 +2863,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function checkForAnnouncement() {
         try {
-            const res = await fetch('/announcements/latest');
+            const anonId = (typeof getOrCreateAnonId === 'function') ? getOrCreateAnonId() : '';
+            const res = await fetch('/announcements/latest?anon_id=' + encodeURIComponent(anonId));
             const data = await res.json();
             if (data.status !== 'success' || !data.announcement) return;
             latestAnnouncement = data.announcement;
