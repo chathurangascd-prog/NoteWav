@@ -335,6 +335,10 @@
         .timeline-item:last-child { border-bottom: none; }
         .timeline-action { color: var(--text); }
         .timeline-time { color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+        .timeline-stats-row { display: flex; gap: 8px; margin-bottom: 16px; }
+        .timeline-stat { flex: 1; background: var(--surface-2); border-radius: 10px; padding: 10px 8px; text-align: center; }
+        .timeline-stat-num { font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 700; color: var(--accent); }
+        .timeline-stat-label { font-size: 0.62rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; font-weight: 600; }
 
         @media (max-width: 640px) {
             .topbar { padding: 14px 18px; }
@@ -414,15 +418,12 @@
                             <th>Device</th>
                             <th>First seen (LK time)</th>
                             <th>Last seen (LK time)</th>
-                            <th>Notes processed</th>
-                            <th>Audio generated</th>
-                            <th>Total actions</th>
                             <th>🪙 Coins</th>
                         </tr>
                     </thead>
                     <tbody id="users-tbody">
                         {% for u in users %}
-                        <tr class="clickable-row" data-anon-id="{{ u.anon_id }}" data-name="{{ u.latest_name or 'Unnamed / Skipped' }}">
+                        <tr class="clickable-row" data-anon-id="{{ u.anon_id }}" data-name="{{ u.latest_name or 'Unnamed / Skipped' }}" data-notes="{{ u.notes_processed }}" data-audio="{{ u.audio_generated }}" data-actions="{{ u.total_events }}">
                             <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
                                 {% if u.is_online %}<span class="online-dot" title="Online now"></span>{% endif %}
                                 {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
@@ -434,9 +435,6 @@
                             <td>{{ u.device_info if u.device_info else '—' }}</td>
                             <td>{{ u.first_seen }}</td>
                             <td>{{ u.last_seen }}</td>
-                            <td>{{ u.notes_processed }}</td>
-                            <td>{{ u.audio_generated }}</td>
-                            <td>{{ u.total_events }}</td>
                             <td>{{ u.coins if u.coins is not none else '—' }}</td>
                         </tr>
                         {% endfor %}
@@ -509,6 +507,7 @@
                 <button class="modal-close" id="timeline-modal-close">✕</button>
             </div>
             <div class="modal-body">
+                <div id="timeline-stats-row" class="timeline-stats-row"></div>
                 <div style="display:flex; gap:8px; margin-bottom:14px;">
                     <input type="text" id="private-announce-input" placeholder="මේ user ට විතරක් message එකක්..." maxlength="500" style="flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.82rem; font-family:inherit;">
                     <button id="private-announce-send-btn" style="padding:9px 16px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;">යවන්න</button>
@@ -544,7 +543,7 @@
                 wrapper.innerHTML = '<div class="empty-state">Match වෙන users කෙනෙක් නෑ.</div>';
                 return;
             }
-            let html = '<table><thead><tr><th>Name</th><th>Email</th><th>Device</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>Notes processed</th><th>Audio generated</th><th>Total actions</th><th>🪙 Coins</th></tr></thead><tbody id="users-tbody">';
+            let html = '<table><thead><tr><th>Name</th><th>Email</th><th>Device</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>🪙 Coins</th></tr></thead><tbody id="users-tbody">';
             filtered.forEach(u => {
                 const nameClass = u.latest_name ? 'name-cell' : 'name-cell no-name';
                 const displayName = u.latest_name ? escapeHtml(u.latest_name) : 'Unnamed / Skipped';
@@ -558,7 +557,7 @@
                         emailDisplay += `<br><span style="color:#f87171; font-size:0.76rem;">${escapeHtml(oldE)}</span>`;
                     });
                 }
-                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td><td>${coinsDisplay}</td></tr>`;
+                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}" data-notes="${u.notes_processed}" data-audio="${u.audio_generated}" data-actions="${u.total_events}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${coinsDisplay}</td></tr>`;
             });
             html += '</tbody></table>';
             wrapper.innerHTML = html;
@@ -568,19 +567,27 @@
         function attachRowClickHandlers() {
             document.querySelectorAll('#users-tbody tr').forEach(row => {
                 row.addEventListener('click', function() {
-                    openTimeline(this.dataset.anonId, this.dataset.name);
+                    openTimeline(this.dataset.anonId, this.dataset.name, this.dataset.notes, this.dataset.audio, this.dataset.actions);
                 });
             });
         }
 
         let currentTimelineAnonId = null;
 
-        async function openTimeline(anonId, name) {
+        async function openTimeline(anonId, name, notesProcessed, audioGenerated, totalActions) {
             currentTimelineAnonId = anonId;
             document.getElementById('timeline-modal-title').textContent = name + ' — Timeline';
             document.getElementById('timeline-modal-body').innerHTML = 'Loading...';
             document.getElementById('private-announce-input').value = '';
             document.getElementById('private-announce-status').textContent = '';
+
+            const statsRow = document.getElementById('timeline-stats-row');
+            statsRow.innerHTML = `
+                <div class="timeline-stat"><div class="timeline-stat-num">${notesProcessed || 0}</div><div class="timeline-stat-label">Notes Processed</div></div>
+                <div class="timeline-stat"><div class="timeline-stat-num">${audioGenerated || 0}</div><div class="timeline-stat-label">Audio Generated</div></div>
+                <div class="timeline-stat"><div class="timeline-stat-num">${totalActions || 0}</div><div class="timeline-stat-label">Total Actions</div></div>
+            `;
+
             document.getElementById('timeline-modal').classList.add('open');
             try {
                 const res = await fetch('/admin/user-timeline/' + encodeURIComponent(anonId));
