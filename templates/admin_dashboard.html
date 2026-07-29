@@ -390,16 +390,26 @@
             </div>
         </div>
 
-        <div class="section-card" style="max-width: 480px;">
-            <div class="section-head">
-                <div class="chip">📢</div>
-                <h2 class="section-title">Users ලාට Notification එකක්</h2>
+        <div style="display: flex; gap: 20px; margin-bottom: 20px; align-items: stretch; flex-wrap: wrap;">
+            <div class="section-card" style="max-width: 480px; min-width: 340px; min-height: 340px; margin-bottom: 0; display: flex; flex-direction: column;">
+                <div class="section-head">
+                    <div class="chip">📢</div>
+                    <h2 class="section-title">Users ලාට Notification එකක්</h2>
+                </div>
+                <div class="announce-row">
+                    <input type="text" id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500">
+                    <button id="announce-send-btn">Send</button>
+                </div>
+                <p id="announce-status" class="announce-status"></p>
             </div>
-            <div class="announce-row">
-                <input type="text" id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500">
-                <button id="announce-send-btn">Send</button>
+
+            <div class="section-card" id="section-announcements" style="flex: 1; min-width: 340px; min-height: 340px; margin-bottom: 0;">
+                <div class="section-head">
+                    <div class="chip">📜</div>
+                    <h2 class="section-title">Announcement History</h2>
+                </div>
+                <div id="announcements-wrap"></div>
             </div>
-            <p id="announce-status" class="announce-status"></p>
         </div>
 
         <div class="section-card" id="section-users">
@@ -489,14 +499,6 @@
             </div>
             <input type="text" id="notes-search-input" placeholder="Subject/Title එකෙන් search කරන්න...">
             <div id="notes-wrap"></div>
-        </div>
-
-        <div class="section-card" id="section-announcements">
-            <div class="section-head">
-                <div class="chip">📜</div>
-                <h2 class="section-title">Announcement History</h2>
-            </div>
-            <div id="announcements-wrap"></div>
         </div>
     </div>
 
