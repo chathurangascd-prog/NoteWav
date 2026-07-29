@@ -505,6 +505,16 @@
                             </div>
                         </div>
                         <hr class="menu-divider">
+                        <div id="google-auth-section">
+                            <a href="/auth/google/login" id="google-signin-btn" class="library-nav-btn" style="width: 100%; justify-content: center; box-sizing: border-box; text-decoration: none;">
+                                <i class="fab fa-google"></i> Sign in with Google
+                            </a>
+                            <div id="google-signed-in-info" class="hidden" style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                                <span style="font-size: 0.85rem; color: var(--text-secondary); flex: 1;" id="google-signed-in-name"></span>
+                                <a href="/auth/logout" style="font-size: 0.78rem; color: #f87171; text-decoration: underline;">Sign out</a>
+                            </div>
+                        </div>
+                        <hr class="menu-divider">
                         <div class="study-stat-row">
                             <span class="settings-label" style="margin-bottom:0;">🔥 Study Streak (දවස්)</span>
                             <span id="streak-count-drawer" class="study-time-value">0 days</span>

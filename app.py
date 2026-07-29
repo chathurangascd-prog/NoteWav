@@ -7,6 +7,9 @@ import time
 import uuid
 import glob
 import sqlite3
+import secrets
+import requests
+from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
@@ -46,6 +49,22 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme')
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 
 # ========================================
+# GOOGLE SIGN-IN (OAuth 2.0)
+# ========================================
+# Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to be set in
+# Render's environment variables (from Google Cloud Console → APIs &
+# Services → Credentials). GOOGLE_REDIRECT_URI defaults to the
+# production callback URL but can be overridden for local testing.
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'https://notewav.onrender.com/auth/google/callback')
+GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
+GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
+GOOGLE_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
+GOOGLE_LOGIN_CONFIGURED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+print("✅ Google Sign-In is configured!" if GOOGLE_LOGIN_CONFIGURED else "⚠️ Google Sign-In not configured (missing GOOGLE_CLIENT_ID/SECRET)")
+
+# ========================================
 # NOTES LIBRARY (SQLite — save/organize notes by subject)
 # ========================================
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notewav.db')
@@ -82,6 +101,15 @@ def init_db():
             conn.execute(f"ALTER TABLE notes ADD COLUMN {column_def}")
         except Exception:
             pass  # column already exists
+    # Added later: which Google account (if any) owns this note. NULL
+    # means it's a guest-saved note — those keep behaving EXACTLY as
+    # before (visible in the shared/global Library listing to everyone,
+    # no privacy filtering). A note WITH an owner_google_id is private
+    # to that signed-in account and syncs across their devices.
+    try:
+        conn.execute("ALTER TABLE notes ADD COLUMN owner_google_id TEXT")
+    except Exception:
+        pass  # column already exists
     # Lightweight, anonymous usage tracking for the admin dashboard —
     # NOT a real login/account system. "anon_id" is a random ID the
     # browser generates once and stores in localStorage (so the same
@@ -127,6 +155,24 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             message TEXT NOT NULL,
             created_at TEXT NOT NULL
+        )
+    """)
+    # Real signed-in accounts (Google Sign-In). Guests who never log in
+    # never get a row here — their coins/streak/profile stay exactly as
+    # before (device-local, localStorage only). Once someone signs in,
+    # their coins/streak/name/picture live HERE instead, so the same
+    # values follow them to any device they log into.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            google_id TEXT PRIMARY KEY,
+            email TEXT,
+            name TEXT,
+            picture TEXT,
+            coins INTEGER DEFAULT 100,
+            streak INTEGER DEFAULT 0,
+            last_streak_date TEXT,
+            created_at TEXT,
+            last_login TEXT
         )
     """)
     conn.commit()
@@ -981,6 +1027,169 @@ def home():
 
 
 # ========================================
+# GOOGLE SIGN-IN ROUTES
+# ========================================
+@app.route('/auth/google/login')
+def google_login():
+    if not GOOGLE_LOGIN_CONFIGURED:
+        return "Google Sign-In is not configured on this server yet.", 500
+    # A random per-session token, checked again in the callback, so a
+    # forged/replayed callback request can't be used to log someone
+    # into an account they didn't actually authorize (CSRF protection
+    # for the OAuth flow).
+    state = secrets.token_urlsafe(24)
+    session['oauth_state'] = state
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'prompt': 'select_account',
+    }
+    return redirect(f'{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}')
+
+
+@app.route('/auth/google/callback')
+def google_callback():
+    if request.args.get('error'):
+        return redirect(url_for('home'))
+
+    state = request.args.get('state')
+    if not state or state != session.get('oauth_state'):
+        return "Invalid or expired login attempt — please try signing in again.", 400
+    session.pop('oauth_state', None)
+
+    code = request.args.get('code')
+    if not code:
+        return redirect(url_for('home'))
+
+    try:
+        token_response = requests.post(GOOGLE_TOKEN_ENDPOINT, data={
+            'code': code,
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'grant_type': 'authorization_code',
+        }, timeout=10)
+        token_response.raise_for_status()
+        access_token = token_response.json().get('access_token')
+
+        userinfo_response = requests.get(
+            GOOGLE_USERINFO_ENDPOINT,
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
+        userinfo_response.raise_for_status()
+        profile = userinfo_response.json()
+    except Exception as e:
+        print(f"❌ Google OAuth exchange failed: {e}")
+        return "Google login failed — please try again.", 500
+
+    google_id = profile.get('sub')
+    email = profile.get('email', '')
+    name = profile.get('name', '')
+    picture = profile.get('picture', '')
+    if not google_id:
+        return "Google login failed — no account ID returned.", 500
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    existing = conn.execute("SELECT * FROM users WHERE google_id = ?", (google_id,)).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE users SET email = ?, name = ?, picture = ?, last_login = ? WHERE google_id = ?",
+            (email, name, picture, now_iso, google_id)
+        )
+    else:
+        # New account — starts with the same 100 free coins guests get,
+        # and a fresh streak.
+        conn.execute(
+            """INSERT INTO users (google_id, email, name, picture, coins, streak, last_streak_date, created_at, last_login)
+               VALUES (?, ?, ?, ?, 100, 0, NULL, ?, ?)""",
+            (google_id, email, name, picture, now_iso, now_iso)
+        )
+    conn.commit()
+    conn.close()
+
+    session['user_id'] = google_id
+    session['user_name'] = name
+    session['user_picture'] = picture
+    return redirect(url_for('home'))
+
+
+@app.route('/auth/logout')
+def auth_logout():
+    session.pop('user_id', None)
+    session.pop('user_name', None)
+    session.pop('user_picture', None)
+    return redirect(url_for('home'))
+
+
+@app.route('/auth/me')
+def auth_me():
+    """Tells the frontend whether the visitor is signed in, and if so,
+    hands back their server-side coins/streak/profile — the single
+    source of truth once someone has an account, so every device they
+    log into shows the same numbers."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'logged_in': False, 'google_login_available': GOOGLE_LOGIN_CONFIGURED})
+    try:
+        conn = get_db()
+        row = conn.execute("SELECT * FROM users WHERE google_id = ?", (user_id,)).fetchone()
+        conn.close()
+        if not row:
+            session.pop('user_id', None)
+            return jsonify({'logged_in': False, 'google_login_available': GOOGLE_LOGIN_CONFIGURED})
+        return jsonify({
+            'logged_in': True,
+            'name': row['name'],
+            'email': row['email'],
+            'picture': row['picture'],
+            'coins': row['coins'],
+            'streak': row['streak'],
+            'last_streak_date': row['last_streak_date'],
+        })
+    except Exception as e:
+        print(f"❌ /auth/me error: {e}")
+        return jsonify({'logged_in': False, 'google_login_available': GOOGLE_LOGIN_CONFIGURED})
+
+
+@app.route('/user/sync', methods=['POST'])
+def user_sync():
+    """Lets the client push updated coins/streak values back up to the
+    signed-in user's account record, so they stay in sync everywhere.
+    Guests (not logged in) get 'ignored' here — their coins/streak
+    remain device-local only, exactly as before Google Sign-In existed."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'ignored'})
+    try:
+        data = request.get_json(silent=True) or {}
+        updates, params = [], []
+        if isinstance(data.get('coins'), int):
+            updates.append('coins = ?')
+            params.append(data['coins'])
+        if isinstance(data.get('streak'), int):
+            updates.append('streak = ?')
+            params.append(data['streak'])
+        if isinstance(data.get('last_streak_date'), str):
+            updates.append('last_streak_date = ?')
+            params.append(data['last_streak_date'])
+        if updates:
+            params.append(user_id)
+            conn = get_db()
+            conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE google_id = ?", params)
+            conn.commit()
+            conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"⚠️ /user/sync failed (non-critical): {e}")
+        return jsonify({'status': 'error'}), 200
+
+
+# ========================================
 # BUG FIX: Service Worker root-scope route
 # ========================================
 # The service worker file physically lives at static/sw.js, and it was
@@ -1091,14 +1300,20 @@ def library_save():
     if not title:
         title = 'Untitled Note'
 
+    # If signed in via Google, tag this note as belonging to that
+    # account (private + synced across their devices). Guests (no
+    # session) leave this NULL — their notes stay in the shared/global
+    # Library exactly as before, no behavior change for them.
+    owner_google_id = session.get('user_id')
+
     try:
         conn = get_db()
         conn.execute(
             """INSERT INTO notes
-               (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode, created_at, anon_id, user_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode, created_at, anon_id, user_name, owner_google_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode,
-             datetime.now(timezone.utc).isoformat(), anon_id, user_name)
+             datetime.now(timezone.utc).isoformat(), anon_id, user_name, owner_google_id)
         )
         conn.commit()
         new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -1113,9 +1328,20 @@ def library_save():
 def library_list():
     try:
         conn = get_db()
-        rows = conn.execute(
-            'SELECT id, subject, title, mode, created_at FROM notes ORDER BY created_at DESC'
-        ).fetchall()
+        user_id = session.get('user_id')
+        if user_id:
+            # Signed in: PRIVATE list — only this account's own notes,
+            # so it's the same list on every device they log into.
+            rows = conn.execute(
+                'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
+                (user_id,)
+            ).fetchall()
+        else:
+            # Guest: UNCHANGED — the original shared/global listing,
+            # exactly as it always worked before Google Sign-In existed.
+            rows = conn.execute(
+                'SELECT id, subject, title, mode, created_at FROM notes ORDER BY created_at DESC'
+            ).fetchall()
         conn.close()
         notes = [dict(row) for row in rows]
         return jsonify({'status': 'success', 'notes': notes})
@@ -1158,6 +1384,13 @@ def library_get(note_id):
 def library_delete(note_id):
     try:
         conn = get_db()
+        # If this note is privately owned (a signed-in account's note),
+        # only THAT account may delete it. Guest notes (owner_google_id
+        # is NULL) keep the original no-restriction behavior.
+        row = conn.execute('SELECT owner_google_id FROM notes WHERE id = ?', (note_id,)).fetchone()
+        if row and row['owner_google_id'] and row['owner_google_id'] != session.get('user_id'):
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'ඔබට මේ note එක delete කරන්න අවසර නෑ.'}), 403
         conn.execute('DELETE FROM notes WHERE id = ?', (note_id,))
         conn.commit()
         conn.close()

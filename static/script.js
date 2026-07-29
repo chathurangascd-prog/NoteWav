@@ -62,6 +62,80 @@ function trackUsageEvent(action) {
     }
 }
 
+// ========================================
+// GOOGLE SIGN-IN (account sync for coins/streak/library)
+// ========================================
+// Set once auth status is known — used by addCoins/spendCoins and the
+// streak tracker to decide whether to also push updates to the server
+// (signed-in users) or stay purely device-local (guests, unchanged
+// from before Google Sign-In existed).
+let notewavIsLoggedIn = false;
+
+async function checkGoogleAuthStatus() {
+    try {
+        const res = await fetch('/auth/me');
+        const data = await res.json();
+        notewavIsLoggedIn = !!data.logged_in;
+
+        const signinBtn = document.getElementById('google-signin-btn');
+        const signedInInfo = document.getElementById('google-signed-in-info');
+        const signedInName = document.getElementById('google-signed-in-name');
+
+        if (data.logged_in) {
+            if (signinBtn) signinBtn.classList.add('hidden');
+            if (signedInInfo) signedInInfo.classList.remove('hidden');
+            if (signedInName) signedInName.textContent = `Signed in as ${data.name || data.email || 'Google User'}`;
+
+            // Server is now the source of truth for coins/streak — pull
+            // the account's saved values down and overwrite whatever
+            // was in localStorage (so every device shows the same
+            // numbers once signed in).
+            if (typeof data.coins === 'number') {
+                try { localStorage.setItem('notewav_coins', String(data.coins)); } catch (e) { /* ignore */ }
+                if (typeof updateCoinsDisplay === 'function') updateCoinsDisplay();
+            }
+            if (typeof data.streak === 'number') {
+                try {
+                    localStorage.setItem('notewav_streak_data', JSON.stringify({
+                        lastDate: data.last_streak_date || todayLocalDateString(),
+                        streak: data.streak,
+                    }));
+                } catch (e) { /* ignore */ }
+                const streakEl = document.getElementById('streak-count-drawer');
+                if (streakEl) streakEl.textContent = `${data.streak} days`;
+            }
+            // Also reflect the Google name/picture in the local profile
+            // fields, so the greeting and menu drawer look consistent.
+            try {
+                const current = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+                current.name = data.name || current.name;
+                if (data.picture) current.avatarDataUrl = data.picture;
+                localStorage.setItem('notewav_profile', JSON.stringify(current));
+            } catch (e) { /* ignore */ }
+            if (typeof updateGreeting === 'function') updateGreeting();
+        } else {
+            if (signinBtn) signinBtn.classList.remove('hidden');
+            if (signedInInfo) signedInInfo.classList.add('hidden');
+        }
+    } catch (e) {
+        console.warn('Could not check Google auth status:', e);
+    }
+}
+
+// Pushes the CURRENT coins/streak values up to the server — a no-op
+// (server just replies 'ignored') for guests, so this is always safe
+// to call regardless of login state.
+function syncAccountToServer(partial) {
+    if (!notewavIsLoggedIn) return;
+    fetch('/user/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(partial),
+    }).catch(() => { /* best-effort only */ });
+}
+
+document.addEventListener('DOMContentLoaded', checkGoogleAuthStatus);
+
 document.addEventListener('DOMContentLoaded', function() {
     trackUsageEvent('app_opened');
 });
@@ -2068,6 +2142,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         localStorage.setItem(STREAK_KEY, JSON.stringify({ lastDate: today, streak }));
         streakCountEl.textContent = `${streak} days`;
+        syncAccountToServer({ streak: streak, last_streak_date: today });
     } catch (e) {
         console.warn('Study streak tracking unavailable:', e);
     }
@@ -2606,6 +2681,7 @@ function spendCoins(amount) {
         console.warn('Could not update coins balance:', e);
     }
     updateCoinsDisplay();
+    syncAccountToServer({ coins: current - amount });
     return true;
 }
 
@@ -2617,6 +2693,7 @@ function addCoins(amount) {
         console.warn('Could not update coins balance:', e);
     }
     updateCoinsDisplay();
+    syncAccountToServer({ coins: current + amount });
 }
 
 document.addEventListener('DOMContentLoaded', updateCoinsDisplay);
