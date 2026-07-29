@@ -10,28 +10,32 @@
 }
 
 :root {
+    /* NEW FIX: tells Firefox/Samsung Internet's "force dark" page-
+       darkening feature that this page is ALREADY properly dark-
+       themed, so it should not auto-override our colors (this is
+       exactly what was turning the gold gradient logo text into a
+       dark red/brown blob in those browsers). */
+    color-scheme: dark;
+
     /* Dark Theme Colors */
     --bg-primary: #14141e;
     --bg-secondary: #1c1c2a;
-    --bg-card: rgba(255, 255, 255, 0.023);
-    --bg-card-hover: rgba(255, 255, 255, 0);
+    /* FIX (was rgba(255,255,255,0.023) — nearly invisible without
+       blur): now that backdrop-filter blur is removed below (it was
+       the main cause of slowness/stacking in Firefox & some Samsung
+       Internet versions on weaker devices), the card background needs
+       a bit more opacity on its own to still look like a "card" and
+       not a flat, invisible box. */
+    --bg-card: rgba(255, 255, 255, 0.05);
+    --bg-card-hover: rgba(255, 255, 255, 0.03);
     --bg-input: rgba(255, 255, 255, 0.06);
     --bg-input-hover: rgba(255, 255, 255, 0.09);
     --border-color: rgba(58, 229, 16, 0.08);
-    /* CHANGED: was a teal hover border competing with the purple brand
-       color — now tinted from the same accent so hover states feel
-       like part of one system instead of a second color language */
     --border-hover: rgba(139, 92, 246, 0.55);
 
-    /* CHANGED: one signature accent (violet) used everywhere something
-       needs to say "selected / focused / this is the brand color" —
-       previously purple, gold and orange all competed for that job */
     --accent: #8b5cf6;
     --accent-soft: rgba(139, 92, 246, 0.16);
 
-    /* Gradients — --primary-grad is the ONE signature gradient, reused
-       everywhere (buttons, step numbers, visualizer, brand mark) rather
-       than introducing new gradients per element */
     --primary-grad: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%);
     --primary-grad-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     
@@ -82,7 +86,6 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* NEW: respect reduced-motion preference across all animations */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -92,9 +95,6 @@ body {
     }
 }
 
-/* NEW: visible keyboard focus states — previously only textarea had a
-   focus style, so keyboard users had no idea where they were on the
-   page for buttons, links, or the progress bar */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -189,10 +189,6 @@ body::after {
 }
 
 /* ===== BRAND TITLE ===== */
-/* CHANGED: was a separate gold/terracotta gradient competing with the
-   purple accent used everywhere else. Now uses Fraunces (a display
-   serif) for personality, and the SAME --primary-grad as the rest of
-   the app so the brand mark and the UI read as one system. */
 .brand h1 {
     font-family: 'Baloo 2', sans-serif;
     font-size: 2.8rem;
@@ -202,6 +198,11 @@ body::after {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    /* FIX: explicit fallback text color for any browser/mode where the
+       gradient-clip trick fails entirely (instead of silently falling
+       back to some unpredictable inherited/forced color) — closest
+       solid match to the gradient's midpoint. */
+    color: #E5A876;
     letter-spacing: -0.5px;
     line-height: 1.1;
 }
@@ -272,8 +273,14 @@ body::after {
    ======================================== */
 .glass-card {
     background: var(--bg-card);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    /* REMOVED: backdrop-filter: blur(24px) and -webkit-backdrop-filter
+       — this was the single biggest cause of the slowness/"stacking"
+       feeling reported on Firefox and some Samsung Internet builds,
+       especially on weaker devices. blur() is very GPU-expensive,
+       Chrome/Blink happens to optimize it well, but Gecko (Firefox)
+       and some Samsung Internet builds do not. With --bg-card's
+       opacity bumped up above, the card still reads visually as a
+       distinct "glass panel" without needing the actual blur effect. */
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 32px;
@@ -344,9 +351,6 @@ body::after {
     box-shadow: 0 4px 15px rgba(107, 48, 255, 0.25);
 }
 
-/* CHANGED: section headings now use the Fraunces display face too, so
-   the serif/sans pairing carries through the whole page instead of
-   being a one-off on the hero title */
 .card-header h2 {
     font-family: 'Fraunces', serif;
     font-size: 1.3rem;
@@ -467,11 +471,6 @@ textarea:hover {
     transform: translateY(-2px);
 }
 
-/* CHANGED (accessibility fix): the radio input was `display: none`,
-   which removes it from the tab order entirely — keyboard users could
-   not select Full Text / Smart Study mode at all. This keeps it
-   invisible but still focusable, and .mode-box:has(input:focus-visible)
-   below gives it a visible focus ring. */
 .mode-box input[type="radio"] {
     position: absolute;
     width: 1px;
@@ -485,18 +484,12 @@ textarea:hover {
     outline-offset: 3px;
 }
 
-/* CHANGED: selected-state border/glow now uses the single --accent
-   variable instead of a one-off orange (#f39317) that didn't match
-   anything else in the page */
 .mode-box:has(input:checked) {
     border-color: var(--accent);
     background: var(--accent-soft);
     box-shadow: 0 0 40px rgba(139, 92, 246, 0.10);
 }
 
-/* CHANGED: checkmark now sits in a small filled circle so it's legible
-   against any card background, instead of bare white text floating
-   in the corner */
 .mode-box:has(input:checked)::after {
     content: '✓';
     position: absolute;
@@ -684,11 +677,7 @@ textarea:hover {
     padding: 4px 0;
 }
 
-/* ===== VISUALIZER =====
-   NOTE: these bars are now driven live by the Web Audio API in
-   scripts.js while audio is playing (real frequency data, not just a
-   canned loop) — this CSS keyframe remains as the idle/ambient motion
-   and as a graceful fallback if Web Audio setup fails. */
+/* ===== VISUALIZER ===== */
 .player-visualizer {
     display: flex;
     justify-content: center;
@@ -704,6 +693,12 @@ textarea:hover {
     background: var(--primary-grad);
     border-radius: 4px;
     animation: waveAnim 1.5s ease-in-out infinite;
+    /* NEW FIX: these bars were animating CONSTANTLY from the moment
+       the page loads, even before any audio ever plays — 10 elements
+       looping forever for no reason, wasting battery/GPU on every
+       single visit. Now paused by default and only set to "running"
+       once .player-container.playing is actually applied (see below). */
+    animation-play-state: paused;
     opacity: 0.5;
     transition: height 0.08s ease;
 }
@@ -726,15 +721,10 @@ textarea:hover {
 
 .player-container.playing .wave-bar {
     animation-duration: 0.7s;
+    animation-play-state: running; /* NEW: only runs while actually playing */
     opacity: 1;
 }
 
-/* NEW: when JS successfully hooks up the Web Audio API analyser, it
-   adds this class and takes over bar height/opacity directly from
-   real playback data — so the canned CSS keyframe animation needs to
-   stand down instead of fighting it. If the analyser can't be set up
-   (unsupported browser, etc.), this class is never added and the
-   original CSS animation above still runs as the fallback. */
 .player-visualizer.audio-reactive .wave-bar {
     animation: none;
     transition: transform 0.08s ease-out, opacity 0.08s ease-out;
@@ -934,10 +924,6 @@ textarea:hover {
 /* ========================================
    MINI WAVE (loading indicator)
    ======================================== */
-/* NEW: replaces the generic fa-spinner icon in loading states with a
-   tiny version of the same waveform motif used in the audio player —
-   one consistent "this app is about sound" visual language instead of
-   a spinner unrelated to the product. */
 .mini-wave {
     display: inline-flex;
     align-items: flex-end;
@@ -967,7 +953,8 @@ textarea:hover {
     left: 50%;
     transform: translateX(-50%);
     background: var(--bg-card);
-    backdrop-filter: blur(24px);
+    /* REMOVED backdrop-filter: blur(24px) — same performance reason as
+       .glass-card above. */
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: 14px 28px;

@@ -20,12 +20,6 @@ function autoResizeTextarea(el, maxHeightPx) {
 // ========================================
 // LIGHTWEIGHT ANONYMOUS USAGE TRACKING (for the admin dashboard)
 // ========================================
-// "anon_id" is a random ID generated once and stored in this
-// browser's localStorage — NOT a real account/login, just a way to
-// tell "this same device visited again" from "a different device".
-// Paired with whatever display name the person entered (if any) so
-// an admin can see, e.g., "Kasun's device processed 5 notes" without
-// requiring students to actually sign in anywhere.
 function getOrCreateAnonId() {
     const KEY = 'notewav_anon_id';
     try {
@@ -127,9 +121,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const speedButtons = document.querySelectorAll('.speed-btn');
     const volumeSlider = document.getElementById('volume-slider');
 
-    // NEW: remember the student's preferred speed across sessions —
-    // previously it always reset to the default (1.25x) every time,
-    // even if they'd changed it last time.
     const SPEED_STORAGE_KEY = 'notewav_preferred_speed';
     try {
         const savedSpeed = localStorage.getItem(SPEED_STORAGE_KEY);
@@ -175,13 +166,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
-    // gTTS's base voice reads a bit slower than feels natural for a
-    // study podcast, and gTTS itself has no "faster" generation option
-    // — so instead, permanently boost the ACTUAL applied playback rate
-    // a bit above whatever speed button is selected. The button labels
-    // (0.75x, 1x, 1.25x, 1.5x) stay the same for the student to
-    // understand, but "1x" now genuinely sounds like a comfortable
-    // normal pace instead of sluggish.
     const SPEED_BOOST_MULTIPLIER = 1.15;
     function getEffectivePlaybackRate() {
         return playbackSpeed * SPEED_BOOST_MULTIPLIER;
@@ -521,10 +505,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: include a link back to the app itself in every share —
-    // when a student shares a note with a friend, the friend also
-    // gets a direct link to try NoteWav themselves (word-of-mouth
-    // growth), not just the note content.
     const APP_SHARE_URL = 'https://notewav.onrender.com';
 
     function getShareText() {
@@ -548,14 +528,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: "Audio එකත් සමඟ Share කරන්න" — the wa.me/t.me links above can
-    // only carry TEXT, not an actual audio file. To share the real
-    // audio, this uses the Web Share API (navigator.share) with the
-    // audio file attached, which opens the device's native share sheet
-    // — from there the student can pick WhatsApp, Telegram, or
-    // anything else, and the actual .mp3 goes along with the text.
-    // Not supported on most desktop browsers, so it's offered as an
-    // extra option alongside the text-only buttons, not a replacement.
     const shareWithAudioBtn = document.getElementById('share-with-audio-btn');
     if (shareWithAudioBtn) {
         shareWithAudioBtn.addEventListener('click', async function() {
@@ -689,20 +661,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     // UPDATE HIGHLIGHT BASED ON CURRENT TIME
     // ========================================
-    // FIX (highlight timing was noticeably off): the old version
-    // assumed every sentence/line takes an EQUAL share of the total
-    // audio duration — very wrong for a mix of short and long
-    // sentences. Now uses the REAL per-sentence duration measured
-    // during TTS synthesis (sent back from the server), and
-    // highlights word-PAIRS within each sentence — proportioned by
-    // each pair's share of that sentence's character count — so the
-    // highlight moves roughly twice per sentence instead of once per
-    // whole line, closer to natural reading pace.
     function updateHighlight(currentTime) {
         if (!highlightUnits || highlightUnits.length === 0) return;
 
-        // Small linear scan is plenty fast for realistic transcript
-        // lengths (a few hundred units at most).
         let activeIndex = -1;
         for (let i = 0; i < highlightUnits.length; i++) {
             if (currentTime >= highlightUnits[i].start && currentTime < highlightUnits[i].end) {
@@ -710,10 +671,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             }
         }
-        // If between units (e.g. during a pause) or past the last
-        // one, keep whichever unit's start time is closest to (and
-        // not after) currentTime, so highlighting doesn't blank out
-        // during the natural pauses between sentences.
         if (activeIndex === -1) {
             for (let i = highlightUnits.length - 1; i >= 0; i--) {
                 if (currentTime >= highlightUnits[i].start) {
@@ -735,11 +692,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     // RENDER LYRICS AS WORD-PAIR HIGHLIGHT UNITS
     // ========================================
-    // Builds highlightUnits from the REAL per-sentence timings the
-    // server measured while synthesizing audio. Falls back to the
-    // old naive equal-split-by-line approach only if timings weren't
-    // provided (e.g. an older cached response), so this never breaks
-    // outright.
     function renderLyrics(text, sentenceTimings) {
         if (!text) {
             highlightContainer.innerHTML = '';
@@ -754,7 +706,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const words = sentence.text.trim().split(/\s+/).filter(Boolean);
                 if (words.length === 0) return;
 
-                // Group into pairs of 2 words each.
                 const pairs = [];
                 for (let i = 0; i < words.length; i += 2) {
                     pairs.push(words.slice(i, i + 2).join(' '));
@@ -778,9 +729,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (highlightUnits.length === 0) {
-            // Fallback: no timing data available — split into lines
-            // and spread them evenly across the (unknown, filled in
-            // once metadata loads) audio duration, same as before.
             const lines = splitTextIntoLines(text);
             highlightUnits = lines.map((line, i) => ({ text: line, start: i, end: i + 1, _isFallback: true }));
         }
@@ -798,10 +746,6 @@ document.addEventListener('DOMContentLoaded', function() {
         highlightContainer.innerHTML = html;
     }
 
-    // NEW: click any word-pair in the transcript to jump the audio
-    // straight to that point — uses the SAME real timing data the
-    // highlight-follow logic uses, so clicking is exactly where the
-    // highlight will land, not an approximation.
     if (highlightContainer) {
         highlightContainer.addEventListener('click', function(e) {
             const lineEl = e.target.closest('.lyric-line');
@@ -814,8 +758,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const unit = highlightUnits[index];
             let seekTime;
             if (unit._isFallback) {
-                // No real timing data (older cached response) — fall
-                // back to the old equal-share estimate.
                 const timePerUnit = totalDuration / highlightUnits.length;
                 seekTime = index * timePerUnit;
             } else {
@@ -839,14 +781,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.mermaid) {
         mermaid.initialize({
             startOnLoad: false,
-            // FIX (arrows disappeared): switching to theme:'base' meant
-            // arrows/lines lost their default styling — 'base' needs a
-            // FULL set of theme variables supplied manually or several
-            // elements (like arrowheads) render invisible against the
-            // dark background. Reverted to 'dark' (fully-styled,
-            // working arrows/lines by default) and layered the visual
-            // polish (rounded corners, shadows, curves) on top via
-            // themeCSS instead, which works with any base theme.
             theme: 'dark',
             securityLevel: 'loose',
             fontFamily: 'Plus Jakarta Sans, sans-serif',
@@ -855,23 +789,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 nodeSpacing: 35,
                 rankSpacing: 90,
                 padding: 48,
-                curve: 'basis' // smooth curved connectors instead of sharp angles
+                curve: 'basis'
             },
             themeVariables: {
                 fontSize: '19px',
-                // FIX: arrows were using the theme's default line color,
-                // which happened to look the same green as the root
-                // node — confusing since arrows aren't meant to signal
-                // anything about branch color. A neutral, distinct
-                // color (matching the arrowhead fix below) makes
-                // arrows read as plain connectors regardless of which
-                // branch colors are in play.
                 lineColor: '#8b6fd6'
             },
-            // Polish pass — rounded node corners + soft glow shadow
-            // (matches the app's glass-card aesthetic elsewhere) and
-            // thicker connector lines. Mermaid embeds this raw CSS
-            // directly into the rendered SVG.
             themeCSS: `
                 .node rect, .node polygon, .node circle, .node ellipse {
                     rx: 14px; ry: 14px;
@@ -880,12 +803,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 .edgePaths .path, .edgePath .path {
                     stroke-width: 2.5px;
                 }
-                /* FIX (arrows still green despite lineColor variable):
-                   the theme variable wasn't winning against Mermaid's
-                   own generated edge styles. Forcing the stroke color
-                   directly on every class name Mermaid has used for
-                   edge paths across versions, with !important, so it
-                   can't lose to anything else. */
                 .edgePath path,
                 .edgePaths path,
                 path.flowchart-link,
@@ -899,15 +816,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 .node.root-node rect, .node.root-node polygon {
                     filter: drop-shadow(0 6px 22px rgba(107, 48, 255, 0.5));
                 }
-                /* FIX (arrowheads invisible): the connector LINES were
-                   visible but the triangular arrowhead markers at each
-                   line's end weren't — their fill wasn't being set
-                   explicitly by our custom styling, so it fell back to
-                   a color too close to the dark background to see.
-                   Marker paths live inside <marker> defs referenced by
-                   marker-end, and Mermaid gives them classes like
-                   flowchart-pointEnd / arrowheadPath — style both to
-                   be safe across Mermaid versions. */
                 marker path,
                 .arrowheadPath,
                 .flowchart-pointEnd,
@@ -932,33 +840,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mindmapLangEnBtn) mindmapLangEnBtn.classList.toggle('active', lang === 'en');
     }
 
-    // FIX (arrows stayed green no matter what CSS was tried): Mermaid's
-    // own generated styles for edges apparently win over any CSS rule
-    // we inject, even with !important — likely due to how/where
-    // themeCSS gets inserted relative to Mermaid's own <style> block.
-    // Setting the color directly via JavaScript on each path element,
-    // AFTER Mermaid has already rendered and styled everything, always
-    // wins — it's not part of the CSS cascade at all.
     function forceEdgeColor(containerEl) {
         if (!containerEl) return;
         const svgEl = containerEl.querySelector('svg');
         if (!svgEl) return;
-        // Every <path> that's an edge/connector (not inside a marker
-        // definition, which holds the arrowhead triangle shapes).
-        // Clearing any existing stroke attribute/inline style FIRST,
-        // then setting both the attribute AND the inline style with
-        // !important, covers every way Mermaid might have originally
-        // colored it (SVG presentation attribute vs CSS vs inline
-        // style all have different precedence — this beats all three).
-        //
-        // FIX (arrows looked like thick green "leaf/wing" shapes, not
-        // thin lines): the edge paths had FILL set (not just stroke),
-        // which is what created that tapered filled-shape look — our
-        // earlier fix only forced stroke, so the fill stayed green and
-        // kept the wing shape. Setting fill:none turns it back into a
-        // normal thin stroked line.
         svgEl.querySelectorAll('path, line, polyline').forEach(p => {
-            if (p.closest('marker')) return; // leave arrowhead shapes alone
+            if (p.closest('marker')) return;
             p.removeAttribute('style');
             p.setAttribute('stroke', '#8b6fd6');
             p.setAttribute('fill', 'none');
@@ -1048,25 +935,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const mindmapDownloadPdfBtn = document.getElementById('mindmap-download-pdf');
     const mindmapDownloadPngBtn = document.getElementById('mindmap-download-png');
 
-    // FIX (wide diagrams got cut off at the sides): a fixed "always
-    // zoom to 400%" default was too aggressive for diagrams with many
-    // parallel branches — they overflowed the modal's visible width
-    // badly. Auto-fit instead: measure the diagram's actual rendered
-    // size and compute a scale that fits it within the modal's visible
-    // area (capped so small diagrams don't get absurdly huge either).
     let mindmapZoom = 1;
     let mindmapNaturalWidth = 0;
     let mindmapNaturalHeight = 0;
 
-    // FIX (couldn't scroll to see content past the left/top edge once
-    // zoomed in): CSS transform:scale() only changes how something is
-    // PAINTED, not its actual layout box size — so a parent with
-    // overflow:auto never grows its scrollable area to match the
-    // visually-bigger content, no matter how zoomed in it looks.
-    // Setting real width/height (which the SVG then stretches to
-    // fill, since it has a viewBox) makes the container's actual
-    // layout size grow with zoom, so scrolling correctly reaches
-    // every part of the zoomed-in diagram.
     function setMindMapZoom(level) {
         mindmapZoom = Math.min(10, Math.max(0.3, level));
         if (mindmapZoomWrapper && mindmapNaturalWidth && mindmapNaturalHeight) {
@@ -1083,19 +955,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         mindmapZoomWrapper.innerHTML = lastMindMapSvg;
         forceEdgeColor(mindmapZoomWrapper);
-        mindmapZoomWrapper.style.transform = ''; // clear any old scale-based sizing
+        mindmapZoomWrapper.style.transform = '';
         mindmapModalBackdrop.classList.remove('hidden');
 
-        // Measure after the modal is actually visible/laid out, then
-        // pick a zoom level that fits the diagram to the viewport
-        // (falls back to 100% if measurement isn't possible).
         requestAnimationFrame(() => {
             const svgEl = mindmapZoomWrapper.querySelector('svg');
             if (svgEl && mindmapModalBody) {
-                // Measure the SVG's OWN natural size (its own width/
-                // height, not the wrapper's, since the wrapper hasn't
-                // been explicitly sized yet at this point) so later
-                // zoom changes always scale from the same baseline.
                 const widthAttr = parseFloat(svgEl.getAttribute('width'));
                 const heightAttr = parseFloat(svgEl.getAttribute('height'));
                 const svgRect = svgEl.getBoundingClientRect();
@@ -1109,7 +974,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const fitScale = Math.min(
                         availableWidth / mindmapNaturalWidth,
                         availableHeight / mindmapNaturalHeight,
-                        2.5 // don't over-zoom small/simple diagrams either
+                        2.5
                     );
                     setMindMapZoom(fitScale);
                     return;
@@ -1197,17 +1062,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const doc = parser.parseFromString(svgString, 'image/svg+xml');
         const svgEl = doc.documentElement;
 
-        // FIX (color/fill fixes never showed up in the exported PDF no
-        // matter how they were applied to the live on-screen DOM):
-        // html2canvas apparently doesn't reflect JS-applied style/attr
-        // changes made to a separately-inserted copy of the SVG. Doing
-        // it HERE instead — directly on this parsed, string-based copy,
-        // serialized back to text with XMLSerializer below — bakes the
-        // fix directly into the markup TEXT itself, before it's ever
-        // inserted into any DOM at all. That removes any ambiguity
-        // about what html2canvas does or doesn't pick up live.
         svgEl.querySelectorAll('path, line, polyline').forEach(p => {
-            if (p.closest('marker')) return; // leave arrowhead triangle shapes alone
+            if (p.closest('marker')) return;
             p.removeAttribute('style');
             p.setAttribute('stroke', '#8b6fd6');
             p.setAttribute('fill', 'none');
@@ -1235,9 +1091,6 @@ document.addEventListener('DOMContentLoaded', function() {
             height = height || 800;
         }
 
-        // Safety margin so edge content (text or thin connector lines)
-        // never gets clipped — a moderate margin is enough now that
-        // arrows are thin lines rather than filled wing shapes.
         const margin = Math.max(70, Math.round(width * 0.05));
         minX -= margin;
         minY -= margin;
@@ -1251,10 +1104,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return { svgString: new XMLSerializer().serializeToString(svgEl), width, height };
     }
 
-    // Shared by both PDF and PNG export — renders the mind map to an
-    // off-screen canvas (cloneNode-based fix for colors, brute-force
-    // padding for clipping — see history below). Returns the canvas,
-    // or null (after showing an error banner) if it couldn't render.
     async function generateMindMapCanvas() {
         if (!lastMindMapSvg) {
             showErrorBanner('Download කරන්න Mind Map එකක් නෑ.');
@@ -1262,13 +1111,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         try {
-            // FIX (arrows kept showing Mermaid's original green no
-            // matter what): Mermaid embeds its OWN <style> block
-            // INSIDE the SVG markup (with rules like ".edgePath
-            // path { stroke: green !important }"). Cloning the LIVE,
-            // already-correctly-styled DOM node with cloneNode(true)
-            // (rather than re-serializing to a string) preserves our
-            // forceEdgeColor() inline-style fix instead of losing it.
             const liveSvg = mindmapContainer.querySelector('svg');
             if (!liveSvg) {
                 showErrorBanner('Mind Map එක load වී නොමැත.');
@@ -1276,8 +1118,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const svgClone = liveSvg.cloneNode(true);
 
-            // Re-apply the color fix directly on the clone too, as
-            // a safety net (harmless if already correct).
             svgClone.querySelectorAll('path, line, polyline').forEach(p => {
                 if (p.closest('marker')) return;
                 p.setAttribute('stroke', '#8b6fd6');
@@ -1287,8 +1127,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 p.style.setProperty('fill', 'none', 'important');
             });
 
-            // Work out the real size from the clone's own viewBox/
-            // width/height, then add a safety margin.
             let width = 0, height = 0;
             const vbAttr = svgClone.getAttribute('viewBox');
             let vx = 0, vy = 0;
@@ -1311,9 +1149,6 @@ document.addEventListener('DOMContentLoaded', function() {
             svgClone.setAttribute('width', String(finalWidth));
             svgClone.setAttribute('height', String(finalHeight));
 
-            // Give the SVG an explicit background rect so it's not
-            // transparent once rasterized (canvas has no CSS
-            // background to fall back on).
             const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             bgRect.setAttribute('x', String(vx - brutePadding));
             bgRect.setAttribute('y', String(vy - brutePadding));
@@ -1322,41 +1157,9 @@ document.addEventListener('DOMContentLoaded', function() {
             bgRect.setAttribute('fill', '#14141e');
             svgClone.insertBefore(bgRect, svgClone.firstChild);
 
-            // FIX (arrows were missing entirely on mobile PNG
-            // downloads, and quality was inconsistent): html2canvas
-            // re-implements its own approximation of SVG rendering,
-            // and that approximation behaves differently across
-            // browser engines — desktop Firefox/Chrome handled our
-            // edge paths fine, but mobile browsers' html2canvas code
-            // path apparently dropped them. Switching to the browser's
-            // OWN native SVG renderer instead — load the serialized
-            // SVG into a real <img>, then draw that onto a canvas —
-            // sidesteps html2canvas's SVG handling entirely and uses
-            // the exact same rendering engine that already draws the
-            // mind map correctly on screen, on every platform.
-            // FIX ("Tainted canvases may not be exported" on mobile):
-            // the SVG's text uses font-family: 'Plus Jakarta Sans'
-            // (loaded from Google Fonts at the PAGE level). When that
-            // same SVG is rendered stand-alone via a blob URL + <img>,
-            // some mobile browsers try to fetch that external font to
-            // render the text and treat the canvas as tainted by
-            // cross-origin content afterward — even though the SVG
-            // itself came from a same-origin blob. Swapping to a
-            // built-in system font here removes any external
-            // resource dependency during the render, avoiding the
-            // taint entirely. (On-screen display is unaffected — this
-            // only touches this exported copy.)
             let svgString = new XMLSerializer().serializeToString(svgClone);
             svgString = svgString.replace(/Plus Jakarta Sans,?\s*/g, '');
 
-            // FIX (still tainted on mobile even after stripping the
-            // external font): blob: URLs are apparently still treated
-            // as "foreign" enough by some mobile browsers' canvas
-            // security checks to taint the canvas once drawn. A
-            // base64 data: URI is fully self-contained inline data
-            // with no indirection at all — this is the more
-            // consistently reliable fix documented for this exact
-            // "tainted canvas" issue with SVG-to-canvas rendering.
             const svgBase64 = btoa(unescape(encodeURIComponent(svgString)));
             const svgDataUrl = `data:image/svg+xml;base64,${svgBase64}`;
 
@@ -1367,11 +1170,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 img.src = svgDataUrl;
             });
 
-            // Adaptive scale: stay under a safe max canvas dimension
-            // so mobile browsers (which often silently cap canvas
-            // size around 4096px per side) never hit that ceiling —
-            // past it, browsers quietly downsample/clip instead of
-            // erroring, which is what looked like "quality loss".
             const SAFE_MAX_CANVAS_DIMENSION = 4000;
             const desiredScale = 2.5;
             const largestSide = Math.max(finalWidth, finalHeight);
@@ -1438,10 +1236,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: PNG export — same rendering pipeline as PDF, but downloads
-    // the raw image directly instead of wrapping it in a PDF page.
-    // Handy for pasting into a document/presentation, or when a
-    // plain image is more convenient to share than a PDF.
     if (mindmapDownloadPngBtn) {
         mindmapDownloadPngBtn.addEventListener('click', async function() {
             const canvas = await generateMindMapCanvas();
@@ -1497,14 +1291,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (uploadSourceMenu) uploadSourceMenu.classList.toggle('hidden');
     }
 
-    // NEW: clicking the upload area no longer jumps straight into the
-    // OS's plain file picker — it shows a small "Gallery / Camera"
-    // choice menu instead. This is more reliable than depending on
-    // browsers to surface a camera option in their native picker
-    // (behavior for a bare <input type="file"> without "capture"
-    // varies a lot and wasn't consistently offering a camera choice),
-    // and it needs no separate always-visible camera button on the
-    // page — the choice only appears right when it's needed.
     uploadArea.addEventListener('click', function(e) {
         if (e.target.closest('.image-preview')) return;
         if (isOCRRunning) return;
@@ -1534,7 +1320,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Close the menu if the person clicks/taps anywhere else on the page.
     document.addEventListener('click', function(e) {
         if (uploadSourceMenu && !uploadSourceMenu.classList.contains('hidden')) {
             if (!e.target.closest('.upload-area-wrapper')) {
@@ -2035,14 +1820,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // SPLASH SCREEN: guaranteed hide (JS fallback)
 // ========================================
-// FIX (splash screen stuck permanently, page never showing): the CSS
-// animation-delay + forwards approach can silently fail in several
-// real-world cases — a backgrounded tab throttling/pausing the
-// animation timer, prefers-reduced-motion rules interacting oddly
-// with the delay, or the animation simply never being triggered. This
-// forces the splash screen away after a fixed timeout regardless of
-// what the CSS animation is doing, so the app can never get stuck
-// behind it.
 window.addEventListener('load', function() {
     setTimeout(function() {
         const splash = document.getElementById('splash-screen');
@@ -2057,9 +1834,20 @@ window.addEventListener('load', function() {
 // ========================================
 // PWA: SERVICE WORKER REGISTRATION
 // ========================================
+// FIX (install button never appeared, especially on Samsung Internet):
+// previously this registered '/static/sw.js', which auto-restricts the
+// service worker's scope to '/static/' — meaning it could never
+// control the actual home page ('/'). Several browsers require the
+// service worker to control start_url before offering the install
+// prompt, so that check was silently failing. Now the SAME sw.js file
+// is served from the app's root path via a new Flask route
+// (@app.route('/sw.js') in app.py, with a Service-Worker-Allowed: /
+// header for extra safety), and registered here with an explicit
+// scope of '/' so it can control the entire site as the manifest
+// intends.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/static/sw.js')
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then((reg) => console.log('✅ Service worker registered:', reg.scope))
             .catch((err) => console.warn('⚠️ Service worker registration failed:', err));
     });
@@ -2099,16 +1887,40 @@ window.addEventListener('appinstalled', function() {
 });
 
 // ========================================
+// FIREFOX / OTHER NON-CHROMIUM: manual "Add to Home Screen" fallback
+// ========================================
+// NEW: Firefox (desktop & Android) never fires 'beforeinstallprompt'
+// at all — that's a Chromium-only API (Chrome, Samsung Internet,
+// Edge). Without this, the install button would just silently never
+// appear there. This detects that case and shows the SAME button, but
+// clicking it opens simple manual instructions instead of the native
+// prompt.
+document.addEventListener('DOMContentLoaded', function() {
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const btn = document.getElementById('install-app-btn');
+    if (!btn || !isFirefox || isStandalone) return;
+
+    setTimeout(() => {
+        btn.classList.remove('hidden');
+    }, 2500);
+
+    btn.addEventListener('click', function firefoxInstallHandler(e) {
+        if (deferredInstallPrompt) return; // let the normal Chromium flow handle it if it exists
+        e.stopImmediatePropagation();
+        alert('Firefox එකේ Install කරන්න:\n\n☰ Menu (⋮) → "Install" හෝ "Add to Home screen" click කරන්න.');
+    }, true);
+});
+
+// ========================================
 // SAFETY-CHECK TEXT FONT SIZE ADJUSTMENT
 // ========================================
-// Lets students bump the script-output textarea's font size up/down
-// for easier reading, persisted across visits via localStorage.
 document.addEventListener('DOMContentLoaded', function() {
     const FONT_SIZE_KEY = 'notewav_script_font_size';
     const MIN_PERCENT = 70;
     const MAX_PERCENT = 160;
     const STEP = 10;
-    const BASE_PX = 16; // the textarea's default font-size in px
+    const BASE_PX = 16;
 
     const decreaseBtn = document.getElementById('font-size-decrease');
     const increaseBtn = document.getElementById('font-size-increase');
@@ -2150,11 +1962,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // STUDY STREAK TRACKER
 // ========================================
-// Tracks consecutive-day usage entirely client-side (localStorage) —
-// no server/database needed. Visiting on a new calendar day that's
-// exactly one day after the last visit increments the streak; a
-// skipped day resets it back to 1. Now shown in the menu drawer
-// (moved out of the header to make room for the coins badge).
 document.addEventListener('DOMContentLoaded', function() {
     const STREAK_KEY = 'notewav_streak_data';
     const streakCountEl = document.getElementById('streak-count-drawer');
@@ -2203,11 +2010,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // APP UI LANGUAGE (Sinhala / English toggle)
 // ========================================
-// Translates the app's own STATIC labels/buttons (not AI-generated
-// content like the podcast script or mind map, which already follow
-// the note's own language). Sinhala is the default/current style;
-// English is a full translation of every tagged string. Persisted in
-// localStorage so the choice survives across visits.
 const NOTEWAV_TRANSLATIONS = {
     my_library: { si: 'My Library', en: 'My Library' },
     settings_title: { si: 'සැකසුම්', en: 'Settings' },
@@ -2288,12 +2090,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // LOCAL PROFILE (name + avatar photo)
 // ========================================
-// No login system exists yet — this is purely a device-local nicety
-// (like the streak tracker and font-size preference) so the person
-// can personalize their own view of the app: a display name and a
-// small profile photo, both saved in localStorage. Images are resized
-// down to a small square via canvas before storing, since localStorage
-// has limited space and a full-resolution photo would waste it.
 document.addEventListener('DOMContentLoaded', function() {
     const PROFILE_KEY = 'notewav_profile';
     const avatarBtn = document.getElementById('profile-avatar-btn');
@@ -2378,11 +2174,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // TIME-BASED GREETING (uses saved profile name)
 // ========================================
-// Exposed as a standalone global function (not just DOMContentLoaded-
-// scoped) so applyAppLanguage() can call it directly whenever the
-// language toggle changes — otherwise the greeting would only ever
-// reflect whatever language was active at the moment the page first
-// loaded, staying stale after a later language switch.
 const NOTEWAV_GREETINGS = {
     morning: { si: 'සුබ උදෑසනක්', en: 'Good Morning' },
     afternoon: { si: 'සුබ දහවලක්', en: 'Good Afternoon' },
@@ -2429,9 +2220,6 @@ document.addEventListener('DOMContentLoaded', updateGreeting);
 // ========================================
 // FIRST-VISIT WELCOME CARD (asks for the person's name once)
 // ========================================
-// Shows only when no name has been saved yet AND the person hasn't
-// already dismissed/skipped it before — so it never nags on repeat
-// visits, whether they filled it in or chose to skip.
 document.addEventListener('DOMContentLoaded', function() {
     const PROFILE_KEY = 'notewav_profile';
     const ONBOARDING_DONE_KEY = 'notewav_onboarding_done';
@@ -2449,17 +2237,13 @@ document.addEventListener('DOMContentLoaded', function() {
         existingName = (profile.name || '').trim();
         onboardingDone = localStorage.getItem(ONBOARDING_DONE_KEY) === 'true';
     } catch (e) {
-        // if storage is unreadable, just don't show the card rather
-        // than risk nagging every visit
         onboardingDone = true;
     }
 
     if (existingName || onboardingDone) {
-        return; // already have a name, or the person already dismissed this once
+        return;
     }
 
-    // Small delay so it appears after the splash screen fades, not
-    // stacked on top of it.
     setTimeout(() => {
         welcomeBackdrop.classList.remove('hidden');
         welcomeNameInput.focus();
@@ -2487,8 +2271,6 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch (e) {
                 console.warn('Could not save name:', e);
             }
-            // Keep the menu drawer's profile field in sync too, in
-            // case the person opens it later in this same session.
             const drawerNameInput = document.getElementById('profile-name-input');
             if (drawerNameInput) drawerNameInput.value = name;
             updateGreeting();
@@ -2510,12 +2292,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // STUDY TIME TRACKER (minutes listened today)
 // ========================================
-// Accumulates real listening time via the natural small deltas
-// between consecutive 'timeupdate' events during normal playback —
-// deliberately ignores big jumps (seeks, skip buttons, new audio
-// loads) so a single skip doesn't get miscounted as minutes studied.
-// Resets each new calendar day, stored in localStorage like the
-// streak tracker.
 let lastTrackedAudioTime = null;
 
 function todayLocalDateString() {
@@ -2571,12 +2347,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // VOICE INPUT (speak instead of type)
 // ========================================
-// Uses the browser's built-in Web Speech API — free, no server cost,
-// but support/quality varies by browser and language (works best in
-// Chrome; Sinhala recognition quality depends entirely on Google's
-// speech backend behind the scenes, so results may be imperfect —
-// treat this as a rough starting point students can then edit, not a
-// guaranteed-accurate transcription).
 document.addEventListener('DOMContentLoaded', function() {
     const voiceBtn = document.getElementById('note-input-voice-btn');
     const targetNoteInput = document.getElementById('note-input');
@@ -2584,7 +2354,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionCtor) {
-        voiceBtn.style.display = 'none'; // hide entirely if unsupported, rather than showing a dead button
+        voiceBtn.style.display = 'none';
         return;
     }
 
@@ -2599,7 +2369,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         recognition.onstart = function() {
             isListening = true;
-            voiceBtn.classList.add('copied'); // reuse the existing "active" green style
+            voiceBtn.classList.add('copied');
             trackUsageEvent('voice_input_used');
         };
         recognition.onresult = function(event) {
@@ -2647,10 +2417,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // LIBRARY BACKUP (Export / Import as JSON)
 // ========================================
-// The notes database isn't guaranteed to survive a redeploy on
-// Render's free tier — this lets a student download all their saved
-// notes as a single JSON file (real backup, kept on their own device)
-// and re-import it later if the server-side data is ever lost.
 document.addEventListener('DOMContentLoaded', function() {
     const exportBtn = document.getElementById('library-export-btn');
     const importBtn = document.getElementById('library-import-btn');
@@ -2742,13 +2508,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // COINS SYSTEM (placeholder — for future paid features)
 // ========================================
-// NoteWav doesn't have any paid/coin-consuming features yet — this is
-// a forward-looking placeholder so the UI/UX for a future "coins"
-// economy already exists. Everyone currently gets a starting balance
-// of FREE coins (clearly labelled as such, not implying real currency
-// or a purchase). When real paid features are added later, hook into
-// spendCoins()/addCoins() here rather than building a new system from
-// scratch.
 const COINS_KEY = 'notewav_coins';
 const STARTING_FREE_COINS = 100;
 
@@ -2770,8 +2529,6 @@ function updateCoinsDisplay() {
     if (el) el.textContent = String(getCoinsBalance());
 }
 
-// Exposed globally so a future feature can call these directly, e.g.
-// spendCoins(10) before unlocking something paid.
 function spendCoins(amount) {
     const current = getCoinsBalance();
     if (current < amount) return false;
@@ -2930,12 +2687,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // NOTIFICATION BELL (admin → users broadcast)
 // ========================================
-// Polls /announcements/latest periodically. If the latest
-// announcement's ID is newer than whatever ID this browser last
-// marked as "seen" (localStorage), a red dot badge appears on the
-// bell. Clicking the bell shows the message and marks it seen,
-// clearing the badge — same pattern as any simple notification
-// system, just without needing real user accounts.
 document.addEventListener('DOMContentLoaded', function() {
     const SEEN_KEY = 'notewav_last_seen_announcement_id';
     const bellBtn = document.getElementById('notification-bell-btn');

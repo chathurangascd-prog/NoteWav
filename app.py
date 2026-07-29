@@ -9,7 +9,7 @@ import glob
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
 from google import genai
 from google.genai import types
 from gtts import gTTS
@@ -508,14 +508,6 @@ def _sanitize_mermaid_labels(code):
 
 
 # Maps Unicode subscript/superscript digits to plain ASCII digits.
-# FIX (chemical formulas like H₂O looked cramped/cut off in mind map
-# nodes): subscript/superscript glyphs (₂, ², etc.) aren't sized like
-# regular text in most fonts, so Mermaid's node-box height estimate
-# (based on normal character metrics) doesn't leave enough room for
-# them, making the label look visually clipped. Converting to plain
-# digits (H2O instead of H₂O) sidesteps the font-metric mismatch
-# entirely — this is a safety net in case Gemini uses them despite
-# being instructed not to.
 _SUBSCRIPT_SUPERSCRIPT_MAP = str.maketrans({
     '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
     '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
@@ -535,19 +527,6 @@ def _clean_mermaid_code(code):
 
 
 def _clean_podcast_script(text):
-    """FIX (chemical formulas showed up as literal "$H_2O$" in the
-    readable/narrated script): despite being instructed not to,
-    Gemini sometimes writes chemical formulas or math using LaTeX-style
-    notation ($...$ delimiters, _ for subscript, ^ for superscript,
-    sometimes with {braces} for grouping too, e.g. "$H_{2}O$"). That's
-    meaningless as plain text — it reads oddly out loud via TTS and
-    looks broken on screen. This is a safety net: strip ALL LaTeX
-    syntax characters (_, ^, {, }, \\) from inside $...$ math sections,
-    then remove the $ delimiters themselves — leaving just the plain
-    alphanumeric content. Also catches stray _ / ^ markers that show up
-    OUTSIDE any $...$ wrapper, in case Gemini drops the delimiters but
-    keeps the subscript syntax.
-    """
     if not text or not isinstance(text, str):
         return text
     text = text.translate(_SUBSCRIPT_SUPERSCRIPT_MAP)
@@ -557,31 +536,18 @@ def _clean_podcast_script(text):
         return re.sub(r'[_^{}\\]', '', inner)
 
     text = re.sub(r'\$([^$]+)\$', strip_latex_markup, text)
-    # Safety net for stray _ / ^ markers outside any $...$ wrapper.
     text = re.sub(r'(?<=[A-Za-z0-9])_(?=[A-Za-z0-9])', '', text)
     text = re.sub(r'(?<=[A-Za-z0-9])\^(?=[A-Za-z0-9])', '', text)
     return text
 
 
 def _is_transient_gemini_error(exc):
-    """Distinguishes a transient server-side hiccup (worth a quick
-    retry) from a permanent problem (bad API key, safety block,
-    malformed request) where retrying would just waste time and hit
-    the same failure again."""
     msg = str(exc).upper()
     transient_markers = ['500', '502', '503', '504', 'INTERNAL', 'UNAVAILABLE', 'TIMEOUT', 'DEADLINE_EXCEEDED']
     return any(marker in msg for marker in transient_markers)
 
 
 def _is_rate_limit_error(exc):
-    """A 429/RESOURCE_EXHAUSTED means the API key's quota (often the
-    free tier's daily/per-minute request cap) is used up. This is NOT
-    the same kind of "transient" as a 500 — Google's own error message
-    suggests waiting up to ~35 seconds, which is too long to block a
-    web request for (risks the server's own request timeout killing
-    it first). So this gets its own short-retry-then-clear-message
-    path instead of the generic transient retry loop.
-    """
     msg = str(exc).upper()
     return '429' in msg or 'RESOURCE_EXHAUSTED' in msg or 'QUOTA' in msg
 
@@ -595,15 +561,6 @@ def call_gemini_structured(note_text, max_retries=3):
 {note_text}
 """
 
-    # FIX (occasional "Gemini request failed: 500 INTERNAL" shown to
-    # students): that error is a transient hiccup on Google's servers,
-    # not a bug here — it usually succeeds on a quick retry. Rather
-    # than making the student notice this and manually click "try
-    # again", retry automatically a few times with a short backoff
-    # before giving up and surfacing an error. Non-transient failures
-    # (bad API key, safety blocks, malformed requests) are NOT
-    # retried — retrying those would just waste time reproducing the
-    # same permanent failure.
     last_error = None
     for attempt in range(1, max_retries + 1):
         try:
@@ -623,9 +580,6 @@ def call_gemini_structured(note_text, max_retries=3):
             last_error = e
 
             if _is_rate_limit_error(e):
-                # One short retry only (a few seconds) in case it was a
-                # brief per-minute burst — but don't try to wait out a
-                # full 30+ second quota window inside a live request.
                 if attempt < 2:
                     print(f"⚠️ Gemini rate-limited (attempt {attempt}), short retry in 4s: {e}")
                     time.sleep(4)
@@ -643,9 +597,6 @@ def call_gemini_structured(note_text, max_retries=3):
                 continue
             raise GeminiGenerationError(f"Gemini request failed: {e}")
     else:
-        # Loop exhausted without a successful break (shouldn't normally
-        # reach here since the last iteration always raises above, but
-        # kept as a safety net).
         raise GeminiGenerationError(f"Gemini request failed after {max_retries} attempts: {last_error}")
 
     if not getattr(response, 'candidates', None):
@@ -657,11 +608,6 @@ def call_gemini_structured(note_text, max_retries=3):
     if 'SAFETY' in finish_reason.upper():
         raise GeminiGenerationError("Content was blocked by Gemini's safety filters.")
     if 'MAX_TOKENS' in finish_reason.upper():
-        # FIX (helps diagnose "response could not be parsed as JSON"
-        # failures): if Gemini hits the output token cap mid-generation,
-        # the JSON gets cut off mid-string and fails to parse — but the
-        # generic parse-failure message didn't say WHY. This gives a
-        # much clearer signal when it happens again.
         raise GeminiGenerationError(
             "Gemini's response was cut off (hit the output length limit) — try shortening the note a bit."
         )
@@ -674,9 +620,6 @@ def call_gemini_structured(note_text, max_retries=3):
 
     podcast_script = _clean_podcast_script((data.get('podcast_script') or '').strip())
     if '$' in podcast_script or '_' in podcast_script:
-        # Diagnostic only — helps confirm in Render's logs whether the
-        # cleanup actually ran and what (if anything) slipped through,
-        # without blocking the response.
         print(f"⚠️ podcast_script still contains $ or _ after cleanup: {podcast_script[:200]!r}")
     mermaid_code_si = _clean_mermaid_code(data.get('mermaid_code_si'))
     mermaid_code_en = _clean_mermaid_code(data.get('mermaid_code_en'))
@@ -815,6 +758,37 @@ def home():
     return render_template('index.html')
 
 
+# ========================================
+# BUG FIX: Service Worker root-scope route
+# ========================================
+# The service worker file physically lives at static/sw.js, and it was
+# being registered from script.js as navigator.serviceWorker.register
+# ('/static/sw.js'). Registering a service worker from a URL under
+# /static/ automatically restricts its "scope" to /static/ — meaning it
+# can NEVER control the home page ("/"), only files under /static/.
+#
+# Several browsers (Samsung Internet in particular) require the
+# service worker to control start_url ("/", per manifest.json) as part
+# of their install-prompt eligibility checks. Because the scope was
+# wrongly limited to /static/, that check silently failed and the
+# "Install app" button never appeared, even though everything else
+# (manifest.json, icons, HTTPS) was correct.
+#
+# Fix: serve the exact same sw.js file content from the ROOT path
+# (/sw.js) instead. script.js's register() call is updated (see
+# script.js) to register '/sw.js' with an explicit scope of '/', which
+# gives the service worker control over the entire site as intended.
+@app.route('/sw.js')
+def service_worker():
+    response = send_from_directory('static', 'sw.js')
+    # Explicitly declare the widest allowed scope in the response
+    # header too — belt-and-suspenders alongside the register({scope})
+    # call on the frontend, since some browsers check this header.
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['Content-Type'] = 'application/javascript'
+    return response
+
+
 @app.route('/process-note', methods=['POST'])
 def process_note():
     data = request.get_json(silent=True) or {}
@@ -923,11 +897,6 @@ def library_list():
 
 @app.route('/library/export', methods=['GET'])
 def library_export():
-    """Returns every saved note with FULL data (not just the summary
-    fields library_list gives) — used by the frontend's backup/export
-    feature, since the notes database on Render's free tier isn't
-    guaranteed to survive a redeploy. Downloading this as a JSON file
-    lets a student restore their notes later via /library/save."""
     try:
         conn = get_db()
         rows = conn.execute(
@@ -986,10 +955,6 @@ def health():
 # ========================================
 @app.route('/track', methods=['POST'])
 def track_event():
-    """Records a single anonymous usage event. Fails silently (never
-    breaks the actual feature the person is using) if anything goes
-    wrong here — tracking is a nice-to-have for the admin, not
-    something that should ever block a student's actual task."""
     try:
         data = request.get_json(silent=True) or {}
         anon_id = (data.get('anon_id') or '').strip()[:64]
@@ -1004,10 +969,6 @@ def track_event():
             "INSERT INTO usage_events (anon_id, user_name, action, created_at) VALUES (?, ?, ?, ?)",
             (anon_id, user_name, action, datetime.now(timezone.utc).isoformat())
         )
-        # Mirror the frontend's coins balance (localStorage) here too,
-        # so the admin can see it — this doesn't create any real
-        # server-side spend/earn logic, just reports the last-seen
-        # value for visibility.
         if isinstance(coins, int):
             conn.execute(
                 """INSERT INTO user_state (anon_id, coins, updated_at) VALUES (?, ?, ?)
@@ -1045,12 +1006,6 @@ def admin_logout():
 
 
 def _get_admin_usage_data():
-    """Shared by the dashboard page (initial load) and the /admin/data
-    JSON endpoint (used for live polling) so both always show
-    identical numbers. Converts timestamps from UTC (how they're
-    stored) to Sri Lanka time (UTC+5:30) for display — showing raw
-    UTC looked "wrong" to anyone checking from Sri Lanka, since it's
-    5.5 hours behind local time."""
     conn = get_db()
     users = conn.execute("""
         SELECT
@@ -1085,7 +1040,6 @@ def _get_admin_usage_data():
             return iso_str[:16].replace('T', ' ')
 
     def is_online(iso_str):
-        """'Online now' = last activity within the last 5 minutes."""
         if not iso_str:
             return False
         try:
@@ -1110,8 +1064,6 @@ def _get_admin_usage_data():
 
 
 def _get_daily_activity(days=7):
-    """Note/audio counts per calendar day (Sri Lanka time) for the
-    last N days — used for the simple activity bar chart."""
     conn = get_db()
     rows = conn.execute("""
         SELECT
@@ -1125,12 +1077,11 @@ def _get_daily_activity(days=7):
     """, (days,)).fetchall()
     conn.close()
     result = [dict(row) for row in rows]
-    result.reverse()  # oldest first, for a left-to-right chart
+    result.reverse()
     return result
 
 
 def _get_top_subjects(limit=8):
-    """Which subjects students are saving the most notes under."""
     conn = get_db()
     rows = conn.execute("""
         SELECT subject, COUNT(*) AS note_count
@@ -1144,9 +1095,6 @@ def _get_top_subjects(limit=8):
 
 
 def _get_feature_usage():
-    """Counts every distinct action type ever tracked — shows which
-    features actually get used (voice input, PNG/PDF export, etc.),
-    not just the two headline stats (notes/audio)."""
     conn = get_db()
     rows = conn.execute("""
         SELECT action, COUNT(*) AS count
@@ -1159,10 +1107,6 @@ def _get_feature_usage():
 
 
 def _get_user_growth(days=14):
-    """Cumulative distinct-user growth over the last N days — for
-    each anon_id, its EARLIEST event counts as that device's "join
-    day"; grouping those join days and running a cumulative sum gives
-    a simple growth curve."""
     conn = get_db()
     rows = conn.execute("""
         SELECT substr(first_seen, 1, 10) AS day, COUNT(*) AS new_users
@@ -1177,8 +1121,6 @@ def _get_user_growth(days=14):
     conn.close()
 
     all_days = [dict(row) for row in rows]
-    # Keep only the last N days but preserve the running total from
-    # everything before that window too.
     running_total = 0
     result = []
     cutoff_days = all_days[-days:] if len(all_days) > days else all_days
@@ -1212,10 +1154,6 @@ def admin_user_growth():
 
 @app.route('/admin/full-backup')
 def admin_full_backup():
-    """Downloads EVERY table (notes, usage_events, announcements) as
-    one JSON file — a genuine full backup, beyond the usage-only CSV
-    export, given the SQLite database isn't guaranteed to survive a
-    Render redeploy."""
     if not _is_admin_logged_in():
         return redirect(url_for('admin_login'))
     try:
@@ -1244,9 +1182,6 @@ def admin_full_backup():
 
 @app.route('/admin/data')
 def admin_data():
-    """JSON version of the same dashboard data — polled by the
-    dashboard page's own JavaScript every few seconds so the numbers
-    update live without the person needing to hit refresh."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
@@ -1278,8 +1213,6 @@ def admin_top_subjects():
 
 @app.route('/admin/user-timeline/<anon_id>')
 def admin_user_timeline(anon_id):
-    """Every individual event for one specific device/browser, in
-    order — the "drill into this one user" view."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
@@ -1307,9 +1240,6 @@ def admin_user_timeline(anon_id):
 
 @app.route('/admin/notes-list')
 def admin_notes_list():
-    """Library notes browser — lets the admin see/search/delete saved
-    notes without needing to go through the actual student-facing
-    app."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
@@ -1436,9 +1366,6 @@ def admin_announce():
 
 @app.route('/announcements/latest')
 def announcements_latest():
-    """Public — every visitor's browser polls this periodically to
-    check for a new admin message. No auth needed since it's a
-    one-way broadcast, not sensitive data."""
     try:
         conn = get_db()
         row = conn.execute(
