@@ -333,15 +333,37 @@ def split_into_sentences(text):
     return [p.strip() for p in parts if p.strip()]
 
 
-def split_into_clauses(sentence):
+def split_into_clauses(sentence, max_words=14):
     """Splits a single sentence further at commas/semicolons — these are
     NOT separate 'sentences' for highlight-timing purposes (the frontend
     still highlights the whole original sentence as one unit), but
     giving each clause its own tiny breathing pause during synthesis
     makes long sentences sound much less rushed/robotic, closer to how
-    a person naturally pauses briefly at a comma before continuing."""
-    parts = re.split(r'(?<=[,;])\s+', sentence)
-    return [p.strip() for p in parts if p.strip()]
+    a person naturally pauses briefly at a comma before continuing.
+
+    SAFETY NET: if a clause has no comma/semicolon at all (or the AI's
+    system-prompt instruction to add natural breathing commas didn't
+    get followed for some reason — or this is Full Text Mode, using the
+    student's own raw text as-is, which the system instruction never
+    even sees) and ends up longer than max_words, it gets force-split at
+    a word boundary anyway. Returns a list of (clause_text, is_forced)
+    tuples — 'is_forced' clauses get a shorter, more subtle pause than a
+    real punctuation-based clause break (see clause_pause_ms handling in
+    synthesize_gtts_natural), since there's no actual grammatical pause
+    there — just a practical breath before the sentence runs on too
+    long."""
+    raw_parts = re.split(r'(?<=[,;])\s+', sentence)
+    final_parts = []
+    for part in raw_parts:
+        words = part.split()
+        if len(words) <= max_words:
+            final_parts.append((part, False))
+        else:
+            for i in range(0, len(words), max_words):
+                chunk = ' '.join(words[i:i + max_words]).strip()
+                if chunk:
+                    final_parts.append((chunk, True))
+    return [(p, forced) for (p, forced) in final_parts if p.strip()]
 
 
 def _tts_sentence_to_segment(args):
@@ -354,7 +376,7 @@ def _tts_sentence_to_segment(args):
 
 
 def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600,
-                             clause_pause_ms=140, max_workers=5):
+                             clause_pause_ms=140, forced_break_pause_ms=90, max_workers=5):
     """Returns (combined_audio, sentence_timings) where sentence_timings
     is a list of {"text": str, "start": float, "end": float} in
     SECONDS — the real, measured duration of each sentence's own TTS
@@ -366,12 +388,14 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
 
     NEW (naturalness tuning): each sentence is further split into
     comma/semicolon-delimited CLAUSES, synthesized individually, and
-    stitched back together with a short clause_pause_ms silence between
-    them. Sentence-level highlight timing is unaffected (still one
-    timing entry per original full sentence) — only the INTERNAL pacing
-    of longer sentences changes, giving them a brief natural breath at
-    each comma instead of running straight through at gTTS's flat,
-    uninterrupted pace."""
+    stitched back together with a short pause between them — a real
+    comma-based clause gets clause_pause_ms, while a clause that had to
+    be force-split purely because it ran too long with NO punctuation
+    at all gets a shorter forced_break_pause_ms (a subtle breath, not an
+    obvious comma pause, since grammatically there wasn't one there).
+    Sentence-level highlight timing is unaffected (still one timing
+    entry per original full sentence) — only the INTERNAL pacing of
+    longer sentences changes."""
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
@@ -383,38 +407,47 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     if not flat_sentences:
         flat_sentences = [(text, True)]
 
-    # Pre-split every sentence into its clauses, and build ONE flat task
-    # list across ALL clauses of ALL sentences — keeping the thread pool
-    # working on the smallest possible units in parallel, rather than
-    # looping sentence-by-sentence (which would serialize each
-    # sentence's own clause calls one after another).
-    sentence_clause_lists = [split_into_clauses(s) or [s] for (s, _) in flat_sentences]
+    # Pre-split every sentence into its clauses (each tagged with
+    # whether the break was a real punctuation break or a forced
+    # word-count break), and build ONE flat task list across ALL
+    # clauses of ALL sentences — keeping the thread pool working on the
+    # smallest possible units in parallel, rather than looping
+    # sentence-by-sentence (which would serialize each sentence's own
+    # clause calls one after another).
+    sentence_clause_lists = [split_into_clauses(s) or [(s, False)] for (s, _) in flat_sentences]
     tasks = []
     task_owner = []  # parallel list: which (sentence_idx, clause_idx) each task belongs to
+    task_is_forced = []  # whether THIS clause was a forced word-count split
     for sentence_idx, clauses in enumerate(sentence_clause_lists):
-        for clause_idx, clause_text in enumerate(clauses):
+        for clause_idx, (clause_text, is_forced) in enumerate(clauses):
             tasks.append((clause_text, lang))
             task_owner.append((sentence_idx, clause_idx))
+            task_is_forced.append(is_forced)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         clause_segments_flat = list(executor.map(_tts_sentence_to_segment, tasks))
 
     # Regroup the flat clause segments back under their owning sentence,
     # in original clause order, then stitch each sentence's own clauses
-    # together with the short clause-level pause.
+    # together with the appropriate pause (real comma vs. forced break).
     clause_silence = AudioSegment.silent(duration=clause_pause_ms, frame_rate=GTTS_FRAME_RATE)
+    forced_silence = AudioSegment.silent(duration=forced_break_pause_ms, frame_rate=GTTS_FRAME_RATE)
     segments_by_sentence = [[] for _ in flat_sentences]
-    for (sentence_idx, clause_idx), seg in zip(task_owner, clause_segments_flat):
-        segments_by_sentence[sentence_idx].append((clause_idx, seg))
+    for (sentence_idx, clause_idx), seg, is_forced in zip(task_owner, clause_segments_flat, task_is_forced):
+        segments_by_sentence[sentence_idx].append((clause_idx, seg, is_forced))
 
     segments = []
     for sentence_idx in range(len(flat_sentences)):
-        clause_segs = [seg for _, seg in sorted(segments_by_sentence[sentence_idx], key=lambda x: x[0])]
+        clause_entries = sorted(segments_by_sentence[sentence_idx], key=lambda x: x[0])
         sentence_audio = AudioSegment.silent(duration=0, frame_rate=GTTS_FRAME_RATE)
-        for i, clause_seg in enumerate(clause_segs):
+        for i, (_, clause_seg, is_forced) in enumerate(clause_entries):
             sentence_audio += clause_seg
-            if i != len(clause_segs) - 1:
-                sentence_audio += clause_silence
+            if i != len(clause_entries) - 1:
+                # The pause AFTER this clause depends on whether the NEXT
+                # clause's break was forced (word-count) or a real comma —
+                # using is_forced of the clause that just ended is close
+                # enough in practice since forced breaks are symmetric.
+                sentence_audio += forced_silence if is_forced else clause_silence
         segments.append(sentence_audio)
 
     sentence_silence = AudioSegment.silent(duration=pause_ms, frame_rate=GTTS_FRAME_RATE)
@@ -519,6 +552,12 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    යොදාගෙන ගලායන කතාවක් ලෙස ලියන්න. Tamil ලියද්දී ඒ හා සමාන ස්වාභාවික, කථනාත්මක,
    podcast-style Tamil වචන/සිතුවිලි යොදාගෙන ලියන්න.
 3. සිංහල හෝ Tamil ව්‍යාකරණ සහ අක්ෂර වින්‍යාසය නිවැරදිව යොදන්න.
+3a. **වාක්‍ය දිග සහ Breathing Pauses:** එක් වාක්‍යයක් වචන 20කට වඩා දිග නොවෙන්න බලන්න —
+    දිග අදහසක් තිබේ නම්, එය කුඩා වාක්‍ය කිහිපයකට කඩන්න, නැත්නම් comma (,) යොදාගෙන
+    ස්වාභාවික breathing point එකක් දෙන්න. **හුස්මක්වත් නොගෙන දිගටම කියවෙන ලෙස** වචන
+    20+ ක් comma එකක්වත් නැතිව එක දිගට ලියන්න එපා — TTS audio එකෙන් මෙය අස්වාභාවික ලෙස
+    ඇසෙනවා. සාමාන්‍යයෙන් වචන 10-15ක් පමණ තැබූ පසු comma එකකින් හෝ වාක්‍ය අවසන් කිරීමකින්
+    breathing point එකක් දෙන්න.
 4. **වැදගත් සීමාව:** "podcast_script" එක අකුරු {MAX_TEXT_LENGTH - 200}ක් නොඉක්මවිය
    යුතුය (spaces ඇතුළුව). පාඩම ඉතා දිග නම්, පොඩ්කාස්ට් වචන (යාලුවනේ, ඊළඟට වැනි)
    අඩුවෙන් යොදාගෙන හෝ core content එකට priority දී, එම සීමාව තුළ තබාගන්න — core
