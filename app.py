@@ -1113,9 +1113,16 @@ def google_callback():
     conn = get_db()
     existing = conn.execute("SELECT * FROM users WHERE google_id = ?", (google_id,)).fetchone()
     if existing:
+        # NEW: name is NOT overwritten here anymore. If the person has
+        # customized their display name (via the edit-name feature),
+        # that choice should survive every future Google login — only
+        # email/picture/last_login refresh automatically. Name only
+        # ever gets its initial value from Google at account CREATION
+        # (the 'else' branch below), and after that, only the
+        # dedicated /user/update-profile endpoint can change it.
         conn.execute(
-            "UPDATE users SET email = ?, name = ?, picture = ?, last_login = ? WHERE google_id = ?",
-            (email, name, picture, now_iso, google_id)
+            "UPDATE users SET email = ?, picture = ?, last_login = ? WHERE google_id = ?",
+            (email, picture, now_iso, google_id)
         )
     else:
         # New account — starts with the same 100 free coins guests get,
@@ -1174,7 +1181,29 @@ def auth_me():
         return jsonify({'logged_in': False, 'google_login_available': GOOGLE_LOGIN_CONFIGURED})
 
 
-@app.route('/user/sync', methods=['POST'])
+@app.route('/user/update-profile', methods=['POST'])
+def user_update_profile():
+    """Lets a signed-in person set a custom display name on their
+    account — persisted server-side so it follows them to every device
+    they log into (unlike the old behavior where Google's own profile
+    name would silently overwrite it on each login)."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'ignored'})
+    try:
+        data = request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()[:40]
+        if not name:
+            return jsonify({'status': 'error', 'message': 'Name එකක් ලියන්න.'}), 400
+        conn = get_db()
+        conn.execute("UPDATE users SET name = ? WHERE google_id = ?", (name, user_id))
+        conn.commit()
+        conn.close()
+        session['user_name'] = name
+        return jsonify({'status': 'success', 'name': name})
+    except Exception as e:
+        print(f"⚠️ /user/update-profile failed: {e}")
+        return jsonify({'status': 'error'}), 200
 def user_sync():
     """Lets the client push updated coins/streak values back up to the
     signed-in user's account record, so they stay in sync everywhere.

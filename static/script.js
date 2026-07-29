@@ -107,12 +107,21 @@ async function checkGoogleAuthStatus() {
                 if (streakEl) streakEl.textContent = `${data.streak} days`;
             }
             // Also reflect the Google name/picture in the local profile
-            // fields, so the greeting and menu drawer look consistent.
+            // fields, so the greeting and menu drawer look consistent —
+            // UNLESS the person already manually saved their own custom
+            // name via the profile edit button, in which case that
+            // choice always wins over whatever Google's account name is.
             try {
                 const current = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
-                current.name = data.name || current.name;
+                if (!current.nameManuallySet) {
+                    current.name = data.name || current.name;
+                }
                 if (data.picture) current.avatarDataUrl = data.picture;
                 localStorage.setItem('notewav_profile', JSON.stringify(current));
+                const nameDisplayEl = document.getElementById('profile-name-display');
+                if (nameDisplayEl) nameDisplayEl.textContent = current.name || 'ඔබේ නම (Your name)';
+                const nameInputEl = document.getElementById('profile-name-input');
+                if (nameInputEl && current.name) nameInputEl.value = current.name;
             } catch (e) { /* ignore */ }
             if (typeof updateGreeting === 'function') updateGreeting();
         } else {
@@ -2242,7 +2251,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const avatarPlaceholder = document.getElementById('profile-avatar-placeholder');
     const avatarInput = document.getElementById('profile-avatar-input');
     const nameInput = document.getElementById('profile-name-input');
+    const nameDisplay = document.getElementById('profile-name-display');
+    const nameEditBtn = document.getElementById('profile-name-edit-btn');
+    const nameEditRow = document.getElementById('profile-name-edit-row');
+    const nameSaveBtn = document.getElementById('profile-name-save-btn');
     if (!avatarBtn || !avatarImg || !avatarInput || !nameInput) return;
+
+    function refreshNameDisplay() {
+        try {
+            const data = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+            if (nameDisplay) nameDisplay.textContent = data.name || 'ඔබේ නම (Your name)';
+        } catch (e) {
+            if (nameDisplay) nameDisplay.textContent = 'ඔබේ නම (Your name)';
+        }
+    }
 
     function loadProfile() {
         try {
@@ -2256,6 +2278,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {
             console.warn('Could not load saved profile:', e);
         }
+        refreshNameDisplay();
     }
 
     function saveProfile(partial) {
@@ -2266,6 +2289,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {
             console.warn('Could not save profile:', e);
         }
+        refreshNameDisplay();
     }
 
     function resizeImageToDataUrl(file, maxDim) {
@@ -2309,8 +2333,39 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    nameInput.addEventListener('input', function() {
-        saveProfile({ name: this.value });
+    // NEW: name is now display-only by default, with a pencil icon to
+    // enter edit mode and an explicit Save (✓) button to commit — a
+    // clearer, more deliberate flow than "every keystroke auto-saves
+    // silently." Saving here ALSO marks the name as manually chosen
+    // (nameManuallySet: true), so a later Google Sign-In never
+    // silently overwrites a name the person specifically picked.
+    if (nameEditBtn && nameEditRow) {
+        nameEditBtn.addEventListener('click', function() {
+            nameEditRow.classList.remove('hidden');
+            nameInput.focus();
+        });
+    }
+
+    function commitNameEdit() {
+        const value = nameInput.value.trim();
+        saveProfile({ name: value, nameManuallySet: true });
+        if (nameEditRow) nameEditRow.classList.add('hidden');
+        if (typeof updateGreeting === 'function') updateGreeting();
+        // If signed in, persist this to the account too — so it
+        // follows the person to any other device they log into,
+        // instead of only ever living in this browser's localStorage.
+        if (typeof notewavIsLoggedIn !== 'undefined' && notewavIsLoggedIn) {
+            fetch('/user/update-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: value }),
+            }).catch(() => { /* best-effort only */ });
+        }
+    }
+
+    if (nameSaveBtn) nameSaveBtn.addEventListener('click', commitNameEdit);
+    nameInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') commitNameEdit();
     });
 
     loadProfile();
@@ -2412,12 +2467,15 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const current = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
                 current.name = name;
+                current.nameManuallySet = true;
                 localStorage.setItem(PROFILE_KEY, JSON.stringify(current));
             } catch (e) {
                 console.warn('Could not save name:', e);
             }
             const drawerNameInput = document.getElementById('profile-name-input');
             if (drawerNameInput) drawerNameInput.value = name;
+            const drawerNameDisplay = document.getElementById('profile-name-display');
+            if (drawerNameDisplay) drawerNameDisplay.textContent = name;
             updateGreeting();
         }
         markOnboardingDone();
