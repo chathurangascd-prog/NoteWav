@@ -333,6 +333,17 @@ def split_into_sentences(text):
     return [p.strip() for p in parts if p.strip()]
 
 
+def split_into_clauses(sentence):
+    """Splits a single sentence further at commas/semicolons — these are
+    NOT separate 'sentences' for highlight-timing purposes (the frontend
+    still highlights the whole original sentence as one unit), but
+    giving each clause its own tiny breathing pause during synthesis
+    makes long sentences sound much less rushed/robotic, closer to how
+    a person naturally pauses briefly at a comma before continuing."""
+    parts = re.split(r'(?<=[,;])\s+', sentence)
+    return [p.strip() for p in parts if p.strip()]
+
+
 def _tts_sentence_to_segment(args):
     sentence, lang = args
     buf = io.BytesIO()
@@ -342,7 +353,8 @@ def _tts_sentence_to_segment(args):
     return segment.set_frame_rate(GTTS_FRAME_RATE).set_channels(1)
 
 
-def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600, max_workers=5):
+def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600,
+                             clause_pause_ms=140, max_workers=5):
     """Returns (combined_audio, sentence_timings) where sentence_timings
     is a list of {"text": str, "start": float, "end": float} in
     SECONDS — the real, measured duration of each sentence's own TTS
@@ -350,7 +362,16 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     This lets the frontend highlight whichever sentence is actually
     playing at any given moment, instead of assuming every line/
     sentence takes the same amount of time to read aloud (which was
-    very inaccurate for a mix of short and long sentences)."""
+    very inaccurate for a mix of short and long sentences).
+
+    NEW (naturalness tuning): each sentence is further split into
+    comma/semicolon-delimited CLAUSES, synthesized individually, and
+    stitched back together with a short clause_pause_ms silence between
+    them. Sentence-level highlight timing is unaffected (still one
+    timing entry per original full sentence) — only the INTERNAL pacing
+    of longer sentences changes, giving them a brief natural breath at
+    each comma instead of running straight through at gTTS's flat,
+    uninterrupted pace."""
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
@@ -362,9 +383,39 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     if not flat_sentences:
         flat_sentences = [(text, True)]
 
-    tasks = [(s, lang) for (s, _) in flat_sentences]
+    # Pre-split every sentence into its clauses, and build ONE flat task
+    # list across ALL clauses of ALL sentences — keeping the thread pool
+    # working on the smallest possible units in parallel, rather than
+    # looping sentence-by-sentence (which would serialize each
+    # sentence's own clause calls one after another).
+    sentence_clause_lists = [split_into_clauses(s) or [s] for (s, _) in flat_sentences]
+    tasks = []
+    task_owner = []  # parallel list: which (sentence_idx, clause_idx) each task belongs to
+    for sentence_idx, clauses in enumerate(sentence_clause_lists):
+        for clause_idx, clause_text in enumerate(clauses):
+            tasks.append((clause_text, lang))
+            task_owner.append((sentence_idx, clause_idx))
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        segments = list(executor.map(_tts_sentence_to_segment, tasks))
+        clause_segments_flat = list(executor.map(_tts_sentence_to_segment, tasks))
+
+    # Regroup the flat clause segments back under their owning sentence,
+    # in original clause order, then stitch each sentence's own clauses
+    # together with the short clause-level pause.
+    clause_silence = AudioSegment.silent(duration=clause_pause_ms, frame_rate=GTTS_FRAME_RATE)
+    segments_by_sentence = [[] for _ in flat_sentences]
+    for (sentence_idx, clause_idx), seg in zip(task_owner, clause_segments_flat):
+        segments_by_sentence[sentence_idx].append((clause_idx, seg))
+
+    segments = []
+    for sentence_idx in range(len(flat_sentences)):
+        clause_segs = [seg for _, seg in sorted(segments_by_sentence[sentence_idx], key=lambda x: x[0])]
+        sentence_audio = AudioSegment.silent(duration=0, frame_rate=GTTS_FRAME_RATE)
+        for i, clause_seg in enumerate(clause_segs):
+            sentence_audio += clause_seg
+            if i != len(clause_segs) - 1:
+                sentence_audio += clause_silence
+        segments.append(sentence_audio)
 
     sentence_silence = AudioSegment.silent(duration=pause_ms, frame_rate=GTTS_FRAME_RATE)
     paragraph_silence = AudioSegment.silent(duration=paragraph_pause_ms, frame_rate=GTTS_FRAME_RATE)
