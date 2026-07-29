@@ -410,6 +410,7 @@
                     <thead>
                         <tr>
                             <th>Name</th>
+                            <th>Email</th>
                             <th>Device</th>
                             <th>First seen (LK time)</th>
                             <th>Last seen (LK time)</th>
@@ -426,6 +427,7 @@
                                 {% if u.is_online %}<span class="online-dot" title="Online now"></span>{% endif %}
                                 {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
                             </td>
+                            <td>{{ u.user_email if u.user_email else '—' }}</td>
                             <td>{{ u.device_info if u.device_info else '—' }}</td>
                             <td>{{ u.first_seen }}</td>
                             <td>{{ u.last_seen }}</td>
@@ -532,14 +534,15 @@
                 wrapper.innerHTML = '<div class="empty-state">Match වෙන users කෙනෙක් නෑ.</div>';
                 return;
             }
-            let html = '<table><thead><tr><th>Name</th><th>Device</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>Notes processed</th><th>Audio generated</th><th>Total actions</th><th>🪙 Coins</th></tr></thead><tbody id="users-tbody">';
+            let html = '<table><thead><tr><th>Name</th><th>Email</th><th>Device</th><th>First seen (LK time)</th><th>Last seen (LK time)</th><th>Notes processed</th><th>Audio generated</th><th>Total actions</th><th>🪙 Coins</th></tr></thead><tbody id="users-tbody">';
             filtered.forEach(u => {
                 const nameClass = u.latest_name ? 'name-cell' : 'name-cell no-name';
                 const displayName = u.latest_name ? escapeHtml(u.latest_name) : 'Unnamed / Skipped';
                 const onlineDot = u.is_online ? '<span class="online-dot" title="Online now"></span>' : '';
                 const coinsDisplay = (u.coins === null || u.coins === undefined) ? '—' : u.coins;
                 const deviceDisplay = u.device_info ? escapeHtml(u.device_info) : '—';
-                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td><td>${coinsDisplay}</td></tr>`;
+                const emailDisplay = u.user_email ? escapeHtml(u.user_email) : '—';
+                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${u.notes_processed}</td><td>${u.audio_generated}</td><td>${u.total_events}</td><td>${coinsDisplay}</td></tr>`;
             });
             html += '</tbody></table>';
             wrapper.innerHTML = html;

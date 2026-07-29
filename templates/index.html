@@ -509,9 +509,13 @@
                             <a href="/auth/google/login" id="google-signin-btn" class="library-nav-btn" style="width: 100%; justify-content: center; box-sizing: border-box; text-decoration: none;">
                                 <i class="fab fa-google"></i> Sign in with Google
                             </a>
-                            <div id="google-signed-in-info" class="hidden" style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
-                                <span style="font-size: 0.85rem; color: var(--text-secondary); flex: 1;" id="google-signed-in-name"></span>
-                                <a href="/auth/logout" style="font-size: 0.78rem; color: #f87171; text-decoration: underline;">Sign out</a>
+                            <div id="google-signed-in-info" class="hidden" style="display: flex; flex-direction: column; gap: 4px; padding: 8px 0;">
+                                <span style="font-size: 0.85rem; color: var(--text-primary); font-weight: 600;" id="google-signed-in-name"></span>
+                                <span style="font-size: 0.78rem; color: var(--text-secondary);" id="google-signed-in-email"></span>
+                                <div style="display: flex; gap: 14px; margin-top: 4px;">
+                                    <a href="/auth/google/login" style="font-size: 0.78rem; color: #a78bfa; text-decoration: underline;">Change account</a>
+                                    <a href="/auth/logout" style="font-size: 0.78rem; color: #f87171; text-decoration: underline;">Sign out</a>
+                                </div>
                             </div>
                         </div>
                         <hr class="menu-divider">

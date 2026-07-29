@@ -134,6 +134,14 @@ def init_db():
         conn.execute("ALTER TABLE usage_events ADD COLUMN device_info TEXT")
     except Exception:
         pass  # column already exists
+    # Added later: the signed-in Google account's email at the time of
+    # this event (NULL for guests, or for events logged before this
+    # column existed) — lets the admin see which real account a device
+    # belongs to, not just an anonymous ID.
+    try:
+        conn.execute("ALTER TABLE usage_events ADD COLUMN user_email TEXT")
+    except Exception:
+        pass  # column already exists
     # Tracks the latest known "coins" balance the frontend reports for
     # each device — coins themselves live in the browser's
     # localStorage (there's no real spend/earn logic server-side yet),
@@ -1114,6 +1122,7 @@ def google_callback():
 
     session['user_id'] = google_id
     session['user_name'] = name
+    session['user_email'] = email
     session['user_picture'] = picture
     return redirect(url_for('home'))
 
@@ -1122,6 +1131,7 @@ def google_callback():
 def auth_logout():
     session.pop('user_id', None)
     session.pop('user_name', None)
+    session.pop('user_email', None)
     session.pop('user_picture', None)
     return redirect(url_for('home'))
 
@@ -1433,9 +1443,12 @@ def track_event():
         # event so the admin dashboard can show which device/browser
         # each user is on.
         device_info = parse_device_info(request.headers.get('User-Agent', ''))
+        # Read the signed-in email from the SERVER-SIDE session (not
+        # trusting anything the client might send) — NULL for guests.
+        user_email = session.get('user_email')
         conn.execute(
-            "INSERT INTO usage_events (anon_id, user_name, action, created_at, device_info) VALUES (?, ?, ?, ?, ?)",
-            (anon_id, user_name, action, datetime.now(timezone.utc).isoformat(), device_info)
+            "INSERT INTO usage_events (anon_id, user_name, action, created_at, device_info, user_email) VALUES (?, ?, ?, ?, ?, ?)",
+            (anon_id, user_name, action, datetime.now(timezone.utc).isoformat(), device_info, user_email)
         )
         if isinstance(coins, int):
             conn.execute(
@@ -1484,6 +1497,9 @@ def _get_admin_usage_data():
             (SELECT device_info FROM usage_events ue3
              WHERE ue3.anon_id = ue1.anon_id AND ue3.device_info IS NOT NULL
              ORDER BY ue3.created_at DESC LIMIT 1) AS device_info,
+            (SELECT user_email FROM usage_events ue4
+             WHERE ue4.anon_id = ue1.anon_id AND ue4.user_email IS NOT NULL
+             ORDER BY ue4.created_at DESC LIMIT 1) AS user_email,
             MIN(created_at) AS first_seen,
             MAX(created_at) AS last_seen,
             COUNT(*) AS total_events,

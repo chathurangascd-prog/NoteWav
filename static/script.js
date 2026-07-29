@@ -80,11 +80,13 @@ async function checkGoogleAuthStatus() {
         const signinBtn = document.getElementById('google-signin-btn');
         const signedInInfo = document.getElementById('google-signed-in-info');
         const signedInName = document.getElementById('google-signed-in-name');
+        const signedInEmail = document.getElementById('google-signed-in-email');
 
         if (data.logged_in) {
             if (signinBtn) signinBtn.classList.add('hidden');
             if (signedInInfo) signedInInfo.classList.remove('hidden');
-            if (signedInName) signedInName.textContent = `Signed in as ${data.name || data.email || 'Google User'}`;
+            if (signedInName) signedInName.textContent = data.name || 'Google User';
+            if (signedInEmail) signedInEmail.textContent = data.email || '';
 
             // Server is now the source of truth for coins/streak — pull
             // the account's saved values down and overwrite whatever
