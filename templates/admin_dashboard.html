@@ -229,9 +229,10 @@
         }
 
         /* ===== ANNOUNCE ===== */
-        .announce-row { display: flex; gap: 10px; }
+        .announce-row { display: flex; flex-direction: column; gap: 10px; }
         #announce-input {
-            flex: 1;
+            width: 100%;
+            min-height: 130px;
             padding: 12px 16px;
             border-radius: 10px;
             border: 1px solid var(--border);
@@ -239,9 +240,12 @@
             color: var(--text);
             font-size: 0.9rem;
             font-family: inherit;
+            resize: vertical;
+            box-sizing: border-box;
         }
         #announce-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
         #announce-send-btn {
+            align-self: flex-end;
             padding: 12px 24px;
             border-radius: 10px;
             border: none;
@@ -397,7 +401,7 @@
                     <h2 class="section-title">Users ලාට Notification එකක්</h2>
                 </div>
                 <div class="announce-row">
-                    <input type="text" id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500">
+                    <textarea id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500"></textarea>
                     <button id="announce-send-btn">Send</button>
                 </div>
                 <p id="announce-status" class="announce-status"></p>
@@ -510,9 +514,9 @@
             </div>
             <div class="modal-body">
                 <div id="timeline-stats-row" class="timeline-stats-row"></div>
-                <div style="display:flex; gap:8px; margin-bottom:14px;">
-                    <input type="text" id="private-announce-input" placeholder="මේ user ට විතරක් message එකක්..." maxlength="500" style="flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.82rem; font-family:inherit;">
-                    <button id="private-announce-send-btn" style="padding:9px 16px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;">Send</button>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+                    <textarea id="private-announce-input" placeholder="මේ user ට විතරක් message එකක්..." maxlength="500" style="width:100%; min-height:90px; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.82rem; font-family:inherit; resize:vertical; box-sizing:border-box;"></textarea>
+                    <button id="private-announce-send-btn" style="align-self:flex-end; padding:9px 16px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;">Send</button>
                 </div>
                 <p id="private-announce-status" style="font-size:0.74rem; color:var(--green); margin:0 0 14px; min-height:1em; font-weight:600;"></p>
                 <div id="timeline-modal-body"></div>
