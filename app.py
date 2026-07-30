@@ -1457,6 +1457,17 @@ def process_note():
 
 @app.route('/library/save', methods=['POST'])
 def library_save():
+    # NEW: saving to the Library now requires being signed in with
+    # Google — this is a deliberate change from the earlier
+    # guest-friendly behavior. Enforced here server-side (in addition
+    # to a friendly prompt on the frontend) so this can't be bypassed.
+    if not session.get('user_id'):
+        return jsonify({
+            'status': 'error',
+            'message': 'Library එකට save කරන්න Google account එකකින් login වෙන්න ඕන.',
+            'login_required': True,
+        }), 401
+
     data = request.get_json(silent=True) or {}
     subject = (data.get('subject') or 'General').strip()[:80] or 'General'
     note_text = (data.get('note_text') or '').strip()

@@ -148,6 +148,19 @@ function syncAccountToServer(partial) {
 document.addEventListener('DOMContentLoaded', checkGoogleAuthStatus);
 
 document.addEventListener('DOMContentLoaded', function() {
+    const loginModalBackdrop = document.getElementById('login-required-modal-backdrop');
+    const loginModalCloseBtn = document.getElementById('login-required-close-btn');
+    if (loginModalCloseBtn && loginModalBackdrop) {
+        loginModalCloseBtn.addEventListener('click', () => loginModalBackdrop.classList.add('hidden'));
+    }
+    if (loginModalBackdrop) {
+        loginModalBackdrop.addEventListener('click', function(e) {
+            if (e.target === loginModalBackdrop) loginModalBackdrop.classList.add('hidden');
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
     trackUsageEvent('app_opened');
 });
 
@@ -560,6 +573,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const noteText = noteInput.value.trim();
             if (!noteText) {
                 showErrorBanner('Save කරන්න note එකක් නෑ.');
+                return;
+            }
+            // NEW: Library saving now requires being signed in with
+            // Google. Guests get a friendly prompt instead of the
+            // save silently going nowhere.
+            if (typeof notewavIsLoggedIn !== 'undefined' && !notewavIsLoggedIn) {
+                const loginModal = document.getElementById('login-required-modal-backdrop');
+                if (loginModal) loginModal.classList.remove('hidden');
                 return;
             }
             const subject = (librarySubjectInput.value || 'General').trim() || 'General';
