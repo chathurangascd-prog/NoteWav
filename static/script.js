@@ -2934,33 +2934,12 @@ document.addEventListener('DOMContentLoaded', function() {
             latestAnnouncement = data.announcement;
             if (isNew) {
                 badge.classList.remove('hidden');
-                // FIX (badge dot alone was too easy to miss/felt like
-                // "nothing happened" even when a message genuinely
-                // arrived): auto-surface the actual popup with the
-                // message text for a few seconds the moment a new one
-                // is detected — no click required. The badge dot still
-                // stays lit afterward until the person actually opens
-                // the bell (so they can always re-read it later too).
-                showAnnouncementToast(data.announcement);
+                // Auto-popup removed per request — badge dot only now.
+                // Person clicks the bell to actually read the message.
             }
         } catch (e) {
             // silent — notifications are non-critical
         }
-    }
-
-    function showAnnouncementToast(announcement) {
-        popupMessage.textContent = announcement.message;
-        try {
-            const dt = new Date(announcement.created_at);
-            popupTimeText.textContent = dt.toLocaleString();
-        } catch (e) {
-            popupTimeText.textContent = '';
-        }
-        popup.classList.remove('hidden');
-        clearTimeout(showAnnouncementToast._timer);
-        showAnnouncementToast._timer = setTimeout(() => {
-            popup.classList.add('hidden');
-        }, 8000);
     }
 
     bellBtn.addEventListener('click', function() {
