@@ -19,7 +19,7 @@ from google.genai import types
 from gtts import gTTS
 from pydub import AudioSegment  # pip install pydub --break-system-packages
                                  # also requires ffmpeg installed on the system
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 # ===== LOAD ENV =====
 load_dotenv()
@@ -154,13 +154,37 @@ class TursoConnection:
     """Mimics sqlite3.Connection's .execute()/.commit()/.close() — a
     thin proxy over ONE shared, persistent libsql_client instance
     (created once at startup above), so every existing get_db() call
-    site in this file keeps working with zero changes."""
+    site in this file keeps working with zero changes.
+
+    FIX (a single hung Turso query froze the ENTIRE site for 2 minutes):
+    a transient network hiccup caused one query to hang indefinitely.
+    With only one gunicorn worker handling requests, that one stuck
+    query blocked EVERYTHING (including totally unrelated requests like
+    loading the admin dashboard) until gunicorn's blunt 120s worker
+    timeout finally killed and restarted the whole process. Running
+    each query through a small thread pool with its OWN short timeout
+    means a hung query now fails fast with a clear error (which
+    existing try/except blocks throughout this file already handle
+    gracefully) instead of freezing the whole app for two minutes.
+    """
+
+    _query_executor = ThreadPoolExecutor(max_workers=8)
+    _QUERY_TIMEOUT_SECONDS = 8
 
     def __init__(self, client):
         self._client = client
 
     def execute(self, stmt, params=None):
-        result = self._client.execute(stmt, list(params) if params else [])
+        future = TursoConnection._query_executor.submit(
+            self._client.execute, stmt, list(params) if params else []
+        )
+        try:
+            result = future.result(timeout=TursoConnection._QUERY_TIMEOUT_SECONDS)
+        except FutureTimeoutError:
+            raise TimeoutError(
+                f"Turso query timed out after {TursoConnection._QUERY_TIMEOUT_SECONDS}s "
+                f"(network hiccup) — query: {stmt[:80]}"
+            )
         return TursoCursorResult(result)
 
     def commit(self):
