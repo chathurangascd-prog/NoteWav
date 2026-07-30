@@ -168,7 +168,21 @@ class TursoConnection:
     gracefully) instead of freezing the whole app for two minutes.
     """
 
-    _query_executor = ThreadPoolExecutor(max_workers=8)
+    # FIX (root cause of the "400 Invalid response status" WebSocket
+    # handshake errors — confirmed via an isolated standalone test
+    # script that reproduced the SAME error outside the app entirely):
+    # this was previously max_workers=8, meaning up to 8 requests could
+    # call into the SAME shared libsql_client instance CONCURRENTLY
+    # from different threads. But that client maintains its own single
+    # background WebSocket session internally — concurrent calls into
+    # it from multiple threads at once could corrupt that session's
+    # handshake state, producing exactly this kind of intermittent 400
+    # error (worked sometimes, failed other times, depending on timing).
+    # max_workers=1 forces EVERY query, app-wide, through one single
+    # worker thread — fully serialized, matching how SQLite itself only
+    # ever supported one writer at a time anyway, so there's no real
+    # functionality lost, just removes the unsafe concurrent access.
+    _query_executor = ThreadPoolExecutor(max_workers=1)
     _QUERY_TIMEOUT_SECONDS = 8
 
     def __init__(self, client):
