@@ -85,6 +85,7 @@
             transition: all 0.15s ease;
         }
         .nav-item:hover { background: var(--surface-hover); color: var(--text); }
+        .nav-item.active { background: var(--accent-soft); color: var(--text); font-weight: 700; }
         .nav-item .nav-ic { font-size: 0.95rem; width: 18px; text-align: center; }
         .sidebar-footer { padding: 14px; border-top: 1px solid var(--border); }
         .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; margin-bottom: 6px; }
@@ -139,6 +140,8 @@
             max-width: 1180px;
             padding: 24px 32px 40px;
         }
+        .view-section { display: none; }
+        .view-section.active { display: block; }
 
         /* ===== STAT CARDS ===== */
         .stats-row {
@@ -364,20 +367,20 @@
             </div>
             <nav class="sidebar-nav">
                 <div class="nav-group-label">Overview</div>
-                <a href="#top" class="nav-item"><span class="nav-ic">📊</span> Dashboard</a>
+                <a href="#" class="nav-item active" data-view="dashboard"><span class="nav-ic">📊</span> Dashboard</a>
 
                 <div class="nav-group-label">Users</div>
-                <a href="#section-users" class="nav-item"><span class="nav-ic">👥</span> Users</a>
-                <a href="#section-activity" class="nav-item"><span class="nav-ic">📈</span> Daily Activity</a>
-                <a href="#section-growth" class="nav-item"><span class="nav-ic">📈</span> User Growth</a>
+                <a href="#" class="nav-item" data-view="users"><span class="nav-ic">👥</span> Users</a>
+                <a href="#" class="nav-item" data-view="activity"><span class="nav-ic">📈</span> Daily Activity</a>
+                <a href="#" class="nav-item" data-view="growth"><span class="nav-ic">📈</span> User Growth</a>
 
                 <div class="nav-group-label">Content</div>
-                <a href="#section-features" class="nav-item"><span class="nav-ic">🎯</span> Feature Usage</a>
-                <a href="#section-subjects" class="nav-item"><span class="nav-ic">📚</span> Top Subjects</a>
-                <a href="#section-notes" class="nav-item"><span class="nav-ic">📖</span> Library</a>
+                <a href="#" class="nav-item" data-view="features"><span class="nav-ic">🎯</span> Feature Usage</a>
+                <a href="#" class="nav-item" data-view="subjects"><span class="nav-ic">📚</span> Top Subjects</a>
+                <a href="#" class="nav-item" data-view="notes"><span class="nav-ic">📖</span> Library</a>
 
                 <div class="nav-group-label">Communication</div>
-                <a href="#section-announcements" class="nav-item"><span class="nav-ic">📜</span> Announcements</a>
+                <a href="#" class="nav-item" data-view="announcements"><span class="nav-ic">📜</span> Announcements</a>
             </nav>
             <div class="sidebar-footer">
                 <div class="sidebar-user">
@@ -394,13 +397,14 @@
         <main class="main-content">
             <header class="content-header" id="top">
                 <div>
-                    <h1>Dashboard</h1>
-                    <div class="content-header-sub">Usage & Content Overview</div>
+                    <h1 id="content-header-title">Dashboard</h1>
+                    <div class="content-header-sub" id="content-header-sub">Usage & Content Overview</div>
                 </div>
                 <span class="live-pill"><span class="dot"></span>Live</span>
             </header>
 
     <div class="page">
+        <div class="view-section active" data-view="dashboard">
         <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-icon">👥</div>
@@ -419,7 +423,9 @@
                 <a href="{{ url_for('admin_full_backup') }}" class="csv-export-btn"><span class="ic">💾</span> Full DB Backup</a>
             </div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="announcements">
         <div style="display: flex; gap: 20px; margin-bottom: 20px; align-items: stretch; flex-wrap: wrap;">
             <div class="section-card" style="max-width: 480px; min-width: 340px; min-height: 440px; margin-bottom: 0; display: flex; flex-direction: column;">
                 <div class="section-head">
@@ -441,7 +447,9 @@
                 <div id="announcements-wrap"></div>
             </div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="users">
         <div class="section-card" id="section-users">
             <div class="section-head">
                 <div class="chip">👥</div>
@@ -485,7 +493,9 @@
                 {% endif %}
             </div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="activity">
         <div class="section-card" id="section-activity">
             <div class="section-head">
                 <div class="chip">📈</div>
@@ -497,7 +507,9 @@
                 <span><span class="legend-dot" style="background:#22d3ee;"></span> Audio Generated</span>
             </div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="growth">
         <div class="section-card" id="section-growth">
             <div class="section-head">
                 <div class="chip">📈</div>
@@ -505,7 +517,9 @@
             </div>
             <div id="growth-chart-wrap" class="chart-wrap"></div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="features">
         <div class="section-card" id="section-features">
             <div class="section-head">
                 <div class="chip">🎯</div>
@@ -513,7 +527,9 @@
             </div>
             <div id="feature-usage-wrap"></div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="subjects">
         <div class="section-card" id="section-subjects">
             <div class="section-head">
                 <div class="chip">📚</div>
@@ -521,7 +537,9 @@
             </div>
             <div id="subjects-wrap"></div>
         </div>
+        </div>
 
+        <div class="view-section" data-view="notes">
         <div class="section-card" id="section-notes">
             <div class="section-head">
                 <div class="chip">📖</div>
@@ -529,6 +547,7 @@
             </div>
             <input type="text" id="notes-search-input" placeholder="Subject/Title එකෙන් search කරන්න...">
             <div id="notes-wrap"></div>
+        </div>
         </div>
     </div>
         </main>
@@ -553,6 +572,42 @@
     </div>
 
     <script>
+        // ========================================
+        // SIDEBAR VIEW SWITCHING (show only the clicked topic)
+        // ========================================
+        const VIEW_TITLES = {
+            dashboard: ['Dashboard', 'Usage & Content Overview'],
+            users: ['Users', 'Everyone using the app'],
+            activity: ['Daily Activity', 'Notes & audio, last 7 days'],
+            growth: ['User Growth', 'Cumulative new users, last 14 days'],
+            features: ['Feature Usage', 'What people actually use'],
+            subjects: ['Top Subjects', 'Most-saved note subjects'],
+            notes: ['Library', 'Browse and manage saved notes'],
+            announcements: ['Announcements', 'Send and review notifications'],
+        };
+
+        function switchView(viewName) {
+            document.querySelectorAll('.view-section').forEach(sec => {
+                sec.classList.toggle('active', sec.dataset.view === viewName);
+            });
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.view === viewName);
+            });
+            const titles = VIEW_TITLES[viewName];
+            if (titles) {
+                document.getElementById('content-header-title').textContent = titles[0];
+                document.getElementById('content-header-sub').textContent = titles[1];
+            }
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        }
+
+        document.querySelectorAll('.nav-item[data-view]').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                switchView(this.dataset.view);
+            });
+        });
+
         function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
