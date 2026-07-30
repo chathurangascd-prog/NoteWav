@@ -2924,6 +2924,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const anonId = (typeof getOrCreateAnonId === 'function') ? getOrCreateAnonId() : '';
             const res = await fetch('/announcements/latest?anon_id=' + encodeURIComponent(anonId));
             const data = await res.json();
+            // TEMP DEBUG — remove once the notification issue is
+            // confirmed fixed. Open DevTools (F12) → Console on the
+            // STUDENT device to see exactly what the server returns
+            // for this device's own anon_id.
+            console.log('[NoteWav debug] my anon_id:', anonId, '| server response:', data, '| my seen_id:', getSeenId());
             if (data.status !== 'success' || !data.announcement) return;
             const isNew = data.announcement.id > getSeenId();
             latestAnnouncement = data.announcement;
