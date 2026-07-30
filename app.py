@@ -95,17 +95,8 @@ TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL')
 TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
 USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
 
-_turso_client = None
 if USE_TURSO:
-    try:
-        _turso_client = libsql_client.create_client_sync(
-            url=TURSO_DATABASE_URL,
-            auth_token=TURSO_AUTH_TOKEN,
-        )
-        print("✅ Turso persistent database connected!")
-    except Exception as e:
-        print(f"⚠️ Turso connection failed, falling back to local SQLite (data will NOT persist across deploys): {e}")
-        USE_TURSO = False
+    print("✅ Turso persistent database configured!")
 else:
     print("⚠️ TURSO_DATABASE_URL/TURSO_AUTH_TOKEN not set — using local SQLite (data will NOT persist across deploys).")
 
@@ -151,47 +142,45 @@ class TursoCursorResult:
 
 
 class TursoConnection:
-    """Mimics sqlite3.Connection's .execute()/.commit()/.close() — a
-    thin proxy over ONE shared, persistent libsql_client instance
-    (created once at startup above), so every existing get_db() call
-    site in this file keeps working with zero changes.
+    """Mimics sqlite3.Connection's .execute()/.commit()/.close() — but
+    UNLIKE the previous version of this class, creates a BRAND NEW
+    libsql_client for every single get_db() call, instead of sharing
+    ONE persistent client across the entire app's lifetime.
 
-    FIX (a single hung Turso query froze the ENTIRE site for 2 minutes):
-    a transient network hiccup caused one query to hang indefinitely.
-    With only one gunicorn worker handling requests, that one stuck
-    query blocked EVERYTHING (including totally unrelated requests like
-    loading the admin dashboard) until gunicorn's blunt 120s worker
-    timeout finally killed and restarted the whole process. Running
-    each query through a small thread pool with its OWN short timeout
-    means a hung query now fails fast with a clear error (which
-    existing try/except blocks throughout this file already handle
-    gracefully) instead of freezing the whole app for two minutes.
+    WHY THE CHANGE: sharing one long-lived client (with its own
+    internal background thread + asyncio event loop) across every
+    request in a multi-worker gunicorn process turned out to hang
+    EVERY query in Render's environment specifically (confirmed: an
+    isolated standalone script with a FRESH client succeeded instantly
+    with the exact same URL/token, while the app's shared client hung
+    on literally every call, including the simplest possible query).
+    Creating a fresh, short-lived client per request costs a small
+    amount of extra connection-setup time per call, but completely
+    avoids whatever shared-state/threading interaction was breaking
+    things — and this is exactly how the original sqlite3.connect()
+    version of get_db() always worked anyway (a fresh connection each
+    time), so this restores that same simple, safe pattern.
     """
 
-    # FIX (root cause of the "400 Invalid response status" WebSocket
-    # handshake errors — confirmed via an isolated standalone test
-    # script that reproduced the SAME error outside the app entirely):
-    # this was previously max_workers=8, meaning up to 8 requests could
-    # call into the SAME shared libsql_client instance CONCURRENTLY
-    # from different threads. But that client maintains its own single
-    # background WebSocket session internally — concurrent calls into
-    # it from multiple threads at once could corrupt that session's
-    # handshake state, producing exactly this kind of intermittent 400
-    # error (worked sometimes, failed other times, depending on timing).
-    # max_workers=1 forces EVERY query, app-wide, through one single
-    # worker thread — fully serialized, matching how SQLite itself only
-    # ever supported one writer at a time anyway, so there's no real
-    # functionality lost, just removes the unsafe concurrent access.
-    _query_executor = ThreadPoolExecutor(max_workers=1)
-    _QUERY_TIMEOUT_SECONDS = 8
+    _query_executor = ThreadPoolExecutor(max_workers=4)
+    _QUERY_TIMEOUT_SECONDS = 15
 
-    def __init__(self, client):
-        self._client = client
+    def __init__(self):
+        self._client = None
+
+    def _ensure_client(self):
+        if self._client is None:
+            self._client = libsql_client.create_client_sync(
+                url=TURSO_DATABASE_URL,
+                auth_token=TURSO_AUTH_TOKEN,
+            )
 
     def execute(self, stmt, params=None):
-        future = TursoConnection._query_executor.submit(
-            self._client.execute, stmt, list(params) if params else []
-        )
+        def _do_query():
+            self._ensure_client()
+            return self._client.execute(stmt, list(params) if params else [])
+
+        future = TursoConnection._query_executor.submit(_do_query)
         try:
             result = future.result(timeout=TursoConnection._QUERY_TIMEOUT_SECONDS)
         except FutureTimeoutError:
@@ -205,12 +194,17 @@ class TursoConnection:
         pass  # Turso commits each statement immediately over the wire — no-op for API compatibility
 
     def close(self):
-        pass  # shared client stays open for reuse across requests — never actually closed here
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                pass  # already closed / never fully opened — safe to ignore
+            self._client = None
 
 
 def get_db():
     if USE_TURSO:
-        return TursoConnection(_turso_client)
+        return TursoConnection()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
