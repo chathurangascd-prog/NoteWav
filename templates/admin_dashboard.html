@@ -40,50 +40,82 @@
         }
         a { color: inherit; }
 
-        /* ===== TOP BAR ===== */
-        .topbar {
-            position: sticky;
-            top: 0;
-            z-index: 50;
+        /* ===== ADMIN SHELL (sidebar + main content) ===== */
+        .admin-shell { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 250px;
+            flex-shrink: 0;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 60;
+        }
+        .sidebar-brand {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 18px 32px;
+            gap: 12px;
+            padding: 22px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .sidebar-brand-name { font-family: 'Space Grotesk', sans-serif; font-size: 1rem; font-weight: 700; letter-spacing: -0.2px; }
+        .sidebar-brand-sub { font-size: 0.7rem; color: var(--text-dim); font-weight: 500; }
+        .sidebar-nav { flex: 1; overflow-y: auto; padding: 16px 12px; }
+        .nav-group-label {
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            padding: 14px 12px 6px;
+        }
+        .nav-group-label:first-child { padding-top: 4px; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 9px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-dim);
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .nav-item:hover { background: var(--surface-hover); color: var(--text); }
+        .nav-item .nav-ic { font-size: 0.95rem; width: 18px; text-align: center; }
+        .sidebar-footer { padding: 14px; border-top: 1px solid var(--border); }
+        .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; margin-bottom: 6px; }
+        .sidebar-avatar {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--accent-grad);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; font-weight: 700; color: #fff; flex-shrink: 0;
+        }
+        .sidebar-user-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+        .sidebar-user-role { font-size: 0.7rem; color: var(--text-dim); }
+        .sidebar-logout {
+            display: block; text-align: center;
+            font-size: 0.78rem; font-weight: 600; color: var(--red);
+            text-decoration: none; padding: 8px; border-radius: 8px;
+            border: 1px solid rgba(248, 113, 113, 0.28);
+            transition: background 0.15s ease;
+        }
+        .sidebar-logout:hover { background: rgba(248, 113, 113, 0.10); }
+
+        .main-content { flex: 1; margin-left: 250px; min-width: 0; }
+        .content-header {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px 32px;
             background: rgba(11, 11, 19, 0.86);
             backdrop-filter: blur(14px);
             border-bottom: 1px solid var(--border);
         }
-        .topbar-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .topbar-mark {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            background: var(--accent-grad);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
-            box-shadow: 0 6px 18px rgba(124, 92, 255, 0.35);
-            flex-shrink: 0;
-        }
-        .topbar-brand h1 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 1.05rem;
-            font-weight: 700;
-            margin: 0;
-            letter-spacing: -0.2px;
-        }
-        .topbar-brand .eyebrow {
-            font-size: 0.7rem;
-            color: var(--text-dim);
-            font-weight: 500;
-            letter-spacing: 0.3px;
-        }
+        .content-header h1 { font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; font-weight: 700; margin: 0; }
+        .content-header-sub { font-size: 0.76rem; color: var(--text-dim); font-weight: 500; margin-top: 2px; }
         .live-pill {
             display: inline-flex;
             align-items: center;
@@ -95,49 +127,17 @@
             border: 1px solid rgba(74, 222, 128, 0.25);
             padding: 4px 10px;
             border-radius: 20px;
-            margin-left: 10px;
         }
         .live-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-        a.logout {
-            color: var(--red);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 600;
-            border: 1px solid rgba(248, 113, 113, 0.35);
-            padding: 8px 16px;
-            border-radius: 20px;
-            transition: all 0.15s ease;
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .main-content { margin-left: 0; }
         }
-        a.logout:hover { background: rgba(248, 113, 113, 0.10); }
-
-        /* ===== QUICK NAV ===== */
-        .quicknav {
-            display: flex;
-            gap: 6px;
-            padding: 14px 32px 0;
-            flex-wrap: wrap;
-            max-width: 1180px;
-            margin: 0 auto;
-        }
-        .quicknav a {
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: var(--text-dim);
-            text-decoration: none;
-            padding: 7px 14px;
-            border-radius: 20px;
-            border: 1px solid var(--border);
-            background: var(--surface);
-            transition: all 0.15s ease;
-            white-space: nowrap;
-        }
-        .quicknav a:hover { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
 
         .page {
             max-width: 1180px;
-            margin: 0 auto;
-            padding: 24px 32px 0;
+            padding: 24px 32px 40px;
         }
 
         /* ===== STAT CARDS ===== */
@@ -345,34 +345,60 @@
         .timeline-stat-label { font-size: 0.62rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; font-weight: 600; }
 
         @media (max-width: 640px) {
-            .topbar { padding: 14px 18px; }
-            .quicknav, .page { padding-left: 18px; padding-right: 18px; }
+            .content-header { padding: 14px 18px; }
+            .page { padding-left: 18px; padding-right: 18px; }
             .stats-row { grid-template-columns: repeat(2, 1fr); }
             table, th, td { font-size: 0.76rem; }
         }
     </style>
 </head>
 <body>
-    <div class="topbar">
-        <div class="topbar-brand">
-            <div class="topbar-mark">📊</div>
-            <div>
-                <h1>NoteWav AI <span class="live-pill"><span class="dot"></span>Live</span></h1>
-                <div class="eyebrow">Usage & Content Dashboard</div>
+    <div class="admin-shell">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="topbar-mark">📊</div>
+                <div>
+                    <div class="sidebar-brand-name">NoteWav AI</div>
+                    <div class="sidebar-brand-sub">Admin Portal</div>
+                </div>
             </div>
-        </div>
-        <a class="logout" href="{{ url_for('admin_logout') }}">Logout</a>
-    </div>
+            <nav class="sidebar-nav">
+                <div class="nav-group-label">Overview</div>
+                <a href="#top" class="nav-item"><span class="nav-ic">📊</span> Dashboard</a>
 
-    <nav class="quicknav">
-        <a href="#section-users">👥 Users</a>
-        <a href="#section-activity">📈 Activity</a>
-        <a href="#section-growth">📈 Growth</a>
-        <a href="#section-features">🎯 Features</a>
-        <a href="#section-subjects">📚 Subjects</a>
-        <a href="#section-notes">📖 Library</a>
-        <a href="#section-announcements">📜 Announcements</a>
-    </nav>
+                <div class="nav-group-label">Users</div>
+                <a href="#section-users" class="nav-item"><span class="nav-ic">👥</span> Users</a>
+                <a href="#section-activity" class="nav-item"><span class="nav-ic">📈</span> Daily Activity</a>
+                <a href="#section-growth" class="nav-item"><span class="nav-ic">📈</span> User Growth</a>
+
+                <div class="nav-group-label">Content</div>
+                <a href="#section-features" class="nav-item"><span class="nav-ic">🎯</span> Feature Usage</a>
+                <a href="#section-subjects" class="nav-item"><span class="nav-ic">📚</span> Top Subjects</a>
+                <a href="#section-notes" class="nav-item"><span class="nav-ic">📖</span> Library</a>
+
+                <div class="nav-group-label">Communication</div>
+                <a href="#section-announcements" class="nav-item"><span class="nav-ic">📜</span> Announcements</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="sidebar-avatar">A</div>
+                    <div>
+                        <div class="sidebar-user-name">Admin</div>
+                        <div class="sidebar-user-role">Administrator</div>
+                    </div>
+                </div>
+                <a class="sidebar-logout" href="{{ url_for('admin_logout') }}">Sign out</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="content-header" id="top">
+                <div>
+                    <h1>Dashboard</h1>
+                    <div class="content-header-sub">Usage & Content Overview</div>
+                </div>
+                <span class="live-pill"><span class="dot"></span>Live</span>
+            </header>
 
     <div class="page">
         <div class="stats-row">
@@ -504,6 +530,8 @@
             <input type="text" id="notes-search-input" placeholder="Subject/Title එකෙන් search කරන්න...">
             <div id="notes-wrap"></div>
         </div>
+    </div>
+        </main>
     </div>
 
     <div id="timeline-modal" class="modal-backdrop">
