@@ -2964,5 +2964,16 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     checkForAnnouncement();
-    setInterval(checkForAnnouncement, 30000); // check every 30 seconds
+    // FIX (notification badge felt slow to appear — up to a 30s wait):
+    // shortened the poll interval considerably, AND added a check the
+    // instant the tab/app becomes visible again (e.g. the person was
+    // on another app and just switched back) — that's the moment a
+    // person is most likely to actually notice a new badge, so it
+    // shouldn't have to wait for the next scheduled poll tick.
+    setInterval(checkForAnnouncement, 6000); // check every 6 seconds
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+            checkForAnnouncement();
+        }
+    });
 });
