@@ -1699,6 +1699,13 @@ def _get_admin_usage_data():
         'users': users_list,
         'total_users': len(users_list),
         'total_notes_in_library': total_notes_in_library,
+        # Tells the admin whether data is genuinely persisting to
+        # Turso, or has silently fallen back to the ephemeral local
+        # SQLite file (e.g. if TURSO_DATABASE_URL/TURSO_AUTH_TOKEN are
+        # missing or invalid) — this is the real thing worth verifying,
+        # since once this is 'turso', EVERY user's data goes through
+        # the same persistent backend.
+        'storage_backend': 'turso' if USE_TURSO else 'sqlite',
     }
 
 

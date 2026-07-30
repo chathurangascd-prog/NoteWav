@@ -429,7 +429,12 @@
                         <div class="content-header-sub" id="content-header-sub">Usage & Content Overview</div>
                     </div>
                 </div>
-                <span class="live-pill"><span class="dot"></span>Live</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span id="storage-badge" class="live-pill" style="{% if storage_backend == 'turso' %}color: var(--green); background: rgba(74,222,128,0.10); border-color: rgba(74,222,128,0.25);{% else %}color: var(--amber); background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.25);{% endif %}">
+                        {% if storage_backend == 'turso' %}💾 Turso Connected{% else %}⚠️ Local (Not Persistent){% endif %}
+                    </span>
+                    <span class="live-pill"><span class="dot"></span>Live</span>
+                </div>
             </header>
             <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
@@ -791,6 +796,21 @@
                 document.getElementById('stat-total-users').textContent = data.total_users;
                 document.getElementById('stat-total-notes').textContent = data.total_notes_in_library;
                 renderTable(data.users);
+
+                const storageBadge = document.getElementById('storage-badge');
+                if (storageBadge && data.storage_backend) {
+                    if (data.storage_backend === 'turso') {
+                        storageBadge.textContent = '💾 Turso Connected';
+                        storageBadge.style.color = '#4ade80';
+                        storageBadge.style.background = 'rgba(74,222,128,0.10)';
+                        storageBadge.style.borderColor = 'rgba(74,222,128,0.25)';
+                    } else {
+                        storageBadge.textContent = '⚠️ Local (Not Persistent)';
+                        storageBadge.style.color = '#f59e0b';
+                        storageBadge.style.background = 'rgba(245,158,11,0.10)';
+                        storageBadge.style.borderColor = 'rgba(245,158,11,0.25)';
+                    }
+                }
             } catch (e) {
                 console.warn('Dashboard poll failed:', e);
             }
