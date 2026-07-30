@@ -1529,10 +1529,14 @@ def library_list():
                 (user_id,)
             ).fetchall()
         else:
-            # Guest: UNCHANGED — the original shared/global listing,
-            # exactly as it always worked before Google Sign-In existed.
+            # Guest: only notes with NO account owner (true guest-saved
+            # notes) — a signed-in account's private notes must NEVER
+            # be visible here. FIX: this previously had no WHERE clause
+            # at all, so it was accidentally showing EVERY note in the
+            # database — including logged-in users' supposedly-private
+            # notes — to any guest. Now correctly scoped.
             rows = conn.execute(
-                'SELECT id, subject, title, mode, created_at FROM notes ORDER BY created_at DESC'
+                'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
             ).fetchall()
         conn.close()
         notes = [dict(row) for row in rows]
