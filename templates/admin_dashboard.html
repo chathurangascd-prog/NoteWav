@@ -131,9 +131,35 @@
         }
         .live-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .mobile-menu-btn {
+            display: none;
+            width: 36px; height: 36px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 1rem;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .sidebar-backdrop {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 55;
+        }
+        .sidebar-backdrop.open { display: block; }
         @media (max-width: 900px) {
-            .sidebar { display: none; }
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                z-index: 70;
+            }
+            .sidebar.open { transform: translateX(0); }
             .main-content { margin-left: 0; }
+            .mobile-menu-btn { display: flex; }
         }
 
         .page {
@@ -396,12 +422,16 @@
 
         <main class="main-content">
             <header class="content-header" id="top">
-                <div>
-                    <h1 id="content-header-title">Dashboard</h1>
-                    <div class="content-header-sub" id="content-header-sub">Usage & Content Overview</div>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menu">☰</button>
+                    <div>
+                        <h1 id="content-header-title">Dashboard</h1>
+                        <div class="content-header-sub" id="content-header-sub">Usage & Content Overview</div>
+                    </div>
                 </div>
                 <span class="live-pill"><span class="dot"></span>Live</span>
             </header>
+            <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <div class="page">
         <div class="view-section active" data-view="dashboard">
@@ -599,7 +629,23 @@
                 document.getElementById('content-header-sub').textContent = titles[1];
             }
             window.scrollTo({ top: 0, behavior: 'instant' });
+            closeMobileSidebar();
         }
+
+        const sidebarEl = document.querySelector('.sidebar');
+        const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+        function openMobileSidebar() {
+            sidebarEl.classList.add('open');
+            sidebarBackdrop.classList.add('open');
+        }
+        function closeMobileSidebar() {
+            sidebarEl.classList.remove('open');
+            sidebarBackdrop.classList.remove('open');
+        }
+        if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', openMobileSidebar);
+        if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
 
         document.querySelectorAll('.nav-item[data-view]').forEach(item => {
             item.addEventListener('click', function(e) {
