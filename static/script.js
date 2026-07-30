@@ -2972,16 +2972,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     checkForAnnouncement();
-    // FIX (notification badge felt slow to appear — up to a 30s wait):
-    // shortened the poll interval considerably, AND added a check the
-    // instant the tab/app becomes visible again (e.g. the person was
-    // on another app and just switched back) — that's the moment a
-    // person is most likely to actually notice a new badge, so it
-    // shouldn't have to wait for the next scheduled poll tick.
-    setInterval(checkForAnnouncement, 6000); // check every 6 seconds
+    // FIX (PC/desktop specifically felt delayed vs. mobile app):
+    // background browser TABS get their JS timers throttled by the
+    // browser to save CPU/battery — this is a desktop-browser-specific
+    // behavior, which is exactly why it felt fine on the installed
+    // mobile app (usually foregrounded while being tested) but slow on
+    // PC (switching between an admin tab and a student tab backgrounds
+    // whichever one isn't active). Shortened the interval further AND
+    // added a 'focus' listener alongside 'visibilitychange' — some
+    // desktop multi-window setups change window focus without the tab
+    // itself ever becoming "hidden", which visibilitychange alone
+    // wouldn't catch.
+    setInterval(checkForAnnouncement, 3000); // check every 3 seconds
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
             checkForAnnouncement();
         }
     });
+    window.addEventListener('focus', checkForAnnouncement);
 });
