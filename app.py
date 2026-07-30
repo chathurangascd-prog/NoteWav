@@ -1827,7 +1827,6 @@ def admin_announcements_list():
         rows = conn.execute(
             "SELECT id, message, created_at, target_anon_id FROM announcements ORDER BY id DESC LIMIT 30"
         ).fetchall()
-        conn.close()
 
         sl_offset = timedelta(hours=5, minutes=30)
         items = []
@@ -1838,7 +1837,22 @@ def admin_announcements_list():
                 a['created_at'] = (dt + sl_offset).strftime('%Y-%m-%d %H:%M')
             except Exception:
                 pass
+            # For private (per-device) messages, look up that device's
+            # latest known display name — lets the admin CONFIRM exactly
+            # who a private message was targeted at (useful for
+            # verifying it went to the right/currently-active device,
+            # e.g. after a cache clear regenerated someone's anon_id).
+            if a.get('target_anon_id'):
+                name_row = conn.execute(
+                    "SELECT user_name FROM usage_events WHERE anon_id = ? AND user_name != '' "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (a['target_anon_id'],)
+                ).fetchone()
+                a['target_name'] = name_row['user_name'] if name_row and name_row['user_name'] else None
+            else:
+                a['target_name'] = None
             items.append(a)
+        conn.close()
         return jsonify({'status': 'success', 'announcements': items})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500

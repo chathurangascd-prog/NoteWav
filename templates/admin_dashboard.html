@@ -853,7 +853,7 @@
                 let html = '';
                 data.announcements.forEach(a => {
                     const tag = a.target_anon_id
-                        ? '<span style="color:#f59e0b; font-size:0.68rem; font-weight:700;">🔒 PRIVATE</span>'
+                        ? `<span style="color:#f59e0b; font-size:0.68rem; font-weight:700;">🔒 PRIVATE → ${escapeHtml(a.target_name || ('device: ' + a.target_anon_id.slice(0, 10) + '...'))}</span>`
                         : '<span style="color:#4ade80; font-size:0.68rem; font-weight:700;">📢 BROADCAST</span>';
                     html += `<div class="ann-item">
                         <div>
