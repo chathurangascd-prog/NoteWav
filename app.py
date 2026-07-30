@@ -41,6 +41,23 @@ app = Flask(__name__)
 # testing, but would log everyone out of /admin on every restart in
 # production.
 app.secret_key = os.environ.get('ADMIN_SECRET_KEY', os.urandom(24).hex())
+if not os.environ.get('ADMIN_SECRET_KEY'):
+    print(
+        "⚠️ ADMIN_SECRET_KEY not set — using a RANDOM key generated on every restart. "
+        "This logs EVERYONE out whenever the server restarts/redeploys/spins down. "
+        "Set ADMIN_SECRET_KEY to a fixed random string in Render's environment variables "
+        "to keep people logged in across restarts."
+    )
+# FIX (users were getting logged out every time they reopened the app):
+# by default, Flask session cookies are "session cookies" that expire
+# the moment the browser/app is closed — NOT persisted across app
+# restarts on the person's own device. Marking the session permanent
+# (with a real, long lifetime) makes the login cookie itself survive
+# closing and reopening the app, as long as ADMIN_SECRET_KEY above is
+# also a STABLE value (see the warning above — a random key that
+# changes on every server restart would still invalidate all sessions
+# regardless of this cookie lifetime setting).
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 # Simple password gate for the /admin usage dashboard. Set
 # ADMIN_PASSWORD in Render's environment variables — do NOT hardcode
@@ -1269,6 +1286,7 @@ def google_callback():
     conn.commit()
     conn.close()
 
+    session.permanent = True  # survives closing/reopening the app, not just a single browser session
     session['user_id'] = google_id
     session['user_name'] = name
     session['user_email'] = email
@@ -1660,6 +1678,7 @@ def admin_login():
     if request.method == 'POST':
         password = request.form.get('password', '')
         if password == ADMIN_PASSWORD:
+            session.permanent = True
             session['is_admin'] = True
             return redirect(url_for('admin_dashboard'))
         error = 'වැරදි password එකක්.'
