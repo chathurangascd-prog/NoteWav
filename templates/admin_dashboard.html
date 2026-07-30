@@ -823,7 +823,7 @@
             loadAnnouncements();
         }
 
-        setInterval(pollDashboard, 8000);
+        setInterval(pollDashboard, 20000); // was 8s — reduced to lower Turso rows-read usage (this page calls 8 endpoints per poll)
         attachRowClickHandlers();
 
         const announceInput = document.getElementById('announce-input');

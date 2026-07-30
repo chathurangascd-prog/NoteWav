@@ -2993,18 +2993,17 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     checkForAnnouncement();
-    // FIX (PC/desktop specifically felt delayed vs. mobile app):
-    // background browser TABS get their JS timers throttled by the
-    // browser to save CPU/battery — this is a desktop-browser-specific
-    // behavior, which is exactly why it felt fine on the installed
-    // mobile app (usually foregrounded while being tested) but slow on
-    // PC (switching between an admin tab and a student tab backgrounds
-    // whichever one isn't active). Shortened the interval further AND
-    // added a 'focus' listener alongside 'visibilitychange' — some
-    // desktop multi-window setups change window focus without the tab
-    // itself ever becoming "hidden", which visibilitychange alone
-    // wouldn't catch.
-    setInterval(checkForAnnouncement, 3000); // check every 3 seconds
+    // FIX (cost/scale concern): this was temporarily set very
+    // aggressive (3s) while debugging a notification-delay bug. That
+    // bug's ROOT CAUSE (a broken Turso connection) is now fixed, so
+    // this no longer needs to poll so frequently — the visibilitychange
+    // + window focus listeners below already catch the moment someone
+    // actually looks at the app, which was the real goal. Polling
+    // every 3s per device, multiplied across many simultaneous
+    // students, adds up fast against Turso's free-tier monthly
+    // rows-read limit. 20s is still responsive enough for a
+    // notification, without the multiplied cost.
+    setInterval(checkForAnnouncement, 20000); // check every 20 seconds
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
             checkForAnnouncement();
