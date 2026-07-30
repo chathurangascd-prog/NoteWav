@@ -6,3 +6,4 @@ gTTS
 pydub
 gunicorn
 audioop-lts
+libsql-client

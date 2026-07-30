@@ -9,6 +9,7 @@ import glob
 import sqlite3
 import secrets
 import requests
+import libsql_client
 from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -69,8 +70,109 @@ print("✅ Google Sign-In is configured!" if GOOGLE_LOGIN_CONFIGURED else "⚠�
 # ========================================
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notewav.db')
 
+# ========================================
+# TURSO (persistent hosted SQLite) — replaces the local notewav.db file
+# ========================================
+# WHY: Render's free tier filesystem is ephemeral — the local
+# notewav.db file (and everything in it: notes, users, usage_events)
+# is wiped on every redeploy/restart/spin-down. Turso is a genuinely
+# persistent, SQLite-compatible hosted database with a free tier that
+# never expires — pointing the app at it instead means data survives
+# deploys with essentially no code changes elsewhere in this file.
+#
+# HOW: a small compatibility layer below (TursoRow / TursoCursorResult
+# / TursoConnection) mimics the exact subset of sqlite3's own API this
+# file already uses (.execute(sql, params), .fetchall(), .fetchone(),
+# .commit(), .close(), and dict(row)/row['col'] access on results) —
+# so get_db() is the ONLY thing that changes; every other conn.execute
+# (...) call throughout this file keeps working completely unchanged.
+#
+# SAFETY NET: if TURSO_DATABASE_URL / TURSO_AUTH_TOKEN aren't set
+# (e.g. running locally without them configured yet), this falls back
+# to the original local sqlite3 file — nothing breaks, it just won't
+# persist across deploys until those two env vars are added.
+TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL')
+TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
+USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+
+_turso_client = None
+if USE_TURSO:
+    try:
+        _turso_client = libsql_client.create_client_sync(
+            url=TURSO_DATABASE_URL,
+            auth_token=TURSO_AUTH_TOKEN,
+        )
+        print("✅ Turso persistent database connected!")
+    except Exception as e:
+        print(f"⚠️ Turso connection failed, falling back to local SQLite (data will NOT persist across deploys): {e}")
+        USE_TURSO = False
+else:
+    print("⚠️ TURSO_DATABASE_URL/TURSO_AUTH_TOKEN not set — using local SQLite (data will NOT persist across deploys).")
+
+
+class TursoRow:
+    """Mimics sqlite3.Row: supports row['col_name'], row[0], dict(row),
+    and iteration — the exact behaviors this file's existing code
+    already relies on everywhere it touches a query result."""
+
+    def __init__(self, columns, values):
+        self._columns = list(columns)
+        self._values = list(values)
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._values[self._columns.index(key)]
+        return self._values[key]
+
+    def keys(self):
+        return self._columns
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __repr__(self):
+        return f"TursoRow({dict(zip(self._columns, self._values))})"
+
+
+class TursoCursorResult:
+    """Mimics the small subset of sqlite3.Cursor this file uses:
+    .fetchall() and .fetchone()."""
+
+    def __init__(self, result_set):
+        columns = getattr(result_set, 'columns', []) or []
+        self._rows = [TursoRow(columns, list(r)) for r in result_set.rows]
+        self.last_insert_rowid = getattr(result_set, 'last_insert_rowid', None)
+
+    def fetchall(self):
+        return self._rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+
+class TursoConnection:
+    """Mimics sqlite3.Connection's .execute()/.commit()/.close() — a
+    thin proxy over ONE shared, persistent libsql_client instance
+    (created once at startup above), so every existing get_db() call
+    site in this file keeps working with zero changes."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def execute(self, stmt, params=None):
+        result = self._client.execute(stmt, list(params) if params else [])
+        return TursoCursorResult(result)
+
+    def commit(self):
+        pass  # Turso commits each statement immediately over the wire — no-op for API compatibility
+
+    def close(self):
+        pass  # shared client stays open for reuse across requests — never actually closed here
+
 
 def get_db():
+    if USE_TURSO:
+        return TursoConnection(_turso_client)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
