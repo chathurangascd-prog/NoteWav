@@ -2925,13 +2925,37 @@ document.addEventListener('DOMContentLoaded', function() {
             const res = await fetch('/announcements/latest?anon_id=' + encodeURIComponent(anonId));
             const data = await res.json();
             if (data.status !== 'success' || !data.announcement) return;
+            const isNew = data.announcement.id > getSeenId();
             latestAnnouncement = data.announcement;
-            if (latestAnnouncement.id > getSeenId()) {
+            if (isNew) {
                 badge.classList.remove('hidden');
+                // FIX (badge dot alone was too easy to miss/felt like
+                // "nothing happened" even when a message genuinely
+                // arrived): auto-surface the actual popup with the
+                // message text for a few seconds the moment a new one
+                // is detected — no click required. The badge dot still
+                // stays lit afterward until the person actually opens
+                // the bell (so they can always re-read it later too).
+                showAnnouncementToast(data.announcement);
             }
         } catch (e) {
             // silent — notifications are non-critical
         }
+    }
+
+    function showAnnouncementToast(announcement) {
+        popupMessage.textContent = announcement.message;
+        try {
+            const dt = new Date(announcement.created_at);
+            popupTimeText.textContent = dt.toLocaleString();
+        } catch (e) {
+            popupTimeText.textContent = '';
+        }
+        popup.classList.remove('hidden');
+        clearTimeout(showAnnouncementToast._timer);
+        showAnnouncementToast._timer = setTimeout(() => {
+            popup.classList.add('hidden');
+        }, 8000);
     }
 
     bellBtn.addEventListener('click', function() {
