@@ -1321,6 +1321,19 @@ document.addEventListener('DOMContentLoaded', function() {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+            // NEW: subtle brand watermark, bottom-right corner. When a
+            // student shares this PNG/PDF with classmates (WhatsApp,
+            // print, etc.), this small credit line is how a friend who
+            // never used the app discovers it — organic, zero-cost
+            // growth from content that's already being shared anyway.
+            const watermarkFontSize = Math.max(14, Math.round(20 * adaptiveScale));
+            ctx.font = `600 ${watermarkFontSize}px 'Plus Jakarta Sans', sans-serif`;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            const watermarkMargin = Math.round(18 * adaptiveScale);
+            ctx.fillText('Made with NoteWav AI · notewav.onrender.com', canvas.width - watermarkMargin, canvas.height - watermarkMargin);
+
             return canvas;
         } catch (err) {
             console.error('Mind map canvas render error:', err);
