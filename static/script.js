@@ -1973,55 +1973,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    console.log('🎵 NoteWav AI Loaded — Mind Maps + gTTS narration ready!');
-});
-
-// ========================================
-// QUIZ GENERATION (active-recall study tool)
-// ========================================
-document.addEventListener('DOMContentLoaded', function() {
+    // ========================================
+    // QUIZ GENERATION (active-recall study tool)
+    // ========================================
     const generateQuizBtn = document.getElementById('generate-quiz-btn');
     const quizBody = document.getElementById('quiz-body');
-    if (!generateQuizBtn || !quizBody) return;
 
-    generateQuizBtn.addEventListener('click', async function() {
-        const sourceText = (document.getElementById('script-output') || {}).value
-            || (document.getElementById('note-input') || {}).value || '';
-        const text = sourceText.trim();
-        if (!text) {
-            if (typeof showErrorBanner === 'function') {
-                showErrorBanner('Quiz එකක් හදන්න content එකක් නෑ — කලින් note එකක් process කරන්න.');
-            }
-            return;
-        }
-
-        generateQuizBtn.innerHTML = '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Quiz හදමින්...';
-        generateQuizBtn.disabled = true;
-        quizBody.innerHTML = '';
-
-        try {
-            const response = await fetch('/generate-quiz', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
-            });
-            const data = await response.json();
-
-            if (data.status === 'success' && Array.isArray(data.questions) && data.questions.length) {
-                renderQuiz(data.questions);
-            } else if (typeof showErrorBanner === 'function') {
-                showErrorBanner(data.message || 'Quiz එක හදාගැනීම අසාර්ථක විය.');
-            }
-        } catch (err) {
-            console.error('Quiz generation error:', err);
-            if (typeof showErrorBanner === 'function') {
-                showErrorBanner('Network error. Quiz එක හදාගැනීම අසාර්ථක විය.');
-            }
-        } finally {
-            generateQuizBtn.innerHTML = '<i class="fas fa-list-check"></i> Quiz එකක් හදන්න';
-            generateQuizBtn.disabled = false;
-        }
-    });
+    function escapeHtmlQuiz(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
 
     function renderQuiz(questions) {
         let html = '<form id="quiz-form">';
@@ -2068,11 +2030,43 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function escapeHtmlQuiz(str) {
-        const div = document.createElement('div');
-        div.textContent = str == null ? '' : String(str);
-        return div.innerHTML;
+    if (generateQuizBtn && quizBody) {
+        generateQuizBtn.addEventListener('click', async function() {
+            const sourceText = (scriptOutput && scriptOutput.value) || (noteInput && noteInput.value) || '';
+            const text = sourceText.trim();
+            if (!text) {
+                showErrorBanner('Quiz එකක් හදන්න content එකක් නෑ — කලින් note එකක් process කරන්න.');
+                return;
+            }
+
+            generateQuizBtn.innerHTML = '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Quiz හදමින්...';
+            generateQuizBtn.disabled = true;
+            quizBody.innerHTML = '';
+
+            try {
+                const response = await fetch('/generate-quiz', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text }),
+                });
+                const data = await response.json();
+
+                if (data.status === 'success' && Array.isArray(data.questions) && data.questions.length) {
+                    renderQuiz(data.questions);
+                } else {
+                    showErrorBanner(data.message || 'Quiz එක හදාගැනීම අසාර්ථක විය.');
+                }
+            } catch (err) {
+                console.error('Quiz generation error:', err);
+                showErrorBanner('Network error. Quiz එක හදාගැනීම අසාර්ථක විය.');
+            } finally {
+                generateQuizBtn.innerHTML = '<i class="fas fa-list-check"></i> Quiz එකක් හදන්න';
+                generateQuizBtn.disabled = false;
+            }
+        });
     }
+
+    console.log('🎵 NoteWav AI Loaded — Mind Maps + gTTS narration ready!');
 });
 
 // ========================================
