@@ -1376,6 +1376,17 @@ def home():
     return render_template('index.html')
 
 
+@app.route('/ads.txt')
+def ads_txt():
+    """Required by Google AdSense to verify this site is authorized to
+    show ads from this publisher account. The 'DIRECT' relationship and
+    the fixed certification ID (f08c47fec0942fa0) are Google's own
+    standard values for AdSense — same for every publisher, only the
+    pub- ID changes."""
+    content = "google.com, pub-4882546078529900, DIRECT, f08c47fec0942fa0\n"
+    return app.response_class(content, mimetype='text/plain')
+
+
 @app.route('/privacy')
 def privacy_page():
     return render_template('privacy.html')
