@@ -2862,7 +2862,11 @@ function getCoinsBalance() {
 
 function updateCoinsDisplay() {
     const el = document.getElementById('coins-count');
-    if (el) el.textContent = String(getCoinsBalance());
+    // NEW: show a plain "Free" label instead of the actual number —
+    // the underlying coin balance (getCoinsBalance()) still tracks
+    // normally in localStorage for future paid-feature gating, this
+    // only changes what's DISPLAYED on the badge.
+    if (el) el.textContent = 'Free';
 }
 
 function spendCoins(amount) {
