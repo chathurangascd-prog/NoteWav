@@ -20,6 +20,9 @@ from gtts import gTTS
 from pydub import AudioSegment  # pip install pydub --break-system-packages
                                  # also requires ffmpeg installed on the system
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import threading
+from collections import defaultdict, deque
+from functools import wraps
 
 # ===== LOAD ENV =====
 load_dotenv()
@@ -65,6 +68,30 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme')
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
+
+# ========================================
+# SENTRY ERROR TRACKING (optional — only activates if SENTRY_DSN is set)
+# ========================================
+# Free Sentry account: sentry.io → create a Flask project → copy the
+# DSN → set it as SENTRY_DSN in Render's environment variables. Once
+# set, unhandled errors show up in Sentry's dashboard (with full stack
+# traces) instead of only being visible by scrolling through Render logs.
+SENTRY_DSN = os.environ.get('SENTRY_DSN')
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[FlaskIntegration()],
+            traces_sample_rate=0.1,  # light performance sampling, not just errors
+            send_default_pii=False,  # don't send request bodies/user data — notes text stays private
+        )
+        print("✅ Sentry error tracking configured!")
+    except Exception as e:
+        print(f"⚠️ Sentry setup failed (non-critical): {e}")
+else:
+    print("⚠️ SENTRY_DSN not set — error tracking disabled (this is fine, just optional).")
 
 # ========================================
 # GOOGLE SIGN-IN (OAuth 2.0)
@@ -342,6 +369,15 @@ def init_db():
             last_login TEXT
         )
     """)
+    # Logs every successful Gemini API call — lets the admin see how
+    # close usage is getting to the free-tier monthly quota, well
+    # before it actually runs out.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gemini_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -361,6 +397,52 @@ def validate_text_length(text):
             f'(දැනට අකුරු {len(text)}ක් ඇත). කරුණාකර සටහන කෙටි කර නැවත උත්සාහ කරන්න.'
         )
     return None
+
+
+# ========================================
+# API RATE LIMITING (protects the free Gemini/Vision quota from being
+# exhausted by one misbehaving device — e.g. a stuck retry loop)
+# ========================================
+# Simple in-memory sliding-window limiter, keyed per signed-in account
+# (or IP address for guests). NOTE: since Render runs 2 gunicorn worker
+# PROCESSES, each has its own separate memory — a device's requests
+# could land on either worker, so the real effective limit across both
+# workers combined is up to ~2x the number configured below. That's an
+# acceptable approximation for protecting against runaway/bot usage;
+# it's not meant to be a precise per-second guarantee.
+_rate_limit_lock = threading.Lock()
+_rate_limit_buckets = defaultdict(deque)
+
+
+def _check_rate_limit(key, max_requests, window_seconds):
+    now = time.time()
+    with _rate_limit_lock:
+        bucket = _rate_limit_buckets[key]
+        while bucket and now - bucket[0] > window_seconds:
+            bucket.popleft()
+        if len(bucket) >= max_requests:
+            return False
+        bucket.append(now)
+        return True
+
+
+def rate_limited(max_requests, window_seconds):
+    """Decorator — apply to any route that hits a paid/quota-limited
+    API (Gemini, Google Cloud Vision) to cap how often one device can
+    call it."""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            identifier = session.get('user_id') or request.remote_addr or 'unknown'
+            bucket_key = f"{f.__name__}:{identifier}"
+            if not _check_rate_limit(bucket_key, max_requests, window_seconds):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'ඉතා වේගවත් ලෙස requests යවනවා — ටිකක් ඉන්න, මිනිත්තුවක් විතර නවතලා නැවත උත්සාහ කරන්න.'
+                }), 429
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 # ========================================
@@ -985,6 +1067,91 @@ def _is_rate_limit_error(exc):
     return '429' in msg or 'RESOURCE_EXHAUSTED' in msg or 'QUOTA' in msg
 
 
+QUIZ_SYSTEM_INSTRUCTION = """
+ඔබ ශ්‍රී ලංකාවේ අධ්‍යාපන AI සහායකයෙකි. ලබා දෙන පාඩම් content එකෙන්, MCQ (multiple choice
+question) ප්‍රශ්න 5ක් සමන්විත quiz එකක් හදන්න. **JSON object එකක් විතරක්** output කරන්න,
+වෙන කිසිදු text හෝ markdown fence නොදාන්න:
+
+{
+  "questions": [
+    {
+      "question": "<ප්‍රශ්නය>",
+      "options": ["<option A>", "<option B>", "<option C>", "<option D>"],
+      "correct_index": <0-3 අතර correct answer එකේ index එක>
+    }
+  ]
+}
+
+නීති:
+- Content එකේ ලියැවී ඇති භාෂාවෙන්ම (Sinhala/Tamil/English) ප්‍රශ්න ලියන්න.
+- ප්‍රශ්න content එකේ ඇති කරුණු පදනම් කරගෙන විය යුතුය (invented/false facts එපා).
+- options 4 සියල්ලම reasonable විය යුතුය (obviously wrong options එපා), correct answer එකක්ම විය යුතුය.
+- Questions 5ක්ම හදන්න, ඊට වඩා අඩු නොවේ.
+"""
+
+
+def call_gemini_quiz(content_text, max_retries=2):
+    """Generates a 5-question multiple-choice quiz from note content,
+    using the same Gemini client/retry pattern as the main script
+    generation. Kept as a separate, lightweight function/prompt rather
+    than folding into the main system instruction, since a quiz is an
+    optional add-on most notes won't need."""
+    if not client:
+        raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
+
+    prompt = f"පහත content එකෙන් quiz එකක් හදන්න:\n\n{content_text}"
+
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model='gemini-flash-latest',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=QUIZ_SYSTEM_INSTRUCTION,
+                    temperature=0.4,
+                    max_output_tokens=2000,
+                    response_mime_type='application/json',
+                    safety_settings=SAFETY_SETTINGS,
+                )
+            )
+            break
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries and _is_transient_gemini_error(e):
+                time.sleep(attempt)
+                continue
+            raise GeminiGenerationError(f"Quiz generation failed: {e}")
+    else:
+        raise GeminiGenerationError(f"Quiz generation failed after {max_retries} attempts: {last_error}")
+
+    if not getattr(response, 'candidates', None):
+        raise GeminiGenerationError("Quiz content was blocked by Gemini's safety filters.")
+
+    raw_text = response.text
+    if not raw_text:
+        raise GeminiGenerationError("Gemini returned an empty quiz response.")
+
+    data = _parse_json_loose(raw_text)
+    questions = data.get('questions') or []
+    if not questions:
+        raise GeminiGenerationError("Gemini did not return any quiz questions.")
+
+    # Log this call too — it hits the same shared Gemini quota.
+    try:
+        log_conn = get_db()
+        log_conn.execute(
+            "INSERT INTO gemini_calls (created_at) VALUES (?)",
+            (datetime.now(timezone.utc).isoformat(),)
+        )
+        log_conn.commit()
+        log_conn.close()
+    except Exception as e:
+        print(f"⚠️ Gemini call logging failed (non-critical): {e}")
+
+    return questions
+
+
 def call_gemini_structured(note_text, output_language='si', max_retries=3):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
@@ -1062,10 +1229,25 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
     if not podcast_script:
         raise GeminiGenerationError("Gemini did not return a podcast script.")
 
+    # Log this successful call for the admin's monthly usage tracker.
+    # Logging failure must NEVER break the actual feature, so it's
+    # wrapped in its own try/except and silently ignored on error.
+    try:
+        log_conn = get_db()
+        log_conn.execute(
+            "INSERT INTO gemini_calls (created_at) VALUES (?)",
+            (datetime.now(timezone.utc).isoformat(),)
+        )
+        log_conn.commit()
+        log_conn.close()
+    except Exception as e:
+        print(f"⚠️ Gemini call logging failed (non-critical): {e}")
+
     return podcast_script, mermaid_code_si, mermaid_code_en
 
 
 @app.route('/ocr', methods=['POST'])
+@rate_limited(10, 60)  # 10 OCR calls per minute per device — Google Cloud Vision has its own free quota
 def ocr_image():
     print("=" * 50)
     print("📸 OCR Request Received")
@@ -1146,6 +1328,7 @@ def ocr_image():
 
 
 @app.route('/tts', methods=['POST'])
+@rate_limited(10, 60)  # 10 audio generations per minute per device
 def text_to_speech():
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
@@ -1191,6 +1374,16 @@ def text_to_speech():
 @app.route('/')
 def home():
     return render_template('index.html')
+
+
+@app.route('/privacy')
+def privacy_page():
+    return render_template('privacy.html')
+
+
+@app.route('/terms')
+def terms_page():
+    return render_template('terms.html')
 
 
 # ========================================
@@ -1419,7 +1612,28 @@ def service_worker():
     return response
 
 
+@app.route('/generate-quiz', methods=['POST'])
+@rate_limited(6, 60)
+def generate_quiz():
+    data = request.get_json(silent=True) or {}
+    content_text = (data.get('text') or '').strip()
+    if not content_text:
+        return jsonify({'status': 'error', 'message': 'Quiz එකක් හදන්න content එකක් නෑ.'}), 400
+
+    length_error = validate_text_length(content_text)
+    if length_error:
+        return jsonify({'status': 'error', 'message': length_error}), 400
+
+    try:
+        questions = call_gemini_quiz(content_text)
+    except GeminiGenerationError as e:
+        return jsonify({'status': 'error', 'message': f'Quiz එක හදාගැනීම අසාර්ථක විය: {e}'}), 500
+
+    return jsonify({'status': 'success', 'questions': questions})
+
+
 @app.route('/process-note', methods=['POST'])
+@rate_limited(8, 60)  # 8 Gemini calls per minute per device — protects the shared free API quota
 def process_note():
     data = request.get_json(silent=True) or {}
     note_text = (data.get('text') or '').strip()
@@ -1721,6 +1935,16 @@ def _get_admin_usage_data():
     """).fetchall()
 
     total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
+
+    # Gemini calls so far THIS calendar month — lets the admin watch
+    # usage approach the free-tier monthly quota before it's actually
+    # exhausted, instead of finding out when requests start failing.
+    month_start = datetime.now(timezone.utc).strftime('%Y-%m-01')
+    gemini_calls_row = conn.execute(
+        'SELECT COUNT(*) FROM gemini_calls WHERE created_at >= ?', (month_start,)
+    ).fetchone()
+    gemini_calls_this_month = gemini_calls_row[0] if gemini_calls_row else 0
+
     conn.close()
 
     sl_offset = timedelta(hours=5, minutes=30)
@@ -1765,6 +1989,7 @@ def _get_admin_usage_data():
         'users': users_list,
         'total_users': len(users_list),
         'total_notes_in_library': total_notes_in_library,
+        'gemini_calls_this_month': gemini_calls_this_month,
         # Tells the admin whether data is genuinely persisting to
         # Turso, or has silently fallen back to the ephemeral local
         # SQLite file (e.g. if TURSO_DATABASE_URL/TURSO_AUTH_TOKEN are

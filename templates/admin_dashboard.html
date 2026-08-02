@@ -451,6 +451,11 @@
                 <div class="num" id="stat-total-notes">{{ total_notes_in_library }}</div>
                 <div class="label">Notes saved (Library)</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-icon">✨</div>
+                <div class="num" id="stat-gemini-calls">{{ gemini_calls_this_month }}</div>
+                <div class="label">Gemini calls this month</div>
+            </div>
             <div class="stat-card action-card">
                 <a href="{{ url_for('admin_export_csv') }}" class="csv-export-btn"><span class="ic">⬇️</span> Export Usage CSV</a>
             </div>
@@ -795,6 +800,7 @@
 
                 document.getElementById('stat-total-users').textContent = data.total_users;
                 document.getElementById('stat-total-notes').textContent = data.total_notes_in_library;
+                document.getElementById('stat-gemini-calls').textContent = data.gemini_calls_this_month;
                 renderTable(data.users);
 
                 const storageBadge = document.getElementById('storage-badge');

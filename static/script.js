@@ -1041,6 +1041,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!mindmapSection || !mindmapContainer) return;
 
         mindmapSection.classList.remove('hidden');
+        const quizSectionEl = document.getElementById('quiz-section');
+        if (quizSectionEl) quizSectionEl.classList.remove('hidden');
         mermaidCodes = { si: codeSi || '', en: codeEn || '' };
         mindmapSvgCache = { si: '', en: '' };
 
@@ -1909,6 +1911,10 @@ document.addEventListener('DOMContentLoaded', function() {
         safetySection.classList.add('hidden');
         audioSection.classList.add('hidden');
         if (mindmapSection) mindmapSection.classList.add('hidden');
+        const quizSectionResetEl = document.getElementById('quiz-section');
+        if (quizSectionResetEl) quizSectionResetEl.classList.add('hidden');
+        const quizBodyResetEl = document.getElementById('quiz-body');
+        if (quizBodyResetEl) quizBodyResetEl.innerHTML = '';
         if (mindmapContainer) mindmapContainer.innerHTML = '<p class="mindmap-empty">Mind map එකක් තවම නෑ.</p>';
         lastMindMapSvg = '';
         mermaidCodes = { si: '', en: '' };
@@ -1968,6 +1974,105 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     console.log('🎵 NoteWav AI Loaded — Mind Maps + gTTS narration ready!');
+});
+
+// ========================================
+// QUIZ GENERATION (active-recall study tool)
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    const generateQuizBtn = document.getElementById('generate-quiz-btn');
+    const quizBody = document.getElementById('quiz-body');
+    if (!generateQuizBtn || !quizBody) return;
+
+    generateQuizBtn.addEventListener('click', async function() {
+        const sourceText = (document.getElementById('script-output') || {}).value
+            || (document.getElementById('note-input') || {}).value || '';
+        const text = sourceText.trim();
+        if (!text) {
+            if (typeof showErrorBanner === 'function') {
+                showErrorBanner('Quiz එකක් හදන්න content එකක් නෑ — කලින් note එකක් process කරන්න.');
+            }
+            return;
+        }
+
+        generateQuizBtn.innerHTML = '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Quiz හදමින්...';
+        generateQuizBtn.disabled = true;
+        quizBody.innerHTML = '';
+
+        try {
+            const response = await fetch('/generate-quiz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            });
+            const data = await response.json();
+
+            if (data.status === 'success' && Array.isArray(data.questions) && data.questions.length) {
+                renderQuiz(data.questions);
+            } else if (typeof showErrorBanner === 'function') {
+                showErrorBanner(data.message || 'Quiz එක හදාගැනීම අසාර්ථක විය.');
+            }
+        } catch (err) {
+            console.error('Quiz generation error:', err);
+            if (typeof showErrorBanner === 'function') {
+                showErrorBanner('Network error. Quiz එක හදාගැනීම අසාර්ථක විය.');
+            }
+        } finally {
+            generateQuizBtn.innerHTML = '<i class="fas fa-list-check"></i> Quiz එකක් හදන්න';
+            generateQuizBtn.disabled = false;
+        }
+    });
+
+    function renderQuiz(questions) {
+        let html = '<form id="quiz-form">';
+        questions.forEach((q, qIndex) => {
+            html += `<div class="quiz-question" style="margin-bottom: 18px; padding: 14px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid var(--border-color);">`;
+            html += `<p style="font-weight: 600; margin-bottom: 10px;">${qIndex + 1}. ${escapeHtmlQuiz(q.question)}</p>`;
+            (q.options || []).forEach((opt, oIndex) => {
+                html += `<label style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; font-size: 0.9rem;">
+                    <input type="radio" name="q${qIndex}" value="${oIndex}" style="accent-color: #6b30ff;">
+                    <span>${escapeHtmlQuiz(opt)}</span>
+                </label>`;
+            });
+            html += `<div class="quiz-answer-feedback" id="quiz-feedback-${qIndex}" style="margin-top: 8px; font-size: 0.85rem; display: none;"></div>`;
+            html += `</div>`;
+        });
+        html += `<button type="submit" class="btn-primary" style="margin-top: 8px;"><i class="fas fa-check"></i> Answers check කරන්න</button>`;
+        html += `<p id="quiz-score" style="margin-top: 12px; font-weight: 700; display: none;"></p>`;
+        html += `</form>`;
+        quizBody.innerHTML = html;
+
+        document.getElementById('quiz-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            let correctCount = 0;
+            questions.forEach((q, qIndex) => {
+                const selected = document.querySelector(`input[name="q${qIndex}"]:checked`);
+                const feedbackEl = document.getElementById(`quiz-feedback-${qIndex}`);
+                feedbackEl.style.display = 'block';
+                if (!selected) {
+                    feedbackEl.innerHTML = '<span style="color:#f59e0b;">⚠️ Answer එකක් තෝරලා නෑ</span>';
+                    return;
+                }
+                const selectedIndex = parseInt(selected.value, 10);
+                if (selectedIndex === q.correct_index) {
+                    correctCount++;
+                    feedbackEl.innerHTML = '<span style="color:#22c55e;">✅ හරි!</span>';
+                } else {
+                    const correctText = (q.options || [])[q.correct_index] || '';
+                    feedbackEl.innerHTML = `<span style="color:#ef4444;">❌ වැරදියි — හරි answer එක: ${escapeHtmlQuiz(correctText)}</span>`;
+                }
+            });
+            const scoreEl = document.getElementById('quiz-score');
+            scoreEl.style.display = 'block';
+            scoreEl.textContent = `ලකුණු: ${correctCount} / ${questions.length}`;
+        });
+    }
+
+    function escapeHtmlQuiz(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
 });
 
 // ========================================
@@ -2912,10 +3017,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const aboutLink = document.getElementById('about-link');
     const supportLink = document.getElementById('support-link');
-    const privacyLink = document.getElementById('privacy-link');
     if (aboutLink) aboutLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('about'); });
     if (supportLink) supportLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('support'); });
-    if (privacyLink) privacyLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('privacy'); });
+    // NOTE: 'privacy-link' no longer opens a modal — it's now a real
+    // link to the /privacy page (required for AdSense/AdMob approval,
+    // which needs a genuinely accessible URL, not an in-app modal).
 
     if (infoModalClose) infoModalClose.addEventListener('click', () => infoModalBackdrop.classList.add('hidden'));
     infoModalBackdrop.addEventListener('click', function(e) {

@@ -14,6 +14,20 @@
          styles.css :root — this is the HTML-level version of the
          same signal. -->
     <meta name="color-scheme" content="dark">
+    <!-- NEW: Open Graph / Twitter Card tags — makes links to NoteWav
+         shared on WhatsApp/Facebook/Telegram show a proper preview
+         card (title + description + icon) instead of a bare URL,
+         complementing the mind-map watermark's word-of-mouth growth. -->
+    <meta property="og:title" content="NoteWav AI — Smart විදිහට පාඩම් අහන්න">
+    <meta property="og:description" content="ඔබේ study notes podcast audio + mind map බවට හරවන්න — Sinhala, Tamil, English. Free AI study tool for Sri Lankan students.">
+    <meta property="og:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) }}">
+    <meta property="og:url" content="https://notewav.onrender.com">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NoteWav AI">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="NoteWav AI — Smart විදිහට පාඩම් අහන්න">
+    <meta name="twitter:description" content="ඔබේ study notes podcast audio + mind map බවට හරවන්න — Sinhala, Tamil, English.">
+    <meta name="twitter:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="NoteWav">
@@ -474,6 +488,18 @@
                 </div>
             </div>
 
+            <div id="quiz-section" class="glass-card hidden animate-fade card-step-2">
+                <div class="card-header">
+                    <span class="step-num">📝</span>
+                    <h2>Quiz</h2>
+                    <span class="step-subtitle">✅ Test yourself</span>
+                </div>
+                <button id="generate-quiz-btn" class="btn-secondary">
+                    <i class="fas fa-list-check"></i> Quiz එකක් හදන්න
+                </button>
+                <div id="quiz-body" style="margin-top: 16px;"></div>
+            </div>
+
             <div id="library-modal-backdrop" class="mindmap-modal-backdrop hidden">
                 <div id="library-modal-card" class="mindmap-modal-card library-modal-card">
                     <div class="mindmap-modal-header">
@@ -707,7 +733,8 @@
                     &copy; 2026 NoteWav AI — Develop by Sandun(SCD)
                 </p>
                 <div class="footer-links">
-                    <a href="#" class="footer-link" id="privacy-link"><i class="fas fa-shield-alt"></i> Privacy</a>
+                    <a href="/privacy" class="footer-link" id="privacy-link"><i class="fas fa-shield-alt"></i> Privacy</a>
+                    <a href="/terms" class="footer-link" id="terms-link"><i class="fas fa-file-contract"></i> Terms</a>
                     <a href="#" class="footer-link" id="about-link"><i class="fas fa-info-circle"></i> About</a>
                     <a href="#" class="footer-link" id="support-link"><i class="fas fa-envelope"></i> Support</a>
                 </div>
