@@ -56,6 +56,46 @@
     --radius-full: 50px;
 }
 
+/* ========================================
+   LIGHT THEME (toggled via body.light-theme)
+   Overrides the same CSS custom properties used everywhere above —
+   most of the UI already reads colors through these variables, so
+   this single block covers the vast majority of surfaces. A few
+   hardcoded-color exceptions (badge, splash screen) get their own
+   targeted overrides below.
+   ======================================== */
+body.light-theme {
+    color-scheme: light;
+    --bg-primary: #f6f5fb;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(107, 48, 255, 0.04);
+    --bg-card-hover: rgba(107, 48, 255, 0.02);
+    --bg-input: #f0edf9;
+    --bg-input-hover: #e7e0fa;
+    --border-color: rgba(107, 48, 255, 0.14);
+    --border-hover: rgba(107, 48, 255, 0.45);
+    --text-primary: #1a1a2e;
+    --text-secondary: rgba(26, 26, 46, 0.72);
+    --text-muted: rgba(26, 26, 46, 0.45);
+    --shadow-md: 0 8px 32px rgba(107, 48, 255, 0.08);
+    --shadow-lg: 0 16px 48px rgba(107, 48, 255, 0.12);
+    --shadow-glow: 0 8px 32px rgba(107, 48, 255, 0.10);
+}
+/* Badge uses hardcoded white-on-translucent-white in dark mode — needs
+   its own light-mode colors since it doesn't read the variables above. */
+body.light-theme .badge {
+    background: rgba(107, 48, 255, 0.08);
+    color: #6b30ff;
+    -webkit-text-fill-color: #6b30ff;
+    border-color: rgba(107, 48, 255, 0.22);
+}
+/* The faint dot-pattern overlay is barely visible either way (very low
+   opacity), dim it slightly further so it doesn't read as "dirty"
+   against a light background. */
+body.light-theme::after {
+    opacity: 0.3;
+}
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar {
     width: 6px;

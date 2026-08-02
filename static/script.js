@@ -2336,6 +2336,38 @@ const NOTEWAV_TRANSLATIONS = {
     lyrics_placeholder: { si: 'Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...', en: 'Text will highlight here as the Audio plays...' },
 };
 
+// ========================================
+// THEME (Dark / Light toggle)
+// ========================================
+function applyTheme(theme) {
+    document.body.classList.toggle('light-theme', theme === 'light');
+    const darkBtn = document.getElementById('theme-dark-btn');
+    const lightBtn = document.getElementById('theme-light-btn');
+    if (darkBtn) darkBtn.classList.toggle('active', theme === 'dark');
+    if (lightBtn) lightBtn.classList.toggle('active', theme === 'light');
+    try {
+        localStorage.setItem('notewav_theme', theme);
+    } catch (e) {
+        console.warn('Could not save theme preference:', e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    let savedTheme = 'dark';
+    try {
+        const stored = localStorage.getItem('notewav_theme');
+        if (stored === 'light' || stored === 'dark') savedTheme = stored;
+    } catch (e) {
+        // ignore, default to dark
+    }
+    applyTheme(savedTheme);
+
+    const themeDarkBtn = document.getElementById('theme-dark-btn');
+    const themeLightBtn = document.getElementById('theme-light-btn');
+    if (themeDarkBtn) themeDarkBtn.addEventListener('click', () => applyTheme('dark'));
+    if (themeLightBtn) themeLightBtn.addEventListener('click', () => applyTheme('light'));
+});
+
 function applyAppLanguage(lang) {
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
