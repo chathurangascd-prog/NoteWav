@@ -1327,7 +1327,8 @@ def pdf_extract():
         })
     except Exception as e:
         print(f"❌ PDF extract error: {e}")
-        return jsonify({'success': False, 'error': f'PDF එක process කිරීමට නොහැකි විය: {e}'}), 500
+        error_detail = f'PDF එක process කිරීමට නොහැකි විය: {e}'
+        return jsonify({'success': False, 'error': error_detail, 'message': error_detail}), 500
 
 
 @app.route('/ocr', methods=['POST'])
