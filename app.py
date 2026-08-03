@@ -2006,6 +2006,7 @@ def _is_admin_logged_in():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
+@rate_limited(5, 300)  # FIX (security gap): admin login had NO protection against brute-force password guessing — a bot could try unlimited passwords. Now capped at 5 attempts per 5 minutes per IP.
 def admin_login():
     error = None
     if request.method == 'POST':
