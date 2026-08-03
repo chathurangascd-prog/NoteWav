@@ -1304,6 +1304,7 @@ def pdf_extract():
                 if page_text:
                     pages_text.append(f"--- Page {i + 1} ---\n{page_text}")
 
+        total_pages_in_pdf = len(doc)  # capture BEFORE closing — len(doc) after close() raises "document closed"
         doc.close()
         full_text = '\n\n'.join(pages_text).strip()
 
@@ -1315,8 +1316,8 @@ def pdf_extract():
             })
 
         note = None
-        if len(doc) > MAX_PAGES:
-            note = f'PDF එකේ pages {len(doc)}ක් තිබුණි — safety හේතුවෙන් මුල් pages {MAX_PAGES} විතරක් process කරන ලදී.'
+        if total_pages_in_pdf > MAX_PAGES:
+            note = f'PDF එකේ pages {total_pages_in_pdf}ක් තිබුණි — safety හේතුවෙන් මුල් pages {MAX_PAGES} විතරක් process කරන ලදී.'
 
         return jsonify({
             'success': True,
