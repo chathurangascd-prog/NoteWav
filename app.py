@@ -1278,7 +1278,7 @@ def pdf_extract():
 
     try:
         doc = fitz.open(stream=content, filetype='pdf')
-        MAX_PAGES = 15  # cost/time safety cap for very long PDFs
+        MAX_PAGES = 10  # cost/time safety cap for very long PDFs
         page_count = min(len(doc), MAX_PAGES)
         pages_text = []
 
