@@ -417,30 +417,42 @@ _rate_limit_buckets = defaultdict(deque)
 
 
 def _check_rate_limit(key, max_requests, window_seconds):
+    """Returns (allowed: bool, retry_after_seconds: int). retry_after
+    is how long until the oldest request in the window expires — i.e.
+    the soonest another attempt could succeed."""
     now = time.time()
     with _rate_limit_lock:
         bucket = _rate_limit_buckets[key]
         while bucket and now - bucket[0] > window_seconds:
             bucket.popleft()
         if len(bucket) >= max_requests:
-            return False
+            retry_after = max(1, int(window_seconds - (now - bucket[0])))
+            return False, retry_after
         bucket.append(now)
-        return True
+        return True, 0
 
 
 def rate_limited(max_requests, window_seconds):
     """Decorator — apply to any route that hits a paid/quota-limited
     API (Gemini, Google Cloud Vision) to cap how often one device can
-    call it."""
+    call it. Shows the person exactly how many seconds until they can
+    try again, instead of a vague 'wait a bit'."""
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
             identifier = session.get('user_id') or request.remote_addr or 'unknown'
             bucket_key = f"{f.__name__}:{identifier}"
-            if not _check_rate_limit(bucket_key, max_requests, window_seconds):
+            allowed, retry_after = _check_rate_limit(bucket_key, max_requests, window_seconds)
+            if not allowed:
+                mins, secs = divmod(retry_after, 60)
+                if mins > 0:
+                    wait_str = f'මිනිත්තු {mins}ක් {secs} තත්පරයක්' if secs else f'මිනිත්තු {mins}ක්'
+                else:
+                    wait_str = f'තත්පර {secs}ක්'
                 return jsonify({
                     'status': 'error',
-                    'message': 'ඉතා වේගවත් ලෙස requests යවනවා — ටිකක් ඉන්න, මිනිත්තුවක් විතර නවතලා නැවත උත්සාහ කරන්න.'
+                    'message': f'ඉතා වේගවත් ලෙස requests යවනවා — {wait_str} ඉන්න, ඊට පස්සේ නැවත උත්සාහ කරන්න.',
+                    'retry_after_seconds': retry_after,
                 }), 429
             return f(*args, **kwargs)
         return wrapper
@@ -2006,10 +2018,22 @@ def _is_admin_logged_in():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
-@rate_limited(5, 300)  # FIX (security gap): admin login had NO protection against brute-force password guessing — a bot could try unlimited passwords. Now capped at 5 attempts per 5 minutes per IP.
 def admin_login():
     error = None
     if request.method == 'POST':
+        # FIX (security gap): admin login had NO protection against
+        # brute-force password guessing — a bot could try unlimited
+        # passwords. Now capped at 5 login ATTEMPTS per 5 minutes per
+        # IP (just viewing the page doesn't count), with the exact
+        # wait time shown right on the login page itself.
+        identifier = request.remote_addr or 'unknown'
+        allowed, retry_after = _check_rate_limit(f"admin_login:{identifier}", 5, 300)
+        if not allowed:
+            mins, secs = divmod(retry_after, 60)
+            wait_str = f'මිනිත්තු {mins}ක් {secs} තත්පරයක්' if mins > 0 else f'තත්පර {secs}ක්'
+            error = f'ඉතා වේගවත් ලෙස උත්සාහ කරලා තියෙනවා — {wait_str} ඉන්න, ඊට පස්සේ නැවත උත්සාහ කරන්න.'
+            return render_template('admin_login.html', error=error)
+
         password = request.form.get('password', '')
         if password == ADMIN_PASSWORD:
             session.permanent = True
