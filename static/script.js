@@ -408,41 +408,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let allLibraryNotes = [];
     const librarySearchInput = document.getElementById('library-search-input');
+    let librarySearchDebounceTimer = null;
 
-    async function loadLibraryList() {
+    async function loadLibraryList(query) {
         libraryModalBody.innerHTML = '<p class="mindmap-empty"><span class="mini-wave"><span></span><span></span><span></span><span></span></span> Loading...</p>';
-        if (librarySearchInput) librarySearchInput.value = '';
+        if (!query && librarySearchInput) librarySearchInput.value = '';
         try {
-            const response = await fetch('/library/notes');
+            const url = query ? `/library/notes?q=${encodeURIComponent(query)}` : '/library/notes';
+            const response = await fetch(url);
             const data = await response.json();
             if (data.status !== 'success') {
                 libraryModalBody.innerHTML = '<p class="mindmap-empty">Library එක load කරගැනීම අසාර්ථක විය.</p>';
                 return;
             }
             allLibraryNotes = data.notes || [];
-            renderLibraryList(allLibraryNotes);
+            renderLibraryList(allLibraryNotes, query);
         } catch (err) {
             console.error('Library load error:', err);
             libraryModalBody.innerHTML = '<p class="mindmap-empty">Library එක load කරගැනීම අසාර්ථක විය.</p>';
         }
     }
 
-    function filterLibraryNotes(searchTerm) {
-        const term = searchTerm.trim().toLowerCase();
-        if (!term) {
-            renderLibraryList(allLibraryNotes);
-            return;
-        }
-        const filtered = allLibraryNotes.filter(note =>
-            (note.title || '').toLowerCase().includes(term) ||
-            (note.subject || '').toLowerCase().includes(term)
-        );
-        renderLibraryList(filtered, term);
-    }
-
+    // NEW: search now goes through the backend (debounced) instead of
+    // only filtering title/subject already loaded in the browser — this
+    // means it searches the FULL saved note content too, not just the
+    // title/subject shown in the list.
     if (librarySearchInput) {
         librarySearchInput.addEventListener('input', function() {
-            filterLibraryNotes(this.value);
+            const term = this.value;
+            clearTimeout(librarySearchDebounceTimer);
+            librarySearchDebounceTimer = setTimeout(() => {
+                loadLibraryList(term.trim());
+            }, 350);
         });
     }
 
@@ -527,11 +524,7 @@ document.addEventListener('DOMContentLoaded', function() {
             this.classList.toggle('active-toggle', combineModeActive);
             if (libraryCombineHint) libraryCombineHint.classList.toggle('hidden', !combineModeActive);
             updateCombineGenerateButton();
-            renderLibraryList(allLibraryNotes.filter(n => {
-                const term = (librarySearchInput && librarySearchInput.value || '').trim().toLowerCase();
-                if (!term) return true;
-                return (n.title || '').toLowerCase().includes(term) || (n.subject || '').toLowerCase().includes(term);
-            }));
+            renderLibraryList(allLibraryNotes);
         });
     }
 
@@ -2418,7 +2411,7 @@ const NOTEWAV_TRANSLATIONS = {
     settings_title: { si: 'සැකසුම්', en: 'Settings' },
     menu_title: { si: 'මෙනුව (Menu)', en: 'Menu' },
     settings_language_label: { si: 'App භාෂාව (Language)', en: 'App Language' },
-    library_search_placeholder: { si: 'Title/Subject එකෙන් හොයන්න...', en: 'Search by Title/Subject...' },
+    library_search_placeholder: { si: 'Title/Subject/Content එකෙන් හොයන්න...', en: 'Search by Title/Subject/Content...' },
     combine_toggle_btn: { si: 'එකතු කරන්න', en: 'Combine' },
     combine_hint: {
         si: '🔗 Notes කිහිපයක් (checkbox වලින්) තෝරගන්න — ඒ සියල්ල එකට එකතු කරලා, එකම දිගු Audio episode එකක් හදාගන්න පුළුවන් (Exam කලින් Full Revision විදිහට අහන්න හොඳයි).',

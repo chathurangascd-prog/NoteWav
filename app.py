@@ -1764,23 +1764,45 @@ def library_list():
     try:
         conn = get_db()
         user_id = session.get('user_id')
+        # NEW: optional full-text search — matches title/subject AND the
+        # actual saved note content (note_text/processed_text), not just
+        # title/subject like before. Empty/missing q returns everything,
+        # unchanged from prior behavior.
+        query = (request.args.get('q') or '').strip()
+        like_term = f'%{query}%'
+
         if user_id:
             # Signed in: PRIVATE list — only this account's own notes,
             # so it's the same list on every device they log into.
-            rows = conn.execute(
-                'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
-                (user_id,)
-            ).fetchall()
+            if query:
+                rows = conn.execute(
+                    """SELECT id, subject, title, mode, created_at FROM notes
+                       WHERE owner_google_id = ?
+                       AND (title LIKE ? OR subject LIKE ? OR note_text LIKE ? OR processed_text LIKE ?)
+                       ORDER BY created_at DESC""",
+                    (user_id, like_term, like_term, like_term, like_term)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
+                    (user_id,)
+                ).fetchall()
         else:
             # Guest: only notes with NO account owner (true guest-saved
             # notes) — a signed-in account's private notes must NEVER
-            # be visible here. FIX: this previously had no WHERE clause
-            # at all, so it was accidentally showing EVERY note in the
-            # database — including logged-in users' supposedly-private
-            # notes — to any guest. Now correctly scoped.
-            rows = conn.execute(
-                'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
-            ).fetchall()
+            # be visible here.
+            if query:
+                rows = conn.execute(
+                    """SELECT id, subject, title, mode, created_at FROM notes
+                       WHERE owner_google_id IS NULL
+                       AND (title LIKE ? OR subject LIKE ? OR note_text LIKE ? OR processed_text LIKE ?)
+                       ORDER BY created_at DESC""",
+                    (like_term, like_term, like_term, like_term)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
+                ).fetchall()
         conn.close()
         notes = [dict(row) for row in rows]
         return jsonify({'status': 'success', 'notes': notes})
