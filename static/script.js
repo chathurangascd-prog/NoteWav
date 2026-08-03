@@ -1658,7 +1658,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     noteInput.value = data.text.trim();
                 }
                 autoResizeTextarea(noteInput);
-                showOcrStatus('success', `✅ Pages ${data.pages}ක PDF එකෙන් පෙළ ලබාගන්නා ලදී (${data.length} අකුරු).`);
+                let successMsg = `✅ Pages ${data.pages}ක PDF එකෙන් පෙළ ලබාගන්නා ලදී (${data.length} අකුරු).`;
+                if (data.note) successMsg += ` ⚠️ ${data.note}`;
+                showOcrStatus('success', successMsg);
                 trackUsageEvent('pdf_uploaded');
             } else {
                 showOcrStatus('error', data.message || 'PDF එකෙන් පෙළ ලබාගැනීම අසාර්ථක විය.');

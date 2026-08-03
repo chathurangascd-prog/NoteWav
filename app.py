@@ -18,7 +18,7 @@ from google import genai
 from google.genai import types
 from gtts import gTTS
 from pydub import AudioSegment  # pip install pydub --break-system-packages
-from pypdf import PdfReader  # pip install pypdf --break-system-packages
+import fitz  # PyMuPDF — pip install pymupdf --break-system-packages
 import io
                                  # also requires ffmpeg installed on the system
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -1251,14 +1251,24 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
 @app.route('/pdf-extract', methods=['POST'])
 @rate_limited(6, 60)
 def pdf_extract():
-    """Extracts embedded text directly from a PDF — no OCR/AI call
-    needed, since this reads the PDF's own text layer. Works great for
-    'digital' PDFs (lecture slides exported from PowerPoint/Word, typed
-    handouts). Does NOT work for scanned/photographed PDFs with no text
-    layer — those need the Photo OCR feature instead, so the error
-    message below points people there."""
+    """Renders each PDF page as an IMAGE and runs it through the same
+    Cloud Vision OCR used for photos, instead of reading the PDF's text
+    layer directly.
+
+    WHY: many Sri Lankan PDFs are typed using legacy non-Unicode Sinhala
+    fonts (FM Abhaya, Kaputa, DL-Manel, etc.) — these fonts make Sinhala
+    glyphs LOOK correct on screen, but the underlying stored character
+    codes are actually plain Latin/ASCII, mapped to Sinhala shapes only
+    by that specific font. Reading the text layer directly (as pypdf
+    did before) returns those raw underlying codes — garbled nonsense
+    like "fjk;a lsishï m%;spdrhla". Rendering the page as an image and
+    reading it visually via OCR sidesteps this entirely, exactly like
+    photographing the page would — it doesn't matter what font or
+    encoding was used, only what the text visually looks like."""
     if 'pdf' not in request.files:
         return jsonify({'success': False, 'error': 'No PDF uploaded'}), 400
+    if not CLOUD_OCR_AVAILABLE:
+        return jsonify({'success': False, 'error': 'Cloud Vision API not configured'}), 500
 
     file = request.files['pdf']
     content = file.read()
@@ -1267,31 +1277,57 @@ def pdf_extract():
         return jsonify({'success': False, 'message': 'PDF ගොනුව ඉතා විශාලයි (උපරිම 8MB).'}), 400
 
     try:
-        reader = PdfReader(io.BytesIO(content))
+        doc = fitz.open(stream=content, filetype='pdf')
+        MAX_PAGES = 15  # cost/time safety cap for very long PDFs
+        page_count = min(len(doc), MAX_PAGES)
         pages_text = []
-        for page in reader.pages:
-            text = (page.extract_text() or '').strip()
-            if text:
-                pages_text.append(text)
 
+        for i in range(page_count):
+            page = doc[i]
+            # matrix=2x2 renders at roughly double the PDF's native
+            # resolution (~144 DPI) — sharp enough for reliable OCR
+            # without making the image unnecessarily huge/slow.
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img_bytes = pix.tobytes('png')
+
+            image = vision.Image(content=img_bytes)
+            image_context = vision.ImageContext(language_hints=['si', 'ta', 'en'])
+            response = vision_client.text_detection(image=image, image_context=image_context)
+
+            if response.error.message:
+                print(f"⚠️ Vision error on PDF page {i + 1}: {response.error.message}")
+                continue
+
+            texts = response.text_annotations
+            if texts:
+                page_text = texts[0].description.strip()
+                if page_text:
+                    pages_text.append(f"--- Page {i + 1} ---\n{page_text}")
+
+        doc.close()
         full_text = '\n\n'.join(pages_text).strip()
 
         if len(full_text) < 3:
             return jsonify({
                 'success': False,
                 'text': '',
-                'message': 'මේ PDF එකෙන් පෙළ උපුටාගැනීමට නොහැකි විය — scanned/photo PDF එකක් නම්, ඒ pages ටික Photo OCR (රූප) විදිහට උත්සාහ කරන්න.'
+                'message': 'මේ PDF එකෙන් පෙළ උපුටාගැනීමට නොහැකි විය. පැහැදිලි pages සහිත PDF එකක් උත්සාහ කරන්න.'
             })
+
+        note = None
+        if len(doc) > MAX_PAGES:
+            note = f'PDF එකේ pages {len(doc)}ක් තිබුණි — safety හේතුවෙන් මුල් pages {MAX_PAGES} විතරක් process කරන ලදී.'
 
         return jsonify({
             'success': True,
             'text': full_text,
             'length': len(full_text),
-            'pages': len(reader.pages),
+            'pages': page_count,
+            'note': note,
         })
     except Exception as e:
         print(f"❌ PDF extract error: {e}")
-        return jsonify({'success': False, 'error': f'PDF එක කියවීමට නොහැකි විය: {e}'}), 500
+        return jsonify({'success': False, 'error': f'PDF එක process කිරීමට නොහැකි විය: {e}'}), 500
 
 
 @app.route('/ocr', methods=['POST'])
