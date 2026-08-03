@@ -531,6 +531,14 @@
                     <button type="button" id="library-combine-generate-btn" class="btn-primary hidden" style="margin: 10px 24px 0; width: calc(100% - 48px);">
                         <i class="fas fa-headphones"></i> <span id="library-combine-generate-label">Combine & Generate Audio</span>
                     </button>
+                    <div style="padding: 14px 24px 0;">
+                        <button type="button" id="offline-audio-toggle-btn" style="display: flex; align-items: center; justify-content: space-between; width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px; color: var(--text-primary); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                            <span>📥 Offline Audio</span>
+                            <i class="fas fa-chevron-down" id="offline-audio-chevron"></i>
+                        </button>
+                        <p style="font-size: 0.7rem; color: var(--text-muted); margin: 6px 0 0;">Once played, audio stays available even offline or after the server clears it.</p>
+                        <div id="offline-audio-list" class="hidden" style="margin-top: 8px;"></div>
+                    </div>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>
                     </div>
@@ -602,10 +610,6 @@
                             <button type="button" class="lang-toggle-btn active" id="theme-dark-btn" data-theme="dark">🌙 Dark</button>
                             <button type="button" class="lang-toggle-btn" id="theme-light-btn" data-theme="light">☀️ Light</button>
                         </div>
-                        <hr class="menu-divider">
-                        <p class="settings-label">📥 Offline Audio</p>
-                        <p style="font-size: 0.72rem; color: var(--text-muted); margin: -6px 0 8px;">Once played, audio stays available even offline or after the server clears it.</p>
-                        <div id="offline-audio-list"></div>
                     </div>
                 </div>
             </div>

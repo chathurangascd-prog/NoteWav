@@ -2555,6 +2555,20 @@ function renderOfflineAudioList() {
 
 document.addEventListener('DOMContentLoaded', renderOfflineAudioList);
 
+document.addEventListener('DOMContentLoaded', function() {
+    const offlineAudioToggleBtn = document.getElementById('offline-audio-toggle-btn');
+    const offlineAudioListEl = document.getElementById('offline-audio-list');
+    const offlineAudioChevron = document.getElementById('offline-audio-chevron');
+    if (offlineAudioToggleBtn && offlineAudioListEl) {
+        offlineAudioToggleBtn.addEventListener('click', function() {
+            const isHidden = offlineAudioListEl.classList.toggle('hidden');
+            if (offlineAudioChevron) {
+                offlineAudioChevron.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
+        });
+    }
+});
+
 function applyAppLanguage(lang) {
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
