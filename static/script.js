@@ -446,6 +446,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    let combineModeActive = false;
+    let combineSelectedIds = new Set();
+
     function renderLibraryList(notes, searchTerm) {
         if (!notes.length) {
             const message = searchTerm
@@ -468,8 +471,10 @@ document.addEventListener('DOMContentLoaded', function() {
             html += `<div class="library-subject-heading">${escapeHtml(subject)} (${grouped[subject].length})</div>`;
             grouped[subject].forEach(note => {
                 const dateStr = new Date(note.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const isChecked = combineSelectedIds.has(String(note.id));
                 html += `
                     <div class="library-note-item">
+                        ${combineModeActive ? `<input type="checkbox" class="library-combine-checkbox" data-id="${note.id}" style="margin-right: 10px; width: 18px; height: 18px; accent-color: #6b30ff; flex-shrink: 0;" ${isChecked ? 'checked' : ''}>` : ''}
                         <div class="library-note-info">
                             <div class="library-note-title">${escapeHtml(note.title)}</div>
                             <div class="library-note-date">${dateStr}</div>
@@ -490,6 +495,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         libraryModalBody.querySelectorAll('.library-delete-btn').forEach(btn => {
             btn.addEventListener('click', () => deleteLibraryNote(btn.dataset.id));
+        });
+        libraryModalBody.querySelectorAll('.library-combine-checkbox').forEach(cb => {
+            cb.addEventListener('change', function() {
+                if (this.checked) combineSelectedIds.add(this.dataset.id);
+                else combineSelectedIds.delete(this.dataset.id);
+                updateCombineGenerateButton();
+            });
+        });
+    }
+
+    function updateCombineGenerateButton() {
+        const combineGenerateBtn = document.getElementById('library-combine-generate-btn');
+        const combineGenerateLabel = document.getElementById('library-combine-generate-label');
+        if (!combineGenerateBtn) return;
+        const count = combineSelectedIds.size;
+        if (combineModeActive && count >= 2) {
+            combineGenerateBtn.classList.remove('hidden');
+            if (combineGenerateLabel) combineGenerateLabel.textContent = `Combine & Generate Audio (${count} notes)`;
+        } else {
+            combineGenerateBtn.classList.add('hidden');
+        }
+    }
+
+    const libraryCombineToggleBtn = document.getElementById('library-combine-toggle-btn');
+    const libraryCombineHint = document.getElementById('library-combine-hint');
+    if (libraryCombineToggleBtn) {
+        libraryCombineToggleBtn.addEventListener('click', function() {
+            combineModeActive = !combineModeActive;
+            combineSelectedIds.clear();
+            this.classList.toggle('active-toggle', combineModeActive);
+            if (libraryCombineHint) libraryCombineHint.classList.toggle('hidden', !combineModeActive);
+            updateCombineGenerateButton();
+            renderLibraryList(allLibraryNotes.filter(n => {
+                const term = (librarySearchInput && librarySearchInput.value || '').trim().toLowerCase();
+                if (!term) return true;
+                return (n.title || '').toLowerCase().includes(term) || (n.subject || '').toLowerCase().includes(term);
+            }));
+        });
+    }
+
+    const libraryCombineGenerateBtn = document.getElementById('library-combine-generate-btn');
+    if (libraryCombineGenerateBtn) {
+        libraryCombineGenerateBtn.addEventListener('click', async function() {
+            const ids = Array.from(combineSelectedIds);
+            if (ids.length < 2) return;
+
+            this.disabled = true;
+            this.innerHTML = '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Combine වෙමින්...';
+
+            try {
+                const noteTexts = [];
+                for (const id of ids) {
+                    const res = await fetch(`/library/notes/${id}`);
+                    const data = await res.json();
+                    if (data.status === 'success' && data.note) {
+                        noteTexts.push(data.note.processed_text || data.note.note_text || '');
+                    }
+                }
+                const combinedText = noteTexts.filter(Boolean).join('\n\n');
+                if (!combinedText) {
+                    showErrorBanner('Combine කරන්න content එකක් හම්බුනේ නෑ.');
+                    return;
+                }
+
+                // Reuse the normal script/safety-check flow — drop the
+                // combined text straight into it, exactly as if it had
+                // just been processed, so the existing "Generate Audio"
+                // button and pipeline handle it unchanged.
+                if (scriptOutput) scriptOutput.value = combinedText;
+                safetySection.classList.remove('hidden');
+                audioSection.classList.add('hidden');
+                if (mindmapSection) mindmapSection.classList.add('hidden'); // no combined mind map — audio-only feature
+                const quizSectionCombineEl = document.getElementById('quiz-section');
+                if (quizSectionCombineEl) quizSectionCombineEl.classList.add('hidden');
+
+                closeLibraryModal();
+                combineModeActive = false;
+                combineSelectedIds.clear();
+                setTimeout(() => {
+                    safetySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            } catch (err) {
+                console.error('Combine error:', err);
+                showErrorBanner('Notes combine කරගැනීම අසාර්ථක විය.');
+            } finally {
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-headphones"></i> <span id="library-combine-generate-label">Combine & Generate Audio</span>';
+            }
         });
     }
 
@@ -1723,6 +1816,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 audioSection.classList.remove('hidden');
                 renderLyrics(text, data.sentence_timings);
                 trackUsageEvent('audio_generated');
+                saveOfflineAudioEntry(text, data.audio_url);
 
                 if (audio) {
                     audio.pause();
@@ -2301,6 +2395,11 @@ const NOTEWAV_TRANSLATIONS = {
     menu_title: { si: 'මෙනුව (Menu)', en: 'Menu' },
     settings_language_label: { si: 'App භාෂාව (Language)', en: 'App Language' },
     library_search_placeholder: { si: 'Title/Subject එකෙන් හොයන්න...', en: 'Search by Title/Subject...' },
+    combine_toggle_btn: { si: 'එකතු කරන්න', en: 'Combine' },
+    combine_hint: {
+        si: '🔗 Notes කිහිපයක් (checkbox වලින්) තෝරගන්න — ඒ සියල්ල එකට එකතු කරලා, එකම දිගු Audio episode එකක් හදාගන්න පුළුවන් (Exam කලින් Full Revision විදිහට අහන්න හොඳයි).',
+        en: '🔗 Select two or more notes (checkboxes) to combine them into one long audio episode — great for a full revision listen before exams.',
+    },
     header_tagline: { si: 'Smart විදිහට පාඩම් අහන්න. NoteWav AI', en: 'Listen to your notes, the smart way. NoteWav AI' },
     card1_title: { si: 'ඔබේ සටහන ඇතුළත් කරන්න', en: 'Enter Your Note' },
     ocr_section_title: { si: 'රූපයක් මඟින් කරුණු ලබාදෙන්න (OCR):', en: 'Provide content via an image (OCR):' },
@@ -2367,6 +2466,94 @@ document.addEventListener('DOMContentLoaded', function() {
     if (themeDarkBtn) themeDarkBtn.addEventListener('click', () => applyTheme('dark'));
     if (themeLightBtn) themeLightBtn.addEventListener('click', () => applyTheme('light'));
 });
+
+// ========================================
+// OFFLINE AUDIO LIST (recently played, still playable offline)
+// ========================================
+// Relies on the service worker having already cached the audio file
+// the first time it played (network-first strategy, falls back to
+// cache when offline or after the server's hourly cleanup) — this just
+// keeps a small, friendly list of what's available to replay.
+const OFFLINE_AUDIO_KEY = 'notewav_offline_audio';
+const OFFLINE_AUDIO_MAX = 10;
+
+function getOfflineAudioList() {
+    try {
+        return JSON.parse(localStorage.getItem(OFFLINE_AUDIO_KEY) || '[]');
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveOfflineAudioEntry(sourceText, audioUrl) {
+    if (!audioUrl) return;
+    try {
+        let list = getOfflineAudioList();
+        list = list.filter(entry => entry.url !== audioUrl); // dedupe
+        const title = (sourceText || 'Audio').trim().split(/\s+/).slice(0, 8).join(' ') || 'Audio';
+        list.unshift({ title, url: audioUrl, date: new Date().toISOString() });
+        list = list.slice(0, OFFLINE_AUDIO_MAX);
+        localStorage.setItem(OFFLINE_AUDIO_KEY, JSON.stringify(list));
+        renderOfflineAudioList();
+    } catch (e) {
+        console.warn('Could not save offline audio entry:', e);
+    }
+}
+
+function removeOfflineAudioEntry(url) {
+    try {
+        let list = getOfflineAudioList().filter(entry => entry.url !== url);
+        localStorage.setItem(OFFLINE_AUDIO_KEY, JSON.stringify(list));
+        renderOfflineAudioList();
+    } catch (e) {
+        console.warn('Could not remove offline audio entry:', e);
+    }
+}
+
+function offlineAudioEscapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+}
+
+function renderOfflineAudioList() {
+    const container = document.getElementById('offline-audio-list');
+    if (!container) return;
+    const list = getOfflineAudioList();
+    if (!list.length) {
+        container.innerHTML = '<p style="font-size: 0.78rem; color: var(--text-muted);">තවම audio එකක් play කරලා නෑ.</p>';
+        return;
+    }
+    container.innerHTML = list.map(entry => {
+        const dateStr = new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        return `
+            <div class="offline-audio-item" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                <button class="offline-audio-play-btn" data-url="${entry.url}" style="background: none; border: none; color: #a78bfa; cursor: pointer; font-size: 1rem; padding: 4px;"><i class="fas fa-play-circle"></i></button>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${offlineAudioEscapeHtml(entry.title)}</div>
+                    <div style="font-size: 0.68rem; color: var(--text-muted);">${dateStr}</div>
+                </div>
+                <button class="offline-audio-remove-btn" data-url="${entry.url}" style="background: none; border: none; color: #f87171; cursor: pointer; padding: 4px;"><i class="fas fa-times"></i></button>
+            </div>`;
+    }).join('');
+
+    container.querySelectorAll('.offline-audio-play-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const player = new Audio(this.dataset.url);
+            player.play().catch(err => {
+                console.warn('Offline audio play failed:', err);
+                alert('මේ audio එක තවම device එකේ save වෙලා නෑ (online තියෙන කොට එකපාරක් play කරන්න ඕන).');
+            });
+        });
+    });
+    container.querySelectorAll('.offline-audio-remove-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            removeOfflineAudioEntry(this.dataset.url);
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', renderOfflineAudioList);
 
 function applyAppLanguage(lang) {
     document.querySelectorAll('[data-i18n]').forEach(el => {

@@ -18,7 +18,7 @@
 // purely an OFFLINE fallback, not something that can make the app show
 // stale content while online.
 
-const CACHE_NAME = 'notewav-shell-v14'; // bumped: network-first strategy + clears out the old stale cache-first version
+const CACHE_NAME = 'notewav-shell-v15'; // bumped: cache fallback now also covers non-ok responses (offline/post-cleanup audio playback)
 const SHELL_FILES = [
     '/',
     '/static/styles.css',
@@ -63,14 +63,25 @@ self.addEventListener('fetch', (event) => {
     // (i.e. genuinely offline). This guarantees anyone online always
     // sees the latest deployed version on their very next request, not
     // "whichever version happened to be cached last time."
+    //
+    // FIX (offline audio playback): generated audio files
+    // (/static/output_*.mp3) live on the server for only 1 hour before
+    // being cleaned up — after that, a normal fetch() succeeds but
+    // returns a 404 (not a network error), which the old logic didn't
+    // treat as a reason to fall back to cache. Now: if we're online but
+    // got a non-ok response (404/500/etc), fall back to whatever this
+    // browser already has cached for that exact URL — so audio a
+    // person already played once keeps working, whether truly offline
+    // or just after the server's own cleanup.
     event.respondWith(
         fetch(event.request)
             .then((response) => {
                 if (response && response.ok) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    return response;
                 }
-                return response;
+                return caches.match(event.request).then((cached) => cached || response);
             })
             .catch(() => caches.match(event.request))
     );

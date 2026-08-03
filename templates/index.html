@@ -176,6 +176,7 @@
         .library-search-row { display: flex; align-items: center; gap: 10px; padding: 14px 24px 0; color: var(--text-muted); }
         .library-backup-row { display: flex; gap: 10px; padding: 12px 24px 0; }
         .library-backup-row .btn-secondary { width: auto; padding: 8px 16px; font-size: 0.82rem; }
+        .library-backup-row .btn-secondary.active-toggle { background: rgba(107, 48, 255, 0.18); border-color: #6b30ff; color: #a78bfa; }
         .library-search-input { flex: 1; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font-size: 0.85rem; font-family: inherit; }
         .library-search-input:focus { outline: none; border-color: #6b30ff; }
         .library-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
@@ -522,7 +523,14 @@
                             <i class="fas fa-upload"></i> Import
                         </button>
                         <input type="file" id="library-import-input" accept="application/json" hidden>
+                        <button type="button" id="library-combine-toggle-btn" class="btn-secondary">
+                            <i class="fas fa-link"></i> <span data-i18n="combine_toggle_btn">Combine</span>
+                        </button>
                     </div>
+                    <p id="library-combine-hint" class="hidden" style="font-size: 0.78rem; color: var(--text-muted); padding: 10px 24px 0; line-height: 1.5;" data-i18n="combine_hint"></p>
+                    <button type="button" id="library-combine-generate-btn" class="btn-primary hidden" style="margin: 10px 24px 0; width: calc(100% - 48px);">
+                        <i class="fas fa-headphones"></i> <span id="library-combine-generate-label">Combine & Generate Audio</span>
+                    </button>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>
                     </div>
@@ -594,6 +602,10 @@
                             <button type="button" class="lang-toggle-btn active" id="theme-dark-btn" data-theme="dark">🌙 Dark</button>
                             <button type="button" class="lang-toggle-btn" id="theme-light-btn" data-theme="light">☀️ Light</button>
                         </div>
+                        <hr class="menu-divider">
+                        <p class="settings-label">📥 Offline Audio</p>
+                        <p style="font-size: 0.72rem; color: var(--text-muted); margin: -6px 0 8px;">Once played, audio stays available even offline or after the server clears it.</p>
+                        <div id="offline-audio-list"></div>
                     </div>
                 </div>
             </div>
