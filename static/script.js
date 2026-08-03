@@ -2557,14 +2557,11 @@ document.addEventListener('DOMContentLoaded', renderOfflineAudioList);
 
 document.addEventListener('DOMContentLoaded', function() {
     const offlineAudioToggleBtn = document.getElementById('offline-audio-toggle-btn');
-    const offlineAudioListEl = document.getElementById('offline-audio-list');
-    const offlineAudioChevron = document.getElementById('offline-audio-chevron');
-    if (offlineAudioToggleBtn && offlineAudioListEl) {
+    const offlineAudioWrap = document.getElementById('offline-audio-wrap');
+    if (offlineAudioToggleBtn && offlineAudioWrap) {
         offlineAudioToggleBtn.addEventListener('click', function() {
-            const isHidden = offlineAudioListEl.classList.toggle('hidden');
-            if (offlineAudioChevron) {
-                offlineAudioChevron.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
-            }
+            const isHidden = offlineAudioWrap.classList.toggle('hidden');
+            this.classList.toggle('active-toggle', !isHidden);
         });
     }
 });

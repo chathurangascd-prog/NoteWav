@@ -174,7 +174,7 @@
         .app-header { position: relative; }
         .library-modal-card { width: 720px; }
         .library-search-row { display: flex; align-items: center; gap: 10px; padding: 14px 24px 0; color: var(--text-muted); }
-        .library-backup-row { display: flex; gap: 10px; padding: 12px 24px 0; }
+        .library-backup-row { display: flex; gap: 10px; padding: 12px 24px 0; flex-wrap: wrap; }
         .library-backup-row .btn-secondary { width: auto; padding: 8px 16px; font-size: 0.82rem; }
         .library-backup-row .btn-secondary.active-toggle { background: rgba(107, 48, 255, 0.18); border-color: #6b30ff; color: #a78bfa; }
         .library-search-input { flex: 1; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font-size: 0.85rem; font-family: inherit; }
@@ -526,18 +526,17 @@
                         <button type="button" id="library-combine-toggle-btn" class="btn-secondary">
                             <i class="fas fa-link"></i> <span data-i18n="combine_toggle_btn">Combine</span>
                         </button>
+                        <button type="button" id="offline-audio-toggle-btn" class="btn-secondary" style="margin-left: auto;">
+                            <i class="fas fa-download" id="offline-audio-chevron"></i> 📥 Offline
+                        </button>
                     </div>
                     <p id="library-combine-hint" class="hidden" style="font-size: 0.78rem; color: var(--text-muted); padding: 10px 24px 0; line-height: 1.5;" data-i18n="combine_hint"></p>
                     <button type="button" id="library-combine-generate-btn" class="btn-primary hidden" style="margin: 10px 24px 0; width: calc(100% - 48px);">
                         <i class="fas fa-headphones"></i> <span id="library-combine-generate-label">Combine & Generate Audio</span>
                     </button>
-                    <div style="padding: 14px 24px 0;">
-                        <button type="button" id="offline-audio-toggle-btn" style="display: flex; align-items: center; justify-content: space-between; width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px; color: var(--text-primary); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
-                            <span>📥 Offline Audio</span>
-                            <i class="fas fa-chevron-down" id="offline-audio-chevron"></i>
-                        </button>
-                        <p style="font-size: 0.7rem; color: var(--text-muted); margin: 6px 0 0;">Once played, audio stays available even offline or after the server clears it.</p>
-                        <div id="offline-audio-list" class="hidden" style="margin-top: 8px;"></div>
+                    <div id="offline-audio-wrap" class="hidden" style="padding: 10px 24px 0;">
+                        <p style="font-size: 0.7rem; color: var(--text-muted); margin: 0 0 8px;">Once played, audio stays available even offline or after the server clears it.</p>
+                        <div id="offline-audio-list"></div>
                     </div>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>
@@ -772,4 +771,4 @@
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
-</html>
+</html> 
