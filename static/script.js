@@ -1861,10 +1861,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     showErrorBanner('Audio playback error. Please try again.');
                 });
 
-                progressBar.addEventListener('click', function(e) {
-                    if (!audio || !audio.duration || isNaN(audio.duration) || !isFinite(audio.duration)) return;
+                // FIX (couldn't seek on mobile): the old handler only
+                // listened for 'click', which fires on a simple tap but
+                // never fires while dragging a finger along the bar —
+                // so seeking only sort-of worked with an exact single
+                // tap and never with a drag-to-scrub gesture. Pointer
+                // Events unify mouse and touch, so this now handles
+                // both a tap AND a drag consistently on any device.
+                let isDraggingProgress = false;
 
-                    const rect = this.getBoundingClientRect();
+                function seekFromPointerEvent(e) {
+                    if (!audio || !audio.duration || isNaN(audio.duration) || !isFinite(audio.duration)) return;
+                    const rect = progressBar.getBoundingClientRect();
                     const x = e.clientX - rect.left;
                     const percentage = Math.min(1, Math.max(0, x / rect.width));
                     const seekTime = percentage * audio.duration;
@@ -1873,6 +1881,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     currentTimeEl.textContent = formatTime(seekTime);
                     updateProgress(percentage * 100);
                     updateHighlight(seekTime);
+                }
+
+                progressBar.addEventListener('pointerdown', function(e) {
+                    isDraggingProgress = true;
+                    try { progressBar.setPointerCapture(e.pointerId); } catch (err) { /* older browsers — safe to ignore */ }
+                    seekFromPointerEvent(e);
+                });
+                progressBar.addEventListener('pointermove', function(e) {
+                    if (!isDraggingProgress) return;
+                    seekFromPointerEvent(e);
+                });
+                progressBar.addEventListener('pointerup', function() {
+                    isDraggingProgress = false;
+                });
+                progressBar.addEventListener('pointercancel', function() {
+                    isDraggingProgress = false;
                 });
 
                 audio.play()

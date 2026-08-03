@@ -873,6 +873,7 @@ textarea:hover {
     position: relative;
     overflow: visible;
     transition: height 0.2s ease;
+    touch-action: none; /* FIX: without this, mobile browsers treat a drag on the bar as a page-scroll gesture instead of seeking */
 }
 
 .progress-bar:hover {
