@@ -2516,6 +2516,60 @@ function offlineAudioEscapeHtml(str) {
     return div.innerHTML;
 }
 
+// Single shared <audio> reused across all offline-list items — only one
+// track plays at a time, which keeps the play/pause + seek UI simple
+// and matches how the main audio player already behaves.
+const offlineAudioPlayer = new Audio();
+let offlineAudioActiveUrl = null;
+
+function offlineAudioFormatTime(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function offlineAudioSetPlayingUI(url, isPlaying) {
+    document.querySelectorAll('.offline-audio-playpause-btn').forEach(btn => {
+        const isThisOne = btn.dataset.url === url;
+        btn.innerHTML = (isThisOne && isPlaying) ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    });
+}
+
+function offlineAudioPlay(url) {
+    if (offlineAudioActiveUrl !== url) {
+        offlineAudioPlayer.src = url;
+        offlineAudioActiveUrl = url;
+    }
+    offlineAudioPlayer.play().then(() => {
+        offlineAudioSetPlayingUI(url, true);
+    }).catch(err => {
+        console.warn('Offline audio play failed:', err);
+        alert('මේ audio එක තවම device එකේ save වෙලා නෑ (online තියෙන කොට එකපාරක් play කරන්න ඕන).\nThis audio hasn\'t been saved on this device yet — play it once while online first.');
+    });
+}
+
+function offlineAudioPause() {
+    offlineAudioPlayer.pause();
+    offlineAudioSetPlayingUI(offlineAudioActiveUrl, false);
+}
+
+offlineAudioPlayer.addEventListener('timeupdate', function() {
+    if (!offlineAudioActiveUrl) return;
+    const seekInput = document.querySelector(`.offline-audio-seek[data-url="${offlineAudioActiveUrl}"]`);
+    const currentLabel = document.querySelector(`.offline-audio-time-current[data-url="${offlineAudioActiveUrl}"]`);
+    if (seekInput && this.duration) seekInput.value = (this.currentTime / this.duration) * 100;
+    if (currentLabel) currentLabel.textContent = offlineAudioFormatTime(this.currentTime);
+});
+offlineAudioPlayer.addEventListener('loadedmetadata', function() {
+    if (!offlineAudioActiveUrl) return;
+    const totalLabel = document.querySelector(`.offline-audio-time-total[data-url="${offlineAudioActiveUrl}"]`);
+    if (totalLabel) totalLabel.textContent = offlineAudioFormatTime(this.duration);
+});
+offlineAudioPlayer.addEventListener('ended', function() {
+    offlineAudioSetPlayingUI(offlineAudioActiveUrl, false);
+});
+
 function renderOfflineAudioList() {
     const container = document.getElementById('offline-audio-list');
     if (!container) return;
@@ -2527,28 +2581,53 @@ function renderOfflineAudioList() {
     container.innerHTML = list.map(entry => {
         const dateStr = new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
         return `
-            <div class="offline-audio-item" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
-                <button class="offline-audio-play-btn" data-url="${entry.url}" style="background: none; border: none; color: #a78bfa; cursor: pointer; font-size: 1rem; padding: 4px;"><i class="fas fa-play-circle"></i></button>
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${offlineAudioEscapeHtml(entry.title)}</div>
-                    <div style="font-size: 0.68rem; color: var(--text-muted);">${dateStr}</div>
+            <div class="offline-audio-item" style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="offline-audio-playpause-btn" data-url="${entry.url}" style="background: none; border: none; color: #a78bfa; cursor: pointer; font-size: 1.1rem; padding: 4px; flex-shrink: 0;"><i class="fas fa-play"></i></button>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${offlineAudioEscapeHtml(entry.title)}</div>
+                        <div style="font-size: 0.68rem; color: var(--text-muted);">${dateStr}</div>
+                    </div>
+                    <button class="offline-audio-remove-btn" data-url="${entry.url}" style="background: none; border: none; color: #f87171; cursor: pointer; padding: 4px; flex-shrink: 0;"><i class="fas fa-times"></i></button>
                 </div>
-                <button class="offline-audio-remove-btn" data-url="${entry.url}" style="background: none; border: none; color: #f87171; cursor: pointer; padding: 4px;"><i class="fas fa-times"></i></button>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                    <span class="offline-audio-time-current" data-url="${entry.url}" style="font-size: 0.65rem; color: var(--text-muted); min-width: 30px;">0:00</span>
+                    <input type="range" class="offline-audio-seek" data-url="${entry.url}" min="0" max="100" value="0" step="0.1" style="flex: 1; accent-color: #6b30ff; height: 4px; cursor: pointer;">
+                    <span class="offline-audio-time-total" data-url="${entry.url}" style="font-size: 0.65rem; color: var(--text-muted); min-width: 30px;">0:00</span>
+                </div>
             </div>`;
     }).join('');
 
-    container.querySelectorAll('.offline-audio-play-btn').forEach(btn => {
+    container.querySelectorAll('.offline-audio-playpause-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            const player = new Audio(this.dataset.url);
-            player.play().catch(err => {
-                console.warn('Offline audio play failed:', err);
-                alert('මේ audio එක තවම device එකේ save වෙලා නෑ (online තියෙන කොට එකපාරක් play කරන්න ඕන).');
-            });
+            const url = this.dataset.url;
+            if (offlineAudioActiveUrl === url && !offlineAudioPlayer.paused) {
+                offlineAudioPause();
+            } else {
+                offlineAudioPlay(url);
+            }
+        });
+    });
+    container.querySelectorAll('.offline-audio-seek').forEach(input => {
+        input.addEventListener('input', function() {
+            const url = this.dataset.url;
+            if (offlineAudioActiveUrl !== url) {
+                offlineAudioPlayer.src = url;
+                offlineAudioActiveUrl = url;
+            }
+            if (offlineAudioPlayer.duration) {
+                offlineAudioPlayer.currentTime = (this.value / 100) * offlineAudioPlayer.duration;
+            }
         });
     });
     container.querySelectorAll('.offline-audio-remove-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            removeOfflineAudioEntry(this.dataset.url);
+            const url = this.dataset.url;
+            if (offlineAudioActiveUrl === url) {
+                offlineAudioPause();
+                offlineAudioActiveUrl = null;
+            }
+            removeOfflineAudioEntry(url);
         });
     });
 }
