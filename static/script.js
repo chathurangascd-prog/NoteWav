@@ -1523,6 +1523,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadSourceMenu = document.getElementById('upload-source-menu');
     const uploadSourceGallery = document.getElementById('upload-source-gallery');
     const uploadSourceCamera = document.getElementById('upload-source-camera');
+    const uploadSourcePdf = document.getElementById('upload-source-pdf');
+    const pdfInput = document.getElementById('pdf-input');
 
     function closeUploadSourceMenu() {
         if (uploadSourceMenu) uploadSourceMenu.classList.add('hidden');
@@ -1560,6 +1562,13 @@ document.addEventListener('DOMContentLoaded', function() {
             cameraInput.click();
         });
     }
+    if (uploadSourcePdf && pdfInput) {
+        uploadSourcePdf.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeUploadSourceMenu();
+            pdfInput.click();
+        });
+    }
 
     document.addEventListener('click', function(e) {
         if (uploadSourceMenu && !uploadSourceMenu.classList.contains('hidden')) {
@@ -1583,15 +1592,22 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         this.classList.remove('dragover');
         closeUploadSourceMenu();
-        const files = e.dataTransfer.files;
+        const files = Array.from(e.dataTransfer.files || []);
         if (files.length > 0 && !isOCRRunning) {
-            handleImage(files[0]);
+            if (files.length > 1) handleMultipleImages(files);
+            else handleImage(files[0]);
         }
     });
 
+    // NEW: 'multiple' is now enabled on the gallery file input — if the
+    // person selects several photos at once (e.g. pages of the same
+    // lesson), batch-process all of them into one combined note instead
+    // of only ever handling a single image.
     imageInput.addEventListener('change', function(e) {
-        if (this.files.length > 0 && !isOCRRunning) {
-            handleImage(this.files[0]);
+        const files = Array.from(this.files || []);
+        if (files.length > 0 && !isOCRRunning) {
+            if (files.length > 1) handleMultipleImages(files);
+            else handleImage(files[0]);
         }
         this.value = '';
     });
@@ -1603,6 +1619,131 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             this.value = '';
         });
+    }
+
+    if (pdfInput) {
+        pdfInput.addEventListener('change', function(e) {
+            if (this.files.length > 0 && !isOCRRunning) {
+                handlePdfFile(this.files[0]);
+            }
+            this.value = '';
+        });
+    }
+
+    async function handlePdfFile(file) {
+        if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+            showOcrStatus('error', 'කරුණාකර PDF ගොනුවක් තෝරන්න.');
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            showOcrStatus('error', 'PDF ගොනුවේ ප්‍රමාණය 8MB ට වඩා වැඩියි.');
+            return;
+        }
+
+        isOCRRunning = true;
+        uploadArea.style.opacity = '0.5';
+        uploadArea.style.pointerEvents = 'none';
+        showOcrStatus('loading', `📄 "${file.name}" එකෙන් පෙළ උපුටාගනිමින්...`);
+
+        try {
+            const formData = new FormData();
+            formData.append('pdf', file);
+            const response = await fetch('/pdf-extract', { method: 'POST', body: formData });
+            const data = await response.json();
+
+            if (data.success && data.text) {
+                if (noteInput.value.trim()) {
+                    noteInput.value += '\n\n' + data.text.trim();
+                } else {
+                    noteInput.value = data.text.trim();
+                }
+                autoResizeTextarea(noteInput);
+                showOcrStatus('success', `✅ Pages ${data.pages}ක PDF එකෙන් පෙළ ලබාගන්නා ලදී (${data.length} අකුරු).`);
+                trackUsageEvent('pdf_uploaded');
+            } else {
+                showOcrStatus('error', data.message || 'PDF එකෙන් පෙළ ලබාගැනීම අසාර්ථක විය.');
+            }
+        } catch (err) {
+            console.error('PDF extract error:', err);
+            showOcrStatus('error', 'Network error. PDF එක process කරගැනීම අසාර්ථක විය.');
+        } finally {
+            isOCRRunning = false;
+            uploadArea.style.opacity = '1';
+            uploadArea.style.pointerEvents = 'auto';
+        }
+    }
+
+    // NEW: batch-processes several photos (e.g. pages 1, 2, 3 of the
+    // same lesson) sequentially through the existing single-image OCR
+    // endpoint, then joins all the extracted text together with clear
+    // page markers into one combined note — no backend change needed,
+    // this just loops the existing /ocr call per file.
+    async function handleMultipleImages(files) {
+        const validFiles = files.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
+        if (!validFiles.length) {
+            showOcrStatus('error', 'වලංගු රූප හම්බුනේ නෑ (image files, එකකට 5MB ට අඩු විය යුතුයි).');
+            return;
+        }
+
+        isOCRRunning = true;
+        uploadArea.style.opacity = '0.5';
+        uploadArea.style.pointerEvents = 'none';
+
+        try {
+            const preview = await readFileAsDataURL(validFiles[0]);
+            let previewEl = uploadArea.querySelector('.image-preview');
+            if (!previewEl) {
+                previewEl = document.createElement('img');
+                previewEl.className = 'image-preview';
+                uploadArea.prepend(previewEl);
+            }
+            previewEl.src = preview;
+            previewEl.style.display = 'block';
+            const uploadText = uploadArea.querySelector('p');
+            const uploadHint = uploadArea.querySelector('.upload-hint');
+            const uploadIcon = uploadArea.querySelector('i');
+            if (uploadText) uploadText.style.display = 'none';
+            if (uploadHint) uploadHint.style.display = 'none';
+            if (uploadIcon) uploadIcon.style.display = 'none';
+        } catch (e) { /* preview is a nice-to-have, not critical */ }
+
+        const collectedTexts = [];
+        let anySuccess = false;
+
+        for (let i = 0; i < validFiles.length; i++) {
+            showOcrStatus('loading', `☁️ Photo ${i + 1}/${validFiles.length} — Cloud OCR මඟින් පෙළ හඳුනා ගැනීම...`);
+            try {
+                const formData = new FormData();
+                formData.append('image', validFiles[i]);
+                const response = await fetch('/ocr', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.success && data.text && data.text.trim().length >= 3) {
+                    collectedTexts.push(`--- Page ${i + 1} ---\n${data.text.trim()}`);
+                    anySuccess = true;
+                }
+            } catch (err) {
+                console.error(`OCR error on photo ${i + 1}:`, err);
+            }
+        }
+
+        isOCRRunning = false;
+        uploadArea.style.opacity = '1';
+        uploadArea.style.pointerEvents = 'auto';
+
+        if (!anySuccess) {
+            showOcrStatus('error', 'කිසිම photo එකකින් පෙළක් හඳුනාගත නොහැකි විය. පැහැදිලි රූප උත්සාහ කරන්න.');
+            return;
+        }
+
+        const combinedText = collectedTexts.join('\n\n');
+        if (noteInput.value.trim()) {
+            noteInput.value += '\n\n' + combinedText;
+        } else {
+            noteInput.value = combinedText;
+        }
+        autoResizeTextarea(noteInput);
+        showOcrStatus('success', `✅ Photos ${validFiles.length}කින් පෙළ ලබාගන්නා ලදී.`);
+        trackUsageEvent('photo_batch_ocr');
     }
 
     async function handleImage(file) {

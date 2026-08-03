@@ -349,8 +349,8 @@
                         <div class="upload-area" id="upload-area" tabindex="0" role="button" aria-label="රූපයක් උඩුගත කරන්න">
                             <i class="fas fa-cloud-upload-alt"></i>
                             <p data-i18n="upload_area_text">පාඩමේ රූපයක් මෙතනට ඇද දමන්න හෝ ක්ලික් කරන්න</p>
-                            <span class="upload-hint" data-i18n="upload_hint">PNG, JPG, JPEG, WEBP ගොනු පමණයි (Max 5MB)</span>
-                            <input type="file" id="image-input" accept="image/*" hidden>
+                            <span class="upload-hint" data-i18n="upload_hint">PNG, JPG, JPEG, WEBP (Max 5MB) — photos කිහිපයක් එකපාරටම select කරන්න පුළුවන්</span>
+                            <input type="file" id="image-input" accept="image/*" multiple hidden>
                         </div>
                         <div id="upload-source-menu" class="upload-source-menu hidden">
                             <button type="button" id="upload-source-gallery" class="upload-source-item">
@@ -359,9 +359,13 @@
                             <button type="button" id="upload-source-camera" class="upload-source-item">
                                 <i class="fas fa-camera"></i> Camera
                             </button>
+                            <button type="button" id="upload-source-pdf" class="upload-source-item">
+                                <i class="fas fa-file-pdf"></i> PDF
+                            </button>
                         </div>
                     </div>
                     <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+                    <input type="file" id="pdf-input" accept="application/pdf" hidden>
                     <div id="ocr-status" class="ocr-status hidden">
                         <i class="fas fa-spinner fa-spin"></i>
                         <span data-i18n="ocr_status_text">පෙළ උපුටා ගැනීම සිදුවෙමින්...</span>

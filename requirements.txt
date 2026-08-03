@@ -8,3 +8,4 @@ gunicorn
 audioop-lts
 libsql-client
 sentry-sdk
+pypdf

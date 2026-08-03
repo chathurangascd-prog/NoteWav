@@ -18,6 +18,8 @@ from google import genai
 from google.genai import types
 from gtts import gTTS
 from pydub import AudioSegment  # pip install pydub --break-system-packages
+from pypdf import PdfReader  # pip install pypdf --break-system-packages
+import io
                                  # also requires ffmpeg installed on the system
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import threading
@@ -1244,6 +1246,52 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
         print(f"⚠️ Gemini call logging failed (non-critical): {e}")
 
     return podcast_script, mermaid_code_si, mermaid_code_en
+
+
+@app.route('/pdf-extract', methods=['POST'])
+@rate_limited(6, 60)
+def pdf_extract():
+    """Extracts embedded text directly from a PDF — no OCR/AI call
+    needed, since this reads the PDF's own text layer. Works great for
+    'digital' PDFs (lecture slides exported from PowerPoint/Word, typed
+    handouts). Does NOT work for scanned/photographed PDFs with no text
+    layer — those need the Photo OCR feature instead, so the error
+    message below points people there."""
+    if 'pdf' not in request.files:
+        return jsonify({'success': False, 'error': 'No PDF uploaded'}), 400
+
+    file = request.files['pdf']
+    content = file.read()
+
+    if len(content) > 8 * 1024 * 1024:
+        return jsonify({'success': False, 'message': 'PDF ගොනුව ඉතා විශාලයි (උපරිම 8MB).'}), 400
+
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        pages_text = []
+        for page in reader.pages:
+            text = (page.extract_text() or '').strip()
+            if text:
+                pages_text.append(text)
+
+        full_text = '\n\n'.join(pages_text).strip()
+
+        if len(full_text) < 3:
+            return jsonify({
+                'success': False,
+                'text': '',
+                'message': 'මේ PDF එකෙන් පෙළ උපුටාගැනීමට නොහැකි විය — scanned/photo PDF එකක් නම්, ඒ pages ටික Photo OCR (රූප) විදිහට උත්සාහ කරන්න.'
+            })
+
+        return jsonify({
+            'success': True,
+            'text': full_text,
+            'length': len(full_text),
+            'pages': len(reader.pages),
+        })
+    except Exception as e:
+        print(f"❌ PDF extract error: {e}")
+        return jsonify({'success': False, 'error': f'PDF එක කියවීමට නොහැකි විය: {e}'}), 500
 
 
 @app.route('/ocr', methods=['POST'])
