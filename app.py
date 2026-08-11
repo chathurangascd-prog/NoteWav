@@ -1482,14 +1482,21 @@ def assetlinks_json():
     package name + SHA-256 signing certificate fingerprint). Without
     this, Android can't verify the installed app owns this domain, so
     it falls back to showing a browser-style URL bar inside the app
-    instead of a clean fullscreen experience."""
+    instead of a clean fullscreen experience.
+
+    NOTE: PWABuilder generates a NEW random signing key every time you
+    regenerate the Android package, UNLESS you explicitly download and
+    reuse the same keystore file it offers on the package page. That's
+    why the fingerprint changed between builds — going forward, reuse
+    the same keystore to avoid needing to update this list again."""
     content = [{
         "relation": ["delegate_permission/common.handle_all_urls"],
         "target": {
             "namespace": "android_app",
             "package_name": "com.onrender.notewav.twa",
             "sha256_cert_fingerprints": [
-                "A4:FD:29:75:B6:5F:ED:A9:61:CE:59:CD:0F:C0:17:8B:2F:20:A7:8D:90:DA:AA:E7:A8:90:6F:D3:95:5D:F0:1D"
+                "A4:FD:29:75:B6:5F:ED:A9:61:CE:59:CD:0F:C0:17:8B:2F:20:A7:8D:90:DA:AA:E7:A8:90:6F:D3:95:5D:F0:1D",
+                "74:32:96:EF:A0:28:FD:CA:AC:63:F2:44:1C:42:80:0D:8D:66:C6:C3:F7:4C:64:CA:02:D8:6C:E9:02:A4:E5:10"
             ]
         }
     }]
