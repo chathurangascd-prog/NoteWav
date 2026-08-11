@@ -1474,6 +1474,28 @@ def home():
     return render_template('index.html')
 
 
+@app.route('/.well-known/assetlinks.json')
+def assetlinks_json():
+    """Digital Asset Links verification for the TWA (Trusted Web
+    Activity) Android package built via PWABuilder — proves this
+    website controls/authorizes that specific APK (identified by its
+    package name + SHA-256 signing certificate fingerprint). Without
+    this, Android can't verify the installed app owns this domain, so
+    it falls back to showing a browser-style URL bar inside the app
+    instead of a clean fullscreen experience."""
+    content = [{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.onrender.notewav.twa",
+            "sha256_cert_fingerprints": [
+                "A4:FD:29:75:B6:5F:ED:A9:61:CE:59:CD:0F:C0:17:8B:2F:20:A7:8D:90:DA:AA:E7:A8:90:6F:D3:95:5D:F0:1D"
+            ]
+        }
+    }]
+    return jsonify(content)
+
+
 @app.route('/ads.txt')
 def ads_txt():
     """Required by Google AdSense to verify this site is authorized to
