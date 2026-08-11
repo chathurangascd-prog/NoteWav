@@ -1496,7 +1496,8 @@ def assetlinks_json():
             "package_name": "com.onrender.notewav.twa",
             "sha256_cert_fingerprints": [
                 "A4:FD:29:75:B6:5F:ED:A9:61:CE:59:CD:0F:C0:17:8B:2F:20:A7:8D:90:DA:AA:E7:A8:90:6F:D3:95:5D:F0:1D",
-                "74:32:96:EF:A0:28:FD:CA:AC:63:F2:44:1C:42:80:0D:8D:66:C6:C3:F7:4C:64:CA:02:D8:6C:E9:02:A4:E5:10"
+                "74:32:96:EF:A0:28:FD:CA:AC:63:F2:44:1C:42:80:0D:8D:66:C6:C3:F7:4C:64:CA:02:D8:6C:E9:02:A4:E5:10",
+                "16:EB:70:C9:42:C3:A1:32:8C:23:47:05:B8:3D:9B:F9:6C:40:B9:0B:01:2F:EA:70:64:41:B2:34:B3:0A:FB:57"
             ]
         }
     }]
