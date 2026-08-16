@@ -339,8 +339,15 @@
             </div>
             <div class="greeting-row">
                 <p id="greeting-text" class="greeting-text hidden" style="margin-top: 0 !important; display: inline-block !important;"></p>
-                <div id="level-badge" class="level-badge" title="Notes process කරන ගණන අනුව level up වෙනවා">
-                    <span id="level-icon">🌱</span> <span id="level-title">Beginner</span>
+                <div style="position: relative; display: inline-block;">
+                    <button type="button" id="level-badge" class="level-badge" style="cursor: pointer; font-family: inherit; outline: none;" aria-label="Level System ගැන">
+                        <span id="level-icon">🌱</span> <span id="level-title">Beginner</span>
+                    </button>
+                    <div id="level-info-popup" class="hidden" style="position: absolute; top: calc(100% + 8px); left: 0; z-index: 60; width: 260px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 14px;">
+                        <p style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;" id="level-popup-current"></p>
+                        <p style="font-size: 0.74rem; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.5;">Notes process කරන ගණන අනුව level up වෙනවා — Level up වුනාම 🪙 5 coins bonus එකක්!</p>
+                        <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0;" id="level-popup-next"></p>
+                    </div>
                 </div>
                 <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
                     <i class="fas fa-coins"></i> <span id="coins-count">Free</span>

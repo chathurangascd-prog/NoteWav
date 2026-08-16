@@ -2654,7 +2654,7 @@ function renderLevelBadge() {
     const profileLevelLabel = document.getElementById('profile-level-label');
     const profileProgressText = document.getElementById('profile-level-progress-text');
     const profileProgressFill = document.getElementById('profile-level-progress-fill');
-    if (profileLevelLabel) profileLevelLabel.textContent = `${info.icon} ${info.title}`;
+    if (profileLevelLabel) profileLevelLabel.textContent = `${info.icon} ${info.title} (Level ${info.level})`;
     if (profileProgressFill) {
         let percent = 100;
         if (info.next) {
@@ -2670,7 +2670,33 @@ function renderLevelBadge() {
             ? `${count}/${info.next.min}`
             : 'MAX';
     }
+
+    // NEW: header level badge popup content (current level + next level hint)
+    const popupCurrentEl = document.getElementById('level-popup-current');
+    const popupNextEl = document.getElementById('level-popup-next');
+    if (popupCurrentEl) popupCurrentEl.textContent = `${info.icon} Level ${info.level}: ${info.title}`;
+    if (popupNextEl) {
+        popupNextEl.textContent = info.next
+            ? `📈 තව notes ${info.next.min - count}ක් process කළොත් "${info.next.icon} ${info.next.title}" (Level ${info.next.level}) වෙනවා! (${count}/${info.next.min})`
+            : `🎉 ඔබ ඉහළම level එකට ළඟා වුනා!`;
+    }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const levelBadgeBtn = document.getElementById('level-badge');
+    const levelInfoPopup = document.getElementById('level-info-popup');
+    if (levelBadgeBtn && levelInfoPopup) {
+        levelBadgeBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            levelInfoPopup.classList.toggle('hidden');
+        });
+        document.addEventListener('click', function(e) {
+            if (!levelInfoPopup.classList.contains('hidden') && !e.target.closest('#level-info-popup') && e.target !== levelBadgeBtn && !e.target.closest('#level-badge')) {
+                levelInfoPopup.classList.add('hidden');
+            }
+        });
+    }
+});
 
 function showLevelUpCelebration(newLevelInfo) {
     const overlay = document.getElementById('level-up-overlay');
