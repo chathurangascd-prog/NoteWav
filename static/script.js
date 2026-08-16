@@ -211,10 +211,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (ttsEngineGttsBtn) ttsEngineGttsBtn.classList.toggle('active', engine === 'gtts');
         if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.classList.toggle('active', engine === 'gemini');
         if (ttsVoicePickerWrap) ttsVoicePickerWrap.classList.toggle('hidden', engine !== 'gemini');
+        updateGeminiTrialStatus();
         try {
             localStorage.setItem('notewav_tts_engine', engine);
         } catch (e) {
             console.warn('Could not save TTS engine preference:', e);
+        }
+    }
+
+    function updateGeminiTrialStatus() {
+        const statusEl = document.getElementById('gemini-trial-status');
+        if (!statusEl) return;
+        if (ttsEngine !== 'gemini') {
+            statusEl.classList.add('hidden');
+            return;
+        }
+        const freeLeft = (typeof getGeminiFreeTrialsLeft === 'function') ? getGeminiFreeTrialsLeft() : 0;
+        if (freeLeft > 0) {
+            statusEl.classList.remove('hidden');
+            statusEl.textContent = `🎁 Free trials ඉතුරුයි: ${freeLeft}/${GEMINI_FREE_TRIALS_TOTAL}`;
+        } else {
+            // NEW: never show the coin price/balance — the exact
+            // pricing tiers are an internal business detail, not
+            // something to expose to the person.
+            statusEl.classList.add('hidden');
         }
     }
 
@@ -2002,6 +2022,21 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // NEW: Gemini (Natural AI) is a paid feature after the first 3
+        // free trials — check BEFORE spending any time/API calls
+        // generating audio the person can't actually afford/use.
+        let estimatedCoinCost = 0;
+        if (ttsEngine === 'gemini') {
+            const freeUsesLeft = getGeminiFreeTrialsLeft();
+            if (freeUsesLeft <= 0) {
+                estimatedCoinCost = estimateGeminiCoinCost(text.length);
+                if (getCoinsBalance() < estimatedCoinCost) {
+                    showErrorBanner('Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ. Coins මිලදී ගන්න පුළුවන් වෙන feature එකක් ඉක්මනින් එනවා!');
+                    return;
+                }
+            }
+        }
+
         generateAudioBtn.innerHTML = ttsEngine === 'gemini'
             ? '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> AI Voice Generating (ටිකක් වේලා ගන්නවා)...'
             : '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Generating...';
@@ -2025,6 +2060,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderLyrics(text, data.sentence_timings);
                 trackUsageEvent('audio_generated');
                 saveOfflineAudioEntry(text, data.audio_url);
+
+                // NEW: only charge AFTER a successful generation — a
+                // failed/errored request shouldn't cost the person
+                // anything.
+                if (data.engine === 'gemini') {
+                    const freeUsesLeft = getGeminiFreeTrialsLeft();
+                    if (freeUsesLeft > 0) {
+                        useGeminiFreeTrial();
+                    } else {
+                        const coinCost = data.coin_cost || estimateGeminiCoinCost(text.length);
+                        spendCoins(coinCost);
+                    }
+                    if (typeof updateGeminiTrialStatus === 'function') updateGeminiTrialStatus();
+                }
 
                 if (audio) {
                     audio.pause();
@@ -2667,6 +2716,42 @@ const NOTEWAV_TRANSLATIONS = {
     share_telegram_btn: { si: 'Telegram (Text විතරයි)', en: 'Telegram (Text only)' },
     lyrics_placeholder: { si: 'Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...', en: 'Text will highlight here as the Audio plays...' },
 };
+
+// ========================================
+// GEMINI (NATURAL AI) VOICE — FREE TRIALS + COIN PRICING
+// ========================================
+const GEMINI_FREE_TRIALS_TOTAL = 3;
+const GEMINI_TRIALS_USED_KEY = 'notewav_gemini_trials_used';
+
+function getGeminiTrialsUsed() {
+    try {
+        return parseInt(localStorage.getItem(GEMINI_TRIALS_USED_KEY) || '0', 10) || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getGeminiFreeTrialsLeft() {
+    return Math.max(0, GEMINI_FREE_TRIALS_TOTAL - getGeminiTrialsUsed());
+}
+
+function useGeminiFreeTrial() {
+    try {
+        localStorage.setItem(GEMINI_TRIALS_USED_KEY, String(getGeminiTrialsUsed() + 1));
+    } catch (e) {
+        console.warn('Could not save Gemini trial usage:', e);
+    }
+}
+
+// Mirrors the backend's calculate_gemini_tts_coin_cost() tiers exactly
+// — used here only to check affordability BEFORE sending the request;
+// the actual authoritative charge always comes from the server's own
+// `coin_cost` in the /tts response.
+function estimateGeminiCoinCost(textLength) {
+    if (textLength <= 500) return 5;
+    if (textLength <= 1200) return 12;
+    return 20;
+}
 
 // ========================================
 // LEVEL SYSTEM (gamification — notes processed = XP)

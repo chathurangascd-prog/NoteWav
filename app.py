@@ -1559,6 +1559,27 @@ def ocr_image():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def calculate_gemini_tts_coin_cost(text_length):
+    """Tiered pricing for Gemini (Natural AI) TTS generation, based on
+    script length — real Gemini API cost scales with audio duration
+    (roughly proportional to text length), so a flat per-generation
+    price wouldn't be fair: a short note and a full 2000-character
+    chapter cost very different amounts to actually generate.
+
+    Tiers (character count of the SCRIPT being converted to audio,
+    capped app-wide at MAX_TEXT_LENGTH=2000):
+      0-500     -> 5 coins   (~50s audio, real cost ≈ $0.0125 / Rs 4)
+      501-1200  -> 12 coins  (~2min audio, real cost ≈ $0.03 / Rs 9)
+      1201+     -> 20 coins  (~3min+ audio, real cost ≈ $0.05 / Rs 15)
+    Coin prices include a margin over the raw Gemini API cost."""
+    if text_length <= 500:
+        return 5
+    elif text_length <= 1200:
+        return 12
+    else:
+        return 20
+
+
 @app.route('/tts', methods=['POST'])
 @rate_limited(10, 60)  # 10 audio generations per minute per device
 def text_to_speech():
@@ -1603,6 +1624,7 @@ def text_to_speech():
                 'audio_url': '/' + filename.replace('\\', '/'),
                 'sentence_timings': sentence_timings,
                 'engine': 'gemini',
+                'coin_cost': calculate_gemini_tts_coin_cost(len(formatted_text)),
             })
         except Exception as e:
             print(f"❌ Gemini TTS Error: {str(e)}")
