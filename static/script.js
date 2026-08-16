@@ -203,11 +203,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let ttsEngine = 'gtts';
     const ttsEngineGttsBtn = document.getElementById('tts-engine-gtts-btn');
     const ttsEngineGeminiBtn = document.getElementById('tts-engine-gemini-btn');
+    const ttsVoicePickerWrap = document.getElementById('tts-voice-picker-wrap');
+    const ttsVoiceSelect = document.getElementById('tts-voice-select');
 
     function setTtsEngineUI(engine) {
         ttsEngine = engine;
         if (ttsEngineGttsBtn) ttsEngineGttsBtn.classList.toggle('active', engine === 'gtts');
         if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.classList.toggle('active', engine === 'gemini');
+        if (ttsVoicePickerWrap) ttsVoicePickerWrap.classList.toggle('hidden', engine !== 'gemini');
         try {
             localStorage.setItem('notewav_tts_engine', engine);
         } catch (e) {
@@ -220,12 +223,25 @@ document.addEventListener('DOMContentLoaded', function() {
         if (savedTtsEngine === 'gtts' || savedTtsEngine === 'gemini') {
             setTtsEngineUI(savedTtsEngine);
         }
+        const savedTtsVoice = localStorage.getItem('notewav_tts_voice');
+        if (savedTtsVoice && ttsVoiceSelect) {
+            ttsVoiceSelect.value = savedTtsVoice;
+        }
     } catch (e) {
-        // ignore, default to 'gtts'
+        // ignore, default to 'gtts' / first voice option
     }
 
     if (ttsEngineGttsBtn) ttsEngineGttsBtn.addEventListener('click', () => setTtsEngineUI('gtts'));
     if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.addEventListener('click', () => setTtsEngineUI('gemini'));
+    if (ttsVoiceSelect) {
+        ttsVoiceSelect.addEventListener('change', function() {
+            try {
+                localStorage.setItem('notewav_tts_voice', this.value);
+            } catch (e) {
+                console.warn('Could not save TTS voice preference:', e);
+            }
+        });
+    }
 
     // ===== DOM Elements =====
     const noteInput = document.getElementById('note-input');
@@ -302,7 +318,9 @@ document.addEventListener('DOMContentLoaded', function() {
             playbackSpeed = parseFloat(this.dataset.speed);
             speedButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            if (audio) audio.playbackRate = getEffectivePlaybackRate();
+            // Gemini (Natural AI) audio stays locked to its own default
+            // pace — the speed slider only affects Standard (gTTS) audio.
+            if (audio && currentAudioEngine !== 'gemini') audio.playbackRate = getEffectivePlaybackRate();
             try {
                 localStorage.setItem(SPEED_STORAGE_KEY, String(playbackSpeed));
             } catch (e) {
@@ -320,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ===== State =====
     let audio = null;
+    let currentAudioEngine = 'gtts'; // tracks which engine generated the current `audio`, so the speed slider knows whether to apply
     let isPlaying = false;
     let isOCRRunning = false;
     let highlightUnits = [];
@@ -1980,7 +1999,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/tts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, engine: ttsEngine }),
+                body: JSON.stringify({
+                    text,
+                    engine: ttsEngine,
+                    voice_name: (ttsEngine === 'gemini' && ttsVoiceSelect) ? ttsVoiceSelect.value : undefined,
+                }),
             });
 
             const data = await response.json();
@@ -1997,7 +2020,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 audio = new Audio(data.audio_url);
-                audio.playbackRate = getEffectivePlaybackRate();
+                currentAudioEngine = data.engine || 'gtts';
+                // NEW: keep the speed slider behavior exactly as before
+                // for the Standard (gTTS) engine — but the Natural (AI)
+                // Gemini voice already has its own carefully-paced,
+                // expressive delivery, and mechanically speeding/
+                // slowing it via playbackRate can make it sound
+                // distorted/unnatural. So Gemini audio always plays at
+                // its own default (1.0x) pace, ignoring the speed
+                // slider for that specific playback.
+                audio.playbackRate = (data.engine === 'gemini') ? 1.0 : getEffectivePlaybackRate();
                 audio.volume = playbackVolume;
                 setupAudioAnalyser(audio);
 
