@@ -520,7 +520,7 @@
                     </thead>
                     <tbody id="users-tbody">
                         {% for u in users %}
-                        <tr class="clickable-row" data-anon-id="{{ u.anon_id }}" data-name="{{ u.latest_name or 'Unnamed / Skipped' }}" data-notes="{{ u.notes_processed }}" data-audio="{{ u.audio_generated }}" data-actions="{{ u.total_events }}">
+                        <tr class="clickable-row" data-anon-id="{{ u.anon_id }}" data-name="{{ u.latest_name or 'Unnamed / Skipped' }}" data-notes="{{ u.notes_processed }}" data-audio="{{ u.audio_generated }}" data-actions="{{ u.total_events }}" data-email="{{ u.current_email or '' }}">
                             <td class="name-cell {% if not u.latest_name %}no-name{% endif %}">
                                 {% if u.is_online %}<span class="online-dot" title="Online now"></span>{% endif %}
                                 {{ u.latest_name if u.latest_name else 'Unnamed / Skipped' }}
@@ -615,6 +615,17 @@
                     <button id="private-announce-send-btn" style="align-self:flex-end; padding:9px 16px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;">Send</button>
                 </div>
                 <p id="private-announce-status" style="font-size:0.74rem; color:var(--green); margin:0 0 14px; min-height:1em; font-weight:600;"></p>
+
+                <div style="border-top:1px solid var(--border); padding-top:14px; margin-bottom:14px;">
+                    <p style="font-size:0.8rem; font-weight:700; margin:0 0 6px;">🪙 Coins Add කරන්න</p>
+                    <p id="add-coins-note" style="font-size:0.7rem; color:var(--text-muted); margin:0 0 8px;"></p>
+                    <div style="display:flex; gap:8px;">
+                        <input type="number" id="add-coins-input" placeholder="Coins ප්‍රමාණය (e.g. 50)" style="flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.82rem; font-family:inherit;">
+                        <button id="add-coins-btn" style="padding:9px 16px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;">Add</button>
+                    </div>
+                    <p id="add-coins-status" style="font-size:0.74rem; color:var(--green); margin:6px 0 0; min-height:1em; font-weight:600;"></p>
+                </div>
+
                 <div id="timeline-modal-body"></div>
             </div>
         </div>
@@ -711,7 +722,7 @@
                         emailDisplay += `<br><span style="color:#f87171; font-size:0.76rem;">${escapeHtml(oldE)}</span>`;
                     });
                 }
-                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}" data-notes="${u.notes_processed}" data-audio="${u.audio_generated}" data-actions="${u.total_events}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${coinsDisplay}</td></tr>`;
+                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}" data-notes="${u.notes_processed}" data-audio="${u.audio_generated}" data-actions="${u.total_events}" data-email="${u.current_email || ''}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${coinsDisplay}</td></tr>`;
             });
             html += '</tbody></table>';
             wrapper.innerHTML = html;
@@ -721,19 +732,37 @@
         function attachRowClickHandlers() {
             document.querySelectorAll('#users-tbody tr').forEach(row => {
                 row.addEventListener('click', function() {
-                    openTimeline(this.dataset.anonId, this.dataset.name, this.dataset.notes, this.dataset.audio, this.dataset.actions);
+                    openTimeline(this.dataset.anonId, this.dataset.name, this.dataset.notes, this.dataset.audio, this.dataset.actions, this.dataset.email);
                 });
             });
         }
 
         let currentTimelineAnonId = null;
+        let currentTimelineEmail = null;
 
-        async function openTimeline(anonId, name, notesProcessed, audioGenerated, totalActions) {
+        async function openTimeline(anonId, name, notesProcessed, audioGenerated, totalActions, email) {
             currentTimelineAnonId = anonId;
+            currentTimelineEmail = email || null;
             document.getElementById('timeline-modal-title').textContent = name + ' — Timeline';
             document.getElementById('timeline-modal-body').innerHTML = 'Loading...';
             document.getElementById('private-announce-input').value = '';
             document.getElementById('private-announce-status').textContent = '';
+
+            const addCoinsInput = document.getElementById('add-coins-input');
+            const addCoinsBtn = document.getElementById('add-coins-btn');
+            const addCoinsStatus = document.getElementById('add-coins-status');
+            const addCoinsNote = document.getElementById('add-coins-note');
+            if (addCoinsInput) addCoinsInput.value = '';
+            if (addCoinsStatus) addCoinsStatus.textContent = '';
+            if (currentTimelineEmail) {
+                if (addCoinsInput) addCoinsInput.disabled = false;
+                if (addCoinsBtn) addCoinsBtn.disabled = false;
+                if (addCoinsNote) addCoinsNote.textContent = `Account: ${currentTimelineEmail}`;
+            } else {
+                if (addCoinsInput) addCoinsInput.disabled = true;
+                if (addCoinsBtn) addCoinsBtn.disabled = true;
+                if (addCoinsNote) addCoinsNote.textContent = '⚠️ මේ device එක login වෙලා නෑ — coins add කරන්න බැහැ.';
+            }
 
             const statsRow = document.getElementById('timeline-stats-row');
             statsRow.innerHTML = `
@@ -780,6 +809,43 @@
                     loadAnnouncements();
                 } else {
                     status.textContent = '❌ ' + (data.message || 'Failed to send.');
+                    status.style.color = '#f87171';
+                }
+            } catch (e) {
+                status.textContent = '❌ Network error.';
+                status.style.color = '#f87171';
+            }
+            this.disabled = false;
+        });
+
+        document.getElementById('add-coins-btn').addEventListener('click', async function() {
+            const input = document.getElementById('add-coins-input');
+            const status = document.getElementById('add-coins-status');
+            const amount = parseInt(input.value, 10);
+            if (!currentTimelineEmail) {
+                status.textContent = '❌ මේ device එක login වෙලා නෑ.';
+                status.style.color = '#f87171';
+                return;
+            }
+            if (!amount || isNaN(amount)) {
+                status.textContent = '❌ වලංගු coins ප්‍රමාණයක් දාන්න.';
+                status.style.color = '#f87171';
+                return;
+            }
+            this.disabled = true;
+            try {
+                const res = await fetch('/admin/add-coins', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: currentTimelineEmail, amount }),
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    status.textContent = `✅ Coins add කළා! අලුත් balance: ${data.new_balance}`;
+                    status.style.color = '#4ade80';
+                    input.value = '';
+                } else {
+                    status.textContent = '❌ ' + (data.message || 'Failed to add coins.');
                     status.style.color = '#f87171';
                 }
             } catch (e) {

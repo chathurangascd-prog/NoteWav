@@ -2508,6 +2508,53 @@ def admin_top_subjects():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/admin/add-coins', methods=['POST'])
+def admin_add_coins():
+    """Adds coins to a signed-in user's REAL, server-side balance
+    (the users.coins column) — not just a local display trick. This
+    only works for accounts that have signed in with Google at least
+    once (identified by email); a device that's only ever used the app
+    as a guest has no server-side coin record to add to.
+
+    The added coins reach the person automatically the next time their
+    browser loads the app — checkGoogleAuthStatus() already pulls the
+    server's coins value down and overwrites localStorage with it on
+    every page load for signed-in users, so no extra sync code is
+    needed here."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get('email') or '').strip()
+        amount = data.get('amount')
+
+        if not email:
+            return jsonify({'status': 'error', 'message': 'මේ user කෙනෙක් login වෙලා නෑ — coins add කරන්න බැහැ.'}), 400
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            return jsonify({'status': 'error', 'message': 'වලංගු coins ප්‍රමාණයක් නෑ.'}), 400
+        if amount == 0:
+            return jsonify({'status': 'error', 'message': 'Coins ප්‍රමාණය 0 විය නොහැක.'}), 400
+        if abs(amount) > 100000:
+            return jsonify({'status': 'error', 'message': 'Coins ප්‍රමාණය ඉතා විශාලයි.'}), 400
+
+        conn = get_db()
+        existing = conn.execute("SELECT google_id, coins FROM users WHERE email = ?", (email,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'මේ email එකෙන් account එකක් හම්බුනේ නෑ.'}), 404
+
+        new_balance = (existing['coins'] or 0) + amount
+        conn.execute("UPDATE users SET coins = ? WHERE email = ?", (new_balance, email))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'new_balance': new_balance})
+    except Exception as e:
+        print(f"❌ Admin add-coins error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/admin/user-timeline/<anon_id>')
 def admin_user_timeline(anon_id):
     if not _is_admin_logged_in():
