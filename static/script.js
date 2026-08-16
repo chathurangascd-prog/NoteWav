@@ -2600,13 +2600,13 @@ const NOTEWAV_TRANSLATIONS = {
 // LEVEL SYSTEM (gamification — notes processed = XP)
 // ========================================
 const LEVEL_THRESHOLDS = [
-    { level: 1, min: 0, icon: '🌱', title: 'Beginner' },
-    { level: 2, min: 5, icon: '📖', title: 'Learner' },
-    { level: 3, min: 10, icon: '✏️', title: 'Note Taker' },
-    { level: 4, min: 20, icon: '🎓', title: 'Scholar' },
-    { level: 5, min: 40, icon: '🧠', title: 'Expert' },
-    { level: 6, min: 75, icon: '🏆', title: 'Master' },
-    { level: 7, min: 150, icon: '👑', title: 'Legend' },
+    { level: 1, min: 0, icon: '🌱', title: 'Beginner', color: '#22c55e' },
+    { level: 2, min: 5, icon: '📖', title: 'Learner', color: '#3b82f6' },
+    { level: 3, min: 10, icon: '✏️', title: 'Note Taker', color: '#06b6d4' },
+    { level: 4, min: 20, icon: '🎓', title: 'Scholar', color: '#a78bfa' },
+    { level: 5, min: 40, icon: '🧠', title: 'Expert', color: '#f97316' },
+    { level: 6, min: 75, icon: '🏆', title: 'Master', color: '#ec4899' },
+    { level: 7, min: 150, icon: '👑', title: 'Legend', color: '#facc15' },
 ];
 const NOTES_COUNT_KEY = 'notewav_notes_processed_count';
 
@@ -2632,14 +2632,43 @@ function renderLevelBadge() {
     const iconEl = document.getElementById('level-icon');
     const titleEl = document.getElementById('level-title');
     const badgeEl = document.getElementById('level-badge');
-    if (!iconEl || !titleEl) return;
-    const info = getLevelInfo(getNotesProcessedCount());
-    iconEl.textContent = info.icon;
-    titleEl.textContent = info.title;
+    const count = getNotesProcessedCount();
+    const info = getLevelInfo(count);
+
+    if (iconEl) iconEl.textContent = info.icon;
+    if (titleEl) titleEl.textContent = info.title;
     if (badgeEl) {
         badgeEl.title = info.next
-            ? `Level ${info.level}: ${info.title} — තව notes ${info.next.min - getNotesProcessedCount()}ක් process කළොත් "${info.next.title}" වෙනවා!`
+            ? `Level ${info.level}: ${info.title} — තව notes ${info.next.min - count}ක් process කළොත් "${info.next.title}" වෙනවා!`
             : `Level ${info.level}: ${info.title} — ඉහළම level එකට ළඟා වුනා! 🎉`;
+    }
+
+    // NEW: profile avatar ring color, matched to the current level.
+    const avatarBtn = document.getElementById('profile-avatar-btn');
+    if (avatarBtn) {
+        avatarBtn.style.borderColor = info.color;
+        avatarBtn.style.boxShadow = `0 0 0 2px ${info.color}22`;
+    }
+
+    // NEW: profile drawer — level label + progress bar toward next level.
+    const profileLevelLabel = document.getElementById('profile-level-label');
+    const profileProgressText = document.getElementById('profile-level-progress-text');
+    const profileProgressFill = document.getElementById('profile-level-progress-fill');
+    if (profileLevelLabel) profileLevelLabel.textContent = `${info.icon} ${info.title}`;
+    if (profileProgressFill) {
+        let percent = 100;
+        if (info.next) {
+            const span = info.next.min - info.min;
+            const progressed = count - info.min;
+            percent = Math.min(100, Math.max(0, (progressed / span) * 100));
+        }
+        profileProgressFill.style.width = `${percent}%`;
+        profileProgressFill.style.background = `linear-gradient(90deg, ${info.color}, ${info.color}cc)`;
+    }
+    if (profileProgressText) {
+        profileProgressText.textContent = info.next
+            ? `${count}/${info.next.min}`
+            : 'MAX';
     }
 }
 
