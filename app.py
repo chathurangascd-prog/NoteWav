@@ -787,8 +787,24 @@ GEMINI_TTS_VOICES = {
     'en': 'Puck',   # Upbeat — nice for English narration
 }
 
+# A curated subset of Gemini's 30 built-in voices — enough variety
+# without overwhelming the person with 30 choices. Descriptions are
+# Google's own official one-word characterizations of each voice.
+GEMINI_TTS_VOICE_OPTIONS = {
+    'Kore': 'Firm',
+    'Puck': 'Upbeat',
+    'Charon': 'Informative',
+    'Leda': 'Youthful',
+    'Aoede': 'Breezy',
+    'Enceladus': 'Breathy',
+    'Achird': 'Friendly',
+    'Sulafat': 'Warm',
+    'Gacrux': 'Mature',
+    'Zephyr': 'Bright',
+}
 
-def synthesize_gemini_tts(text, lang='si'):
+
+def synthesize_gemini_tts(text, lang='si', voice_name=None):
     """Generates natural-sounding audio using Gemini's native TTS model
     — a genuinely different voice engine from gTTS (LLM-driven, not a
     classic speech synthesizer), currently in Preview.
@@ -805,7 +821,11 @@ def synthesize_gemini_tts(text, lang='si'):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
-    voice_name = GEMINI_TTS_VOICES.get(lang, 'Kore')
+    # NEW: person can pick a specific voice character; falls back to a
+    # sensible per-language default if they didn't (or picked an
+    # invalid one).
+    if voice_name not in GEMINI_TTS_VOICE_OPTIONS:
+        voice_name = GEMINI_TTS_VOICES.get(lang, 'Kore')
 
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
     flat_sentences = []
@@ -1156,6 +1176,15 @@ def _is_transient_gemini_error(exc):
     return any(marker in msg for marker in transient_markers)
 
 
+def _friendly_gemini_error_message(exc):
+    """Turns a raw Gemini exception (often a big JSON error dump) into
+    a short, clean message a student can actually understand, instead
+    of showing them '503 UNAVAILABLE {...}' verbatim."""
+    if _is_transient_gemini_error(exc):
+        return 'Google ගේම AI servers දැනට busy වී ඇත (high demand). මිනිත්තුවක් විතර ඉඳලා නැවත උත්සාහ කරන්න.'
+    return 'AI processing එකේදී මොකක් හරි ගැටලුවක් ආවා. නැවත උත්සාහ කරන්න.'
+
+
 def _is_rate_limit_error(exc):
     msg = str(exc).upper()
     return '429' in msg or 'RESOURCE_EXHAUSTED' in msg or 'QUOTA' in msg
@@ -1184,7 +1213,7 @@ question) ප්‍රශ්න 5ක් සමන්විත quiz එකක් 
 """
 
 
-def call_gemini_quiz(content_text, max_retries=2):
+def call_gemini_quiz(content_text, max_retries=5):
     """Generates a 5-question multiple-choice quiz from note content,
     using the same Gemini client/retry pattern as the main script
     generation. Kept as a separate, lightweight function/prompt rather
@@ -1213,7 +1242,8 @@ def call_gemini_quiz(content_text, max_retries=2):
         except Exception as e:
             last_error = e
             if attempt < max_retries and _is_transient_gemini_error(e):
-                time.sleep(attempt)
+                wait_seconds = min(attempt * 2, 10)
+                time.sleep(wait_seconds)
                 continue
             raise GeminiGenerationError(f"Quiz generation failed: {e}")
     else:
@@ -1246,7 +1276,7 @@ def call_gemini_quiz(content_text, max_retries=2):
     return questions
 
 
-def call_gemini_structured(note_text, output_language='si', max_retries=3):
+def call_gemini_structured(note_text, output_language='si', max_retries=6):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -1287,7 +1317,14 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
                 )
 
             if attempt < max_retries and _is_transient_gemini_error(e):
-                wait_seconds = attempt  # 1s, then 2s, then 3s
+                # FIX: was only 1s/2s (≈3s total across all retries) —
+                # far too short for a genuine "Google servers under
+                # high demand" spike (503 UNAVAILABLE) to actually
+                # clear. Now backs off 2s, 4s, 6s, 8s, 10s — a much
+                # more realistic window for a transient overload to
+                # resolve, while still bounded well under Render's
+                # gunicorn worker timeout.
+                wait_seconds = min(attempt * 2, 10)
                 print(f"⚠️ Gemini transient error (attempt {attempt}/{max_retries}), retrying in {wait_seconds}s: {e}")
                 time.sleep(wait_seconds)
                 continue
@@ -1516,6 +1553,7 @@ def text_to_speech():
     engine = (data.get('engine') or 'gtts').strip().lower()
     if engine not in ('gtts', 'gemini'):
         engine = 'gtts'
+    voice_name = (data.get('voice_name') or '').strip()
 
     if not text:
         return jsonify({'status': 'error', 'message': 'කියවීමට කිසිම text එකක් ලැබී නැත.'}), 400
@@ -1538,7 +1576,7 @@ def text_to_speech():
     if engine == 'gemini':
         try:
             print(f"🎙️ Requesting Gemini TTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
-            audio_segment, sentence_timings = synthesize_gemini_tts(formatted_text, lang=gtts_lang)
+            audio_segment, sentence_timings = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name)
             unique_name = f"output_{uuid.uuid4().hex}.mp3"
             filename = os.path.join('static', unique_name)
             audio_segment.export(filename, format='mp3')
@@ -1874,7 +1912,8 @@ def generate_quiz():
     try:
         questions = call_gemini_quiz(content_text)
     except GeminiGenerationError as e:
-        return jsonify({'status': 'error', 'message': f'Quiz එක හදාගැනීම අසාර්ථක විය: {e}'}), 500
+        print(f"Quiz Gemini Error: {e}")
+        return jsonify({'status': 'error', 'message': _friendly_gemini_error_message(e)}), 500
 
     return jsonify({'status': 'success', 'questions': questions})
 
@@ -1920,7 +1959,7 @@ def process_note():
             'mermaid_code_si': '',
             'mermaid_code_en': '',
             'ai_processed': False,
-            'warning': f'AI processing එක අසාර්ථක විය ({e}). ඔබේ මුල් text එකම පෙන්වයි.'
+            'warning': _friendly_gemini_error_message(e)
         })
 
     final_text = podcast_script if mode == 'smart' else note_text
