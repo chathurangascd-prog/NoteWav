@@ -320,7 +320,7 @@ document.addEventListener('DOMContentLoaded', function() {
             this.classList.add('active');
             // Gemini (Natural AI) audio stays locked to its own default
             // pace — the speed slider only affects Standard (gTTS) audio.
-            if (audio && currentAudioEngine !== 'gemini') audio.playbackRate = getEffectivePlaybackRate();
+            if (audio) audio.playbackRate = getEffectivePlaybackRate();
             try {
                 localStorage.setItem(SPEED_STORAGE_KEY, String(playbackSpeed));
             } catch (e) {
@@ -347,6 +347,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const SPEED_BOOST_MULTIPLIER = 1.15;
     function getEffectivePlaybackRate() {
+        // gTTS (Standard) keeps its EXACT existing behavior unchanged —
+        // "1x" has always actually played at 1.15x, because gTTS's
+        // mechanical voice sounds noticeably duller/slower at a true
+        // 1.0x than a natural human voice does.
+        //
+        // Gemini (Natural AI) already has its own carefully-paced,
+        // natural-sounding delivery, so it does NOT get that artificial
+        // boost — its "1x" means a genuine, unmodified 1.0x, and the
+        // speed buttons scale from that true baseline.
+        if (currentAudioEngine === 'gemini') {
+            return playbackSpeed;
+        }
         return playbackSpeed * SPEED_BOOST_MULTIPLIER;
     }
 
@@ -2021,15 +2033,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 audio = new Audio(data.audio_url);
                 currentAudioEngine = data.engine || 'gtts';
-                // NEW: keep the speed slider behavior exactly as before
-                // for the Standard (gTTS) engine — but the Natural (AI)
-                // Gemini voice already has its own carefully-paced,
-                // expressive delivery, and mechanically speeding/
-                // slowing it via playbackRate can make it sound
-                // distorted/unnatural. So Gemini audio always plays at
-                // its own default (1.0x) pace, ignoring the speed
-                // slider for that specific playback.
-                audio.playbackRate = (data.engine === 'gemini') ? 1.0 : getEffectivePlaybackRate();
+                audio.playbackRate = getEffectivePlaybackRate();
                 audio.volume = playbackVolume;
                 setupAudioAnalyser(audio);
 
