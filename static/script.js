@@ -1888,6 +1888,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 safetySection.classList.remove('hidden');
                 audioSection.classList.add('hidden');
                 trackUsageEvent('note_processed');
+                incrementNotesProcessedCount();
 
                 if (data.ai_processed === false && data.warning) {
                     showErrorBanner(data.warning);
@@ -2594,6 +2595,101 @@ const NOTEWAV_TRANSLATIONS = {
     share_telegram_btn: { si: 'Telegram (Text විතරයි)', en: 'Telegram (Text only)' },
     lyrics_placeholder: { si: 'Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...', en: 'Text will highlight here as the Audio plays...' },
 };
+
+// ========================================
+// LEVEL SYSTEM (gamification — notes processed = XP)
+// ========================================
+const LEVEL_THRESHOLDS = [
+    { level: 1, min: 0, icon: '🌱', title: 'Beginner' },
+    { level: 2, min: 5, icon: '📖', title: 'Learner' },
+    { level: 3, min: 10, icon: '✏️', title: 'Note Taker' },
+    { level: 4, min: 20, icon: '🎓', title: 'Scholar' },
+    { level: 5, min: 40, icon: '🧠', title: 'Expert' },
+    { level: 6, min: 75, icon: '🏆', title: 'Master' },
+    { level: 7, min: 150, icon: '👑', title: 'Legend' },
+];
+const NOTES_COUNT_KEY = 'notewav_notes_processed_count';
+
+function getNotesProcessedCount() {
+    try {
+        return parseInt(localStorage.getItem(NOTES_COUNT_KEY) || '0', 10) || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getLevelInfo(count) {
+    let current = LEVEL_THRESHOLDS[0];
+    for (const lvl of LEVEL_THRESHOLDS) {
+        if (count >= lvl.min) current = lvl;
+    }
+    const currentIndex = LEVEL_THRESHOLDS.indexOf(current);
+    const next = LEVEL_THRESHOLDS[currentIndex + 1] || null;
+    return { ...current, next };
+}
+
+function renderLevelBadge() {
+    const iconEl = document.getElementById('level-icon');
+    const titleEl = document.getElementById('level-title');
+    const badgeEl = document.getElementById('level-badge');
+    if (!iconEl || !titleEl) return;
+    const info = getLevelInfo(getNotesProcessedCount());
+    iconEl.textContent = info.icon;
+    titleEl.textContent = info.title;
+    if (badgeEl) {
+        badgeEl.title = info.next
+            ? `Level ${info.level}: ${info.title} — තව notes ${info.next.min - getNotesProcessedCount()}ක් process කළොත් "${info.next.title}" වෙනවා!`
+            : `Level ${info.level}: ${info.title} — ඉහළම level එකට ළඟා වුනා! 🎉`;
+    }
+}
+
+function showLevelUpCelebration(newLevelInfo) {
+    const overlay = document.getElementById('level-up-overlay');
+    const iconEl = document.getElementById('level-up-icon');
+    const headingEl = document.getElementById('level-up-heading');
+    const subtextEl = document.getElementById('level-up-subtext');
+    if (!overlay) return;
+
+    // Reward: 5 free coins for reaching a new level.
+    const LEVEL_UP_COINS_REWARD = 5;
+    if (typeof addCoins === 'function') addCoins(LEVEL_UP_COINS_REWARD);
+    if (typeof updateCoinsDisplay === 'function') updateCoinsDisplay();
+
+    if (iconEl) iconEl.textContent = newLevelInfo.icon;
+    if (headingEl) headingEl.textContent = `Level ${newLevelInfo.level}: ${newLevelInfo.title}!`;
+    if (subtextEl) subtextEl.textContent = `🎉 Congrats! ඔබ notes process කරලා level up වුනා — 🪙 ${LEVEL_UP_COINS_REWARD} coins reward එකක්! ඉගෙනීම දිගටම කරගෙන යන්න!`;
+    overlay.classList.add('show');
+}
+
+function incrementNotesProcessedCount() {
+    const before = getNotesProcessedCount();
+    const after = before + 1;
+    try {
+        localStorage.setItem(NOTES_COUNT_KEY, String(after));
+    } catch (e) {
+        console.warn('Could not save notes processed count:', e);
+    }
+    const beforeInfo = getLevelInfo(before);
+    const afterInfo = getLevelInfo(after);
+    renderLevelBadge();
+    if (afterInfo.level > beforeInfo.level) {
+        showLevelUpCelebration(afterInfo);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    renderLevelBadge();
+    const levelUpCloseBtn = document.getElementById('level-up-close-btn');
+    const levelUpOverlay = document.getElementById('level-up-overlay');
+    if (levelUpCloseBtn && levelUpOverlay) {
+        levelUpCloseBtn.addEventListener('click', () => levelUpOverlay.classList.remove('show'));
+    }
+    if (levelUpOverlay) {
+        levelUpOverlay.addEventListener('click', function(e) {
+            if (e.target === levelUpOverlay) levelUpOverlay.classList.remove('show');
+        });
+    }
+});
 
 // ========================================
 // THEME (Dark / Light toggle)
