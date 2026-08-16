@@ -782,25 +782,17 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
 
 
 GEMINI_TTS_VOICES = {
-    'si': 'Kore',   # Firm, clear — good default for Sinhala narration
-    'ta': 'Kore',
-    'en': 'Puck',   # Upbeat — nice for English narration
+    'si': 'Leda',   # default to female voice if none chosen
+    'ta': 'Leda',
+    'en': 'Leda',
 }
 
-# A curated subset of Gemini's 30 built-in voices — enough variety
-# without overwhelming the person with 30 choices. Descriptions are
-# Google's own official one-word characterizations of each voice.
+# Simplified to just two curated choices — a clear Male and Female
+# newscaster-style voice, instead of overwhelming students with all 30
+# of Gemini's built-in options.
 GEMINI_TTS_VOICE_OPTIONS = {
-    'Kore': 'Firm',
-    'Puck': 'Upbeat',
-    'Charon': 'Informative',
-    'Leda': 'Youthful',
-    'Aoede': 'Breezy',
-    'Enceladus': 'Breathy',
-    'Achird': 'Friendly',
-    'Sulafat': 'Warm',
-    'Gacrux': 'Mature',
-    'Zephyr': 'Bright',
+    'Sadaltager': 'Male',
+    'Leda': 'Female',
 }
 
 
@@ -821,11 +813,11 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
-    # NEW: person can pick a specific voice character; falls back to a
-    # sensible per-language default if they didn't (or picked an
-    # invalid one).
+    # NEW: person can pick Male (Sadaltager) or Female (Leda); falls
+    # back to a sensible default if they didn't (or picked an invalid
+    # value).
     if voice_name not in GEMINI_TTS_VOICE_OPTIONS:
-        voice_name = GEMINI_TTS_VOICES.get(lang, 'Kore')
+        voice_name = GEMINI_TTS_VOICES.get(lang, 'Leda')
 
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
     flat_sentences = []
@@ -835,9 +827,20 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None):
     if not flat_sentences:
         flat_sentences = [text]
 
+    # Director's notes: fixed Style (Newscaster) + Pace (Natural), per
+    # Gemini TTS's own prompting convention. Docs recommend keeping
+    # these instructions in English even when the transcript itself is
+    # in another language (Sinhala/Tamil), for best results.
+    directed_prompt = (
+        "Style: Newscaster — clear, professional, and authoritative delivery, "
+        "as if reading a news broadcast.\n"
+        "Pace: Natural, comfortable speaking speed — not rushed, not slow.\n\n"
+        f"{text}"
+    )
+
     response = client.models.generate_content(
         model='gemini-2.5-flash-preview-tts',
-        contents=text,
+        contents=directed_prompt,
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
