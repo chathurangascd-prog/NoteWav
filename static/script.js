@@ -1888,10 +1888,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 safetySection.classList.remove('hidden');
                 audioSection.classList.add('hidden');
                 trackUsageEvent('note_processed');
-                incrementNotesProcessedCount();
 
                 if (data.ai_processed === false && data.warning) {
+                    // FIX: this is a "soft failure" — Gemini processing
+                    // didn't fully work and a warning banner (looks
+                    // like an error) is shown to the person, so it
+                    // shouldn't count as a completed note toward
+                    // leveling up.
                     showErrorBanner(data.warning);
+                } else {
+                    incrementNotesProcessedCount();
                 }
 
                 await renderMindMap(data.mermaid_code_si, data.mermaid_code_en);
