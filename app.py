@@ -781,6 +781,86 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     return combined, sentence_timings
 
 
+GEMINI_TTS_VOICES = {
+    'si': 'Kore',   # Firm, clear — good default for Sinhala narration
+    'ta': 'Kore',
+    'en': 'Puck',   # Upbeat — nice for English narration
+}
+
+
+def synthesize_gemini_tts(text, lang='si'):
+    """Generates natural-sounding audio using Gemini's native TTS model
+    — a genuinely different voice engine from gTTS (LLM-driven, not a
+    classic speech synthesizer), currently in Preview.
+
+    NOTE on sentence timings: gTTS generates each sentence as its own
+    separate audio call, so its timings are REAL measured durations.
+    Gemini TTS is called ONCE for the entire script (much better
+    prosody/flow across sentences that way), so there's no per-sentence
+    boundary to measure directly — timings here are ESTIMATED by
+    distributing the total measured audio duration proportionally by
+    each sentence's character count. This is an approximation, not
+    exact, but close enough for karaoke-style highlighting in practice.
+    """
+    if not client:
+        raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
+
+    voice_name = GEMINI_TTS_VOICES.get(lang, 'Kore')
+
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
+    flat_sentences = []
+    for paragraph in paragraphs:
+        sentences = split_into_sentences(paragraph) or [paragraph]
+        flat_sentences.extend(sentences)
+    if not flat_sentences:
+        flat_sentences = [text]
+
+    response = client.models.generate_content(
+        model='gemini-2.5-flash-preview-tts',
+        contents=text,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+                )
+            ),
+        )
+    )
+
+    if not getattr(response, 'candidates', None):
+        raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
+
+    audio_data = response.candidates[0].content.parts[0].inline_data.data
+    # Gemini TTS returns raw 24kHz 16-bit mono PCM — wrap it as an
+    # AudioSegment the same way the rest of this file already handles
+    # audio (so export/duration/etc. all work identically to gTTS output).
+    audio_segment = AudioSegment(
+        data=audio_data,
+        sample_width=2,
+        frame_rate=24000,
+        channels=1,
+    )
+
+    total_duration_ms = len(audio_segment)
+    total_chars = sum(len(s) for s in flat_sentences) or 1
+    sentence_timings = []
+    cursor_ms = 0
+    for sentence_text in flat_sentences:
+        share = len(sentence_text) / total_chars
+        duration_ms = total_duration_ms * share
+        start_ms = cursor_ms
+        end_ms = cursor_ms + duration_ms
+        sentence_timings.append({
+            'text': sentence_text,
+            'start': round(start_ms / 1000, 3),
+            'end': round(end_ms / 1000, 3),
+        })
+        cursor_ms = end_ms
+
+    return audio_segment, sentence_timings
+
+
 class GeminiGenerationError(Exception):
     pass
 
@@ -1430,6 +1510,12 @@ def ocr_image():
 def text_to_speech():
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
+    # NEW: which voice engine to use — 'gtts' (default, free, classic
+    # robotic TTS) or 'gemini' (natural LLM-driven voice, Preview,
+    # costs Gemini API usage). Anything unrecognized falls back to gtts.
+    engine = (data.get('engine') or 'gtts').strip().lower()
+    if engine not in ('gtts', 'gemini'):
+        engine = 'gtts'
 
     if not text:
         return jsonify({'status': 'error', 'message': 'කියවීමට කිසිම text එකක් ලැබී නැත.'}), 400
@@ -1449,6 +1535,27 @@ def text_to_speech():
     detected_lang = detect_language(formatted_text)
     gtts_lang = {'Sinhala': 'si', 'Tamil': 'ta', 'English': 'en'}.get(detected_lang, 'si')
 
+    if engine == 'gemini':
+        try:
+            print(f"🎙️ Requesting Gemini TTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
+            audio_segment, sentence_timings = synthesize_gemini_tts(formatted_text, lang=gtts_lang)
+            unique_name = f"output_{uuid.uuid4().hex}.mp3"
+            filename = os.path.join('static', unique_name)
+            audio_segment.export(filename, format='mp3')
+            print("✅ Gemini TTS Success!")
+            return jsonify({
+                'status': 'success',
+                'audio_url': '/' + filename.replace('\\', '/'),
+                'sentence_timings': sentence_timings,
+                'engine': 'gemini',
+            })
+        except Exception as e:
+            print(f"❌ Gemini TTS Error: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Gemini AI Voice (Preview) එකෙන් audio එක generate කරගැනීම අසාර්ථක විය — Standard Voice එකෙන් try කරන්න.'
+            }), 500
+
     try:
         print(f"🎙️ Requesting gTTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
         audio_segment, sentence_timings = synthesize_gtts_natural(formatted_text, lang=gtts_lang)
@@ -1460,6 +1567,7 @@ def text_to_speech():
             'status': 'success',
             'audio_url': '/' + filename.replace('\\', '/'),
             'sentence_timings': sentence_timings,
+            'engine': 'gtts',
         })
     except Exception as e:
         print(f"❌ gTTS Error: {str(e)}")

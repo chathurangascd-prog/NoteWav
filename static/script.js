@@ -199,6 +199,34 @@ document.addEventListener('DOMContentLoaded', function() {
     if (outputLangSiBtn) outputLangSiBtn.addEventListener('click', () => setOutputLanguageUI('si'));
     if (outputLangEnBtn) outputLangEnBtn.addEventListener('click', () => setOutputLanguageUI('en'));
 
+    // ===== TTS Voice Engine (Standard gTTS vs Natural Gemini AI) =====
+    let ttsEngine = 'gtts';
+    const ttsEngineGttsBtn = document.getElementById('tts-engine-gtts-btn');
+    const ttsEngineGeminiBtn = document.getElementById('tts-engine-gemini-btn');
+
+    function setTtsEngineUI(engine) {
+        ttsEngine = engine;
+        if (ttsEngineGttsBtn) ttsEngineGttsBtn.classList.toggle('active', engine === 'gtts');
+        if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.classList.toggle('active', engine === 'gemini');
+        try {
+            localStorage.setItem('notewav_tts_engine', engine);
+        } catch (e) {
+            console.warn('Could not save TTS engine preference:', e);
+        }
+    }
+
+    try {
+        const savedTtsEngine = localStorage.getItem('notewav_tts_engine');
+        if (savedTtsEngine === 'gtts' || savedTtsEngine === 'gemini') {
+            setTtsEngineUI(savedTtsEngine);
+        }
+    } catch (e) {
+        // ignore, default to 'gtts'
+    }
+
+    if (ttsEngineGttsBtn) ttsEngineGttsBtn.addEventListener('click', () => setTtsEngineUI('gtts'));
+    if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.addEventListener('click', () => setTtsEngineUI('gemini'));
+
     // ===== DOM Elements =====
     const noteInput = document.getElementById('note-input');
     const processBtn = document.getElementById('process-btn');
@@ -1943,14 +1971,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        generateAudioBtn.innerHTML = '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Generating...';
+        generateAudioBtn.innerHTML = ttsEngine === 'gemini'
+            ? '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> AI Voice Generating (ටිකක් වේලා ගන්නවා)...'
+            : '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Generating...';
         generateAudioBtn.disabled = true;
 
         try {
             const response = await fetch('/tts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({ text, engine: ttsEngine }),
             });
 
             const data = await response.json();
