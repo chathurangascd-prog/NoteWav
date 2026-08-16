@@ -2288,7 +2288,22 @@ def _get_admin_usage_data():
             COUNT(*) AS total_events,
             SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed,
             SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated,
-            (SELECT coins FROM user_state us WHERE us.anon_id = ue1.anon_id) AS coins
+            -- FIX: for a signed-in account, users.coins (keyed by
+            -- email) is the REAL, authoritative, cross-device balance
+            -- — the same one the Admin's "Add Coins" feature updates.
+            -- The old query only ever read user_state.coins (a
+            -- device-level snapshot), so admin-added coins never
+            -- showed up here even though the real balance WAS correct.
+            -- Falls back to user_state.coins only for guests (who have
+            -- no users row at all).
+            COALESCE(
+                (SELECT u.coins FROM users u WHERE u.email = (
+                    SELECT user_email FROM usage_events ue4
+                    WHERE ue4.anon_id = ue1.anon_id AND ue4.user_email IS NOT NULL
+                    ORDER BY ue4.created_at DESC LIMIT 1
+                )),
+                (SELECT coins FROM user_state us WHERE us.anon_id = ue1.anon_id)
+            ) AS coins
         FROM usage_events ue1
         GROUP BY anon_id
         ORDER BY last_seen DESC
