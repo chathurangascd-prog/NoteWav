@@ -455,18 +455,6 @@
 
                 <div class="mode-selector">
                     <p class="section-title">
-                        <i class="fas fa-microphone-lines"></i>
-                        <span>Voice Engine (Audio):</span>
-                    </p>
-                    <div class="mindmap-lang-toggle" id="tts-engine-toggle">
-                        <button type="button" class="lang-toggle-btn active" data-ttsengine="gtts" id="tts-engine-gtts-btn">🤖 Standard</button>
-                        <button type="button" class="lang-toggle-btn" data-ttsengine="gemini" id="tts-engine-gemini-btn">✨ Natural (AI) — Beta</button>
-                    </div>
-                    <span class="upload-hint">"Natural (AI)" — Gemini ගේම advanced voice model එකෙන් (Preview/Beta), ගොඩක් human-like — ඒත් generate වෙන්න ටිකක් වැඩිය කාලයක් ගන්න පුළුවන්.</span>
-                </div>
-
-                <div class="mode-selector">
-                    <p class="section-title">
                         <i class="fas fa-graduation-cap"></i>
                         <span data-i18n="study_mode_title">අධ්‍යාපනික මාදිලිය (Study Mode):</span>
                     </p>
@@ -530,6 +518,32 @@
                     <button id="save-to-library-btn" class="btn-secondary library-save-btn">
                         <i class="fas fa-bookmark"></i> <span data-i18n="save_to_library_btn">Library එකට Save කරන්න</span>
                     </button>
+                </div>
+
+                <div class="mode-selector">
+                    <p class="section-title">
+                        <i class="fas fa-microphone-lines"></i>
+                        <span>Voice Engine (Audio):</span>
+                    </p>
+                    <div class="mindmap-lang-toggle" id="tts-engine-toggle">
+                        <button type="button" class="lang-toggle-btn active" data-ttsengine="gtts" id="tts-engine-gtts-btn">🤖 Standard</button>
+                        <button type="button" class="lang-toggle-btn" data-ttsengine="gemini" id="tts-engine-gemini-btn">✨ Natural (AI) — Beta</button>
+                    </div>
+                    <div id="tts-voice-picker-wrap" class="hidden" style="margin-top: 10px;">
+                        <label for="tts-voice-select" style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;">🗣️ Voice Character:</label>
+                        <select id="tts-voice-select" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 0.85rem; font-family: inherit;">
+                            <option value="Kore">Kore — Firm</option>
+                            <option value="Puck">Puck — Upbeat</option>
+                            <option value="Charon">Charon — Informative</option>
+                            <option value="Leda">Leda — Youthful</option>
+                            <option value="Aoede">Aoede — Breezy</option>
+                            <option value="Enceladus">Enceladus — Breathy</option>
+                            <option value="Achird">Achird — Friendly</option>
+                            <option value="Sulafat">Sulafat — Warm</option>
+                            <option value="Gacrux">Gacrux — Mature</option>
+                            <option value="Zephyr">Zephyr — Bright</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="btn-group">
