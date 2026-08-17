@@ -3116,6 +3116,94 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // ONBOARDING TUTORIAL (first-time visitors)
 // ========================================
+// ========================================
+// DAILY QUOTE GREETING CARD (once per day, first open)
+// ========================================
+// 20 short, well-known, verifiably-attributed quotes — a mix of
+// globally-recognized figures and simple, widely-taught Buddhist
+// teachings. Kept short and paraphrased in Claude's own words rather
+// than claiming exact verbatim scripture/literary translation.
+const DAILY_QUOTES = [
+    { si: { text: 'ඉගෙනගත් දෙයක් කිසිවෙකුට අහෝසි කරන්න බැහැ.', author: 'B.B. King' }, en: { text: 'The beautiful thing about learning is nobody can take it away from you.', author: 'B.B. King' } },
+    { si: { text: 'අධ්‍යාපනය ලෝකය වෙනස් කරන්න පුළුවන් බලවත්ම ආයුධයයි.', author: 'Nelson Mandela' }, en: { text: 'Education is the most powerful weapon to change the world.', author: 'Nelson Mandela' } },
+    { si: { text: 'ඔබ කරන දේට ආදරය කරන එකයි විශිෂ්ට වැඩේ කරන්න තියෙන එකම මගම.', author: 'Steve Jobs' }, en: { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' } },
+    { si: { text: 'පුළුවන් කියලා විශ්වාස කරන්න — ඔබ ඒ මතටම අඩක් ළඟා වෙලා.', author: 'Theodore Roosevelt' }, en: { text: "Believe you can, and you're halfway there.", author: 'Theodore Roosevelt' } },
+    { si: { text: 'ඉවර වෙනකන් හැමදාම එය කළ නොහැකි වගේ පෙනෙනවා.', author: 'Nelson Mandela' }, en: { text: 'It always seems impossible until it is done.', author: 'Nelson Mandela' } },
+    { si: { text: 'තමන්ගේ සිහිනවල අලංකාරය විශ්වාස කරන අයටයි අනාගතය අයිති.', author: 'Eleanor Roosevelt' }, en: { text: 'The future belongs to those who believe in the beauty of their dreams.', author: 'Eleanor Roosevelt' } },
+    { si: { text: 'සාර්ථකත්වය අවසානයක් නෙවෙයි, අසාර්ථකත්වය අන්තිමත් නෙවෙයි — ඉදිරියට යන්න ඇති ධෛර්යයයි වැදගත්.', author: 'Winston Churchill' }, en: { text: 'Success is not final, failure is not fatal: it is the courage to continue that counts.', author: 'Winston Churchill' } },
+    { si: { text: 'මනස තමයි හැම දෙයක්ම — ඔබ හිතන දේ ඔබ බවටම පත් වෙනවා.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'The mind is everything. What you think you become.', author: 'Lord Buddha' } },
+    { si: { text: 'සාමය ඇතුළතින්ම එනවා — එය පිටින් සොයන්න එපා.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'Peace comes from within. Do not seek it without.', author: 'Lord Buddha' } },
+    { si: { text: 'ක්‍රියාවට නංවපු අදහසක් වටිනවා, හිතේම ඉතුරු වුනු අදහසකට වඩා.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'A developed idea put into action matters more than one that stays only a thought.', author: 'Lord Buddha' } },
+    { si: { text: 'හොඳින් පටන් ගැනීම වැඩේ අඩක් ඉවර කිරීමක්.', author: 'Aristotle' }, en: { text: 'Well begun is half done.', author: 'Aristotle' } },
+    { si: { text: 'මම අසාර්ථක වුනේ නෑ — වැඩ නොකරන ක්‍රම 10,000ක් සොයාගත්තා විතරයි.', author: 'Thomas Edison' }, en: { text: "I have not failed. I've just found ways that won't work.", author: 'Thomas Edison' } },
+    { si: { text: 'ඕනම ක්ෂේත්‍රයක expert කෙනෙක් වුනත්, කලින් beginner කෙනෙක්ම වුනා.', author: 'Helen Hayes' }, en: { text: 'The expert in anything was once a beginner.', author: 'Helen Hayes' } },
+    { si: { text: 'අතීතේ ජීවත් නොවී, අනාගතේ නොහීන්දී, වර්තමානේ මනස තියන්න.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'Do not dwell in the past or dream of the future — focus the mind on the present.', author: 'Lord Buddha' } },
+    { si: { text: 'ඔබ කොච්චර හෙමින් ගියත් කමක් නෑ, නවතින්නම එපා.', author: 'Confucius' }, en: { text: 'It does not matter how slowly you go, as long as you do not stop.', author: 'Confucius' } },
+    { si: { text: 'දැනුමයි බලය.', author: 'Francis Bacon' }, en: { text: 'Knowledge is power.', author: 'Francis Bacon' } },
+    { si: { text: 'අලුත් ඉලක්කයක් තියාගන්න, අලුත් සිහිනයක් දකින්න — ඔබ කිසිදාක වයසක නෑ.', author: 'C.S. Lewis' }, en: { text: 'You are never too old to set another goal or dream a new dream.', author: 'C.S. Lewis' } },
+    { si: { text: 'අපි හිතන දේම, අපි බවටම පත් වෙනවා.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'What we think, we become.', author: 'Lord Buddha' } },
+    { si: { text: 'සැතපුම් දහසක ගමන පටන් ගන්නේ එක පියවරකින්.', author: 'Lao Tzu' }, en: { text: 'The journey of a thousand miles begins with a single step.', author: 'Lao Tzu' } },
+    { si: { text: 'තරහයි නොඉවසීමයි — නිවැරදි අවබෝධයේ සතුරන්.', author: 'Mahatma Gandhi' }, en: { text: 'Anger and intolerance are the enemies of correct understanding.', author: 'Mahatma Gandhi' } },
+];
+
+function getDayOfYear(date) {
+    const start = new Date(date.getFullYear(), 0, 0);
+    const diffMs = date - start;
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('daily-quote-modal-backdrop');
+    if (!modal) return;
+
+    const QUOTE_SEEN_DATE_KEY = 'notewav_last_quote_date';
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let lastShownDate = null;
+    try { lastShownDate = localStorage.getItem(QUOTE_SEEN_DATE_KEY); } catch (e) { /* ignore */ }
+
+    if (lastShownDate === todayStr) return; // already shown today
+
+    // Avoid colliding with the onboarding tutorial (also shown once,
+    // shortly after the splash screen) — a genuinely brand-new visitor
+    // sees onboarding first; the daily quote card simply starts from
+    // their next calendar-day visit instead of stacking on the same screen.
+    let onboardingAlreadySeen = true;
+    try { onboardingAlreadySeen = localStorage.getItem('notewav_onboarding_seen') === '1'; } catch (e) { /* ignore */ }
+    if (!onboardingAlreadySeen) {
+        try { localStorage.setItem(QUOTE_SEEN_DATE_KEY, todayStr); } catch (e) { /* ignore */ }
+        return;
+    }
+
+    const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+    const dayIndex = getDayOfYear(new Date()) % DAILY_QUOTES.length;
+    const quote = DAILY_QUOTES[dayIndex][lang];
+
+    const dateLabelEl = document.getElementById('daily-quote-date-label');
+    const textEl = document.getElementById('daily-quote-text');
+    const authorEl = document.getElementById('daily-quote-author');
+    const startLabelEl = document.getElementById('daily-quote-start-label');
+
+    if (dateLabelEl) {
+        dateLabelEl.textContent = lang === 'en' ? 'Quote of the Day' : 'අද දවසේ වදන';
+    }
+    if (textEl) textEl.textContent = quote.text;
+    if (authorEl) authorEl.textContent = quote.author;
+    if (startLabelEl) startLabelEl.textContent = lang === 'en' ? "Let's Start" : 'ආරම්භ කරමු';
+
+    // Small delay so it doesn't compete with the splash screen animation.
+    setTimeout(() => {
+        modal.classList.remove('hidden');
+    }, 3600);
+
+    const startBtn = document.getElementById('daily-quote-start-btn');
+    if (startBtn) {
+        startBtn.addEventListener('click', function() {
+            modal.classList.add('hidden');
+            try { localStorage.setItem(QUOTE_SEEN_DATE_KEY, todayStr); } catch (e) { /* ignore */ }
+        });
+    }
+});
+
 const ONBOARDING_SEEN_KEY = 'notewav_onboarding_seen';
 const ONBOARDING_STEPS = [
     { icon: '👋', title: 'ආයුබෝවන්! NoteWav AI වලට සාදරයෙන් පිළිගන්නවා', body: 'ඔබේ study notes — podcast audio + mind map බවට හරවන app එකක්. Steps කිහිපයකින් පෙන්නන්නම්! 🚀' },

@@ -150,6 +150,61 @@
             max-width: 320px;
         }
         #level-up-overlay.show .level-up-card { transform: scale(1); }
+
+        /* ===== DAILY QUOTE CARD ===== */
+        .daily-quote-card {
+            width: 480px; max-width: 92vw; height: auto; max-height: 90vh;
+            background: linear-gradient(165deg, #1d1530 0%, #14101f 55%, #0e0c17 100%);
+            border: 1px solid rgba(167, 139, 250, 0.28);
+            position: relative;
+            overflow: hidden;
+            animation: dailyQuoteIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes dailyQuoteIn {
+            from { opacity: 0; transform: scale(0.92) translateY(14px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .daily-quote-glow {
+            position: absolute; top: -40%; left: 50%; transform: translateX(-50%);
+            width: 340px; height: 340px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(107,48,255,0.35) 0%, rgba(107,48,255,0) 70%);
+            pointer-events: none;
+        }
+        .daily-quote-body {
+            position: relative; z-index: 1;
+            padding: 44px 38px 36px;
+            text-align: center;
+        }
+        .daily-quote-day-label {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 0.72rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+            color: #a78bfa; opacity: 0.85; margin-bottom: 18px;
+        }
+        .daily-quote-mark {
+            font-family: 'Fraunces', serif;
+            font-size: 3.4rem; line-height: 1; color: #6b30ff;
+            background: linear-gradient(135deg, #a78bfa, #EFC37B);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            margin-bottom: 6px; opacity: 0.9;
+        }
+        .daily-quote-text {
+            font-family: 'Fraunces', serif;
+            font-size: 1.28rem; font-weight: 500; line-height: 1.55;
+            color: #f5f2ff;
+            margin: 0 0 22px;
+        }
+        .daily-quote-divider {
+            width: 44px; height: 2px; margin: 0 auto 16px;
+            background: linear-gradient(90deg, #6b30ff, #EFC37B);
+            border-radius: 2px;
+        }
+        .daily-quote-author {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 0.88rem; font-weight: 700; color: #d8cfff;
+            margin: 0 0 28px;
+        }
+        .daily-quote-author::before { content: '— '; opacity: 0.6; }
+        .daily-quote-start-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .level-up-icon { font-size: 4rem; line-height: 1; margin-bottom: 12px; animation: levelUpBounce 0.6s ease; }
         @keyframes levelUpBounce {
             0% { transform: translateY(0) scale(0.5); opacity: 0; }
@@ -353,6 +408,22 @@
                     <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(167,139,250,0.9); display: inline-block;"></span>
                     <span>වැඩි</span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="daily-quote-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Quote of the Day">
+        <div class="mindmap-modal-card daily-quote-card">
+            <div class="daily-quote-glow"></div>
+            <div class="daily-quote-body">
+                <div class="daily-quote-day-label" id="daily-quote-date-label"></div>
+                <div class="daily-quote-mark">❝</div>
+                <p class="daily-quote-text" id="daily-quote-text"></p>
+                <div class="daily-quote-divider"></div>
+                <p class="daily-quote-author" id="daily-quote-author"></p>
+                <button type="button" id="daily-quote-start-btn" class="btn-primary daily-quote-start-btn">
+                    <span id="daily-quote-start-label">ආරම්භ කරමු</span> <i class="fas fa-arrow-right"></i>
+                </button>
             </div>
         </div>
     </div>

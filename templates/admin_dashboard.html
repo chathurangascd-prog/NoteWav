@@ -1324,6 +1324,14 @@
             // without waiting for the next poll cycle.
             renderReportsList();
         }
+        function markReportUnviewed(reportId) {
+            const viewed = getViewedReportIds();
+            viewed.delete(reportId);
+            saveViewedReportIds(viewed);
+            expandedReportIds.delete(reportId); // collapse it back too
+            updateReportsBadge();
+            renderReportsList();
+        }
         function updateReportsBadge() {
             const viewed = getViewedReportIds();
             const hasUnviewed = lastReportsData.some(r => !viewed.has(r.id));
@@ -1387,12 +1395,15 @@
                 const viewLabel = hasMore
                     ? (isExpanded ? '▲ Show less' : '👁️ View full note')
                     : (isExpanded ? '▲ Hide' : '👁️ View');
+                const unviewBtn = !isNew
+                    ? `<button onclick="markReportUnviewed(${r.id})" style="background:none; border:none; color:#fb923c; font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0; margin-left:10px;">🔄 Mark as unviewed</button>`
+                    : '';
                 html += `<div class="${itemClass}">
                     <div class="note-item-info">
                         <div class="note-item-title">🚩 ${escapeHtml(r.title || '(deleted note)')}${newTag}</div>
                         <div class="note-item-subject">${escapeHtml(r.subject || '')} · Reason: ${escapeHtml(r.reason || '(none given)')}</div>
                         <div class="note-item-snippet">${escapeHtml(isExpanded ? fullText : preview)}</div>
-                        <button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${viewLabel}</button>
+                        <button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${viewLabel}</button>${unviewBtn}
                         <div class="note-item-date">Reported: ${r.created_at}</div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:6px;">
