@@ -856,7 +856,14 @@ def calculate_gemini_tts_coin_cost(text_length, model_version='v25'):
 _gemini_tts_call_times = deque()
 _gemini_tts_gate_lock = threading.Lock()
 GEMINI_TTS_SAFE_RPM_PER_WORKER = 4
-GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS = 45
+# FIX (502 errors — worker timeout regression): the queue wait
+# (previously up to 45s) combined with the Gemini call's own timeout
+# (90s) could total 135s on a SINGLE attempt alone — already past
+# gunicorn's 120s worker timeout, before even considering that this
+# function retries up to 4 times. Reduced to a much safer cap, and a
+# hard TOTAL TIME BUDGET (see below) now bounds the whole function
+# regardless of how queueing and retries combine.
+GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS = 10
 
 
 def _gemini_tts_call_gate():
@@ -955,10 +962,24 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # immediately with zero attempt to recover. Now retries both
     # transient overload errors AND rate-limit errors, same pattern as
     # script generation.
+    # FIX (502 errors — worker timeout regression): reduced from 90s to
+    # 60s per call. A hard TOTAL TIME BUDGET below now bounds the
+    # ENTIRE function (queue waits + all call attempts + retry sleeps
+    # combined) to stay safely under gunicorn's 120s worker timeout —
+    # previously each of these had its own separate cap, but nothing
+    # stopped them from ADDING UP past 120s across multiple retries.
     max_tts_retries = 4
     response = None
     last_tts_error = None
+    synth_start_time = time.time()
+    TOTAL_TIME_BUDGET_SECONDS = 95  # hard ceiling, safely under gunicorn's 120s timeout
+
     for attempt in range(1, max_tts_retries + 1):
+        elapsed = time.time() - synth_start_time
+        if elapsed > TOTAL_TIME_BUDGET_SECONDS:
+            print(f"⚠️ Gemini TTS aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
+            raise GeminiGenerationError("Gemini TTS timed out across retries (server-side time budget exceeded).")
+
         _gemini_tts_call_gate()  # queue/wait for a safe slot before calling Gemini
         try:
             response = client.models.generate_content(
@@ -971,7 +992,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
                             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
                         )
                     ),
-                    http_options=types.HttpOptions(timeout=90_000),  # milliseconds
+                    http_options=types.HttpOptions(timeout=60_000),  # milliseconds
                 )
             )
             break  # success
