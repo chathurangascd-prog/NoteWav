@@ -3938,7 +3938,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // list and shows all of them; "Clear All" dismisses the whole
     // batch at once (marks the highest id seen).
     const SEEN_KEY = 'notewav_last_seen_announcement_id';
-    const CLEARED_KEY = 'notewav_notifications_cleared';
     const bellBtn = document.getElementById('notification-bell-btn');
     const badge = document.getElementById('notification-badge');
     const popup = document.getElementById('notification-popup');
@@ -3965,20 +3964,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function isCleared() {
-        try {
-            return localStorage.getItem(CLEARED_KEY) === '1';
-        } catch (e) {
-            return false;
-        }
-    }
-
-    function setCleared(value) {
-        try {
-            localStorage.setItem(CLEARED_KEY, value ? '1' : '0');
-        } catch (e) { /* ignore */ }
-    }
-
     function markAllSeen() {
         if (!announcements.length) return;
         const highestId = Math.max(...announcements.map(a => a.id));
@@ -3994,23 +3979,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const res = await fetch('/announcements/list?anon_id=' + encodeURIComponent(anonId));
             const data = await res.json();
             if (data.status !== 'success') return;
-            const fresh = data.announcements || [];
+            announcements = data.announcements || [];
 
-            // FIX: this used to compare against the in-memory
-            // `announcements` array's previous max id — but that array
-            // always starts EMPTY on every page load/refresh, so
-            // "freshMaxId > previousMaxId(=0)" was true on literally
-            // every reload, incorrectly un-clearing a list the person
-            // had already cleared. Comparing against the PERSISTED
-            // seen-id (localStorage) instead only un-clears when
-            // there's a genuinely new announcement the person has
-            // never seen before — which survives refreshes correctly.
-            const freshMaxId = fresh.length ? Math.max(...fresh.map(a => a.id)) : 0;
-            if (freshMaxId > getSeenId()) setCleared(false);
-
-            announcements = fresh;
+            // FIX: previously used a global "cleared" on/off flag —
+            // clearing set it true, but ANY new message set it back to
+            // false, which revealed the ENTIRE list again (old cleared
+            // ones included), not just the new message. Now each
+            // announcement is judged individually by whether its OWN id
+            // is greater than the last-seen id — once something is
+            // marked seen (via Clear All), it stays hidden forever,
+            // and only genuinely new (higher-id) messages ever show up.
             const hasUnseen = announcements.some(a => a.id > getSeenId());
-            if (hasUnseen && !isCleared()) {
+            if (hasUnseen) {
                 badge.classList.remove('hidden');
             }
         } catch (e) {
@@ -4019,14 +3999,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderPopupList() {
-        if (!announcements.length || isCleared()) {
+        const unread = announcements.filter(a => a.id > getSeenId());
+        if (!unread.length) {
             const lang = getAppLanguage();
             popupList.innerHTML = `<p class="notification-popup-message">${lang === 'en' ? 'No new notifications.' : 'නව notifications නෑ.'}</p>`;
             if (clearBtn) clearBtn.classList.add('hidden');
             return;
         }
         if (clearBtn) clearBtn.classList.remove('hidden');
-        popupList.innerHTML = announcements.map(a => {
+        popupList.innerHTML = unread.map(a => {
             let timeText = '';
             try {
                 const dt = new Date(a.created_at);
@@ -4034,7 +4015,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch (e) { /* ignore */ }
             return `
                 <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
-                    <p class="notification-popup-message" style="margin: 0 0 4px;">${escapeNotificationHtml(a.message)}</p>
+                    <p class="notification-popup-message" style="margin: 0 0 6px;">${escapeNotificationHtml(a.message)}</p>
                     <p class="notification-popup-time" style="margin: 0;"><i class="fas fa-clock"></i> ${escapeNotificationHtml(timeText)}</p>
                 </div>`;
         }).join('');
@@ -4043,13 +4024,11 @@ document.addEventListener('DOMContentLoaded', function() {
     bellBtn.addEventListener('click', function() {
         renderPopupList();
         popup.classList.toggle('hidden');
-        markAllSeen();
     });
 
     if (clearBtn) {
         clearBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            setCleared(true);
             markAllSeen();
             popup.classList.add('hidden');
         });
