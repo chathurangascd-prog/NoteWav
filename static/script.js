@@ -71,6 +71,18 @@ function trackUsageEvent(action) {
 // from before Google Sign-In existed).
 let notewavIsLoggedIn = false;
 
+// FIX (level-up coins sometimes not reaching the server/admin): the
+// auth check below is async — there was a window right after page
+// load where notewavIsLoggedIn was still 'false' by default even for
+// a signed-in user, because /auth/me hadn't responded yet. If a coin
+// change (like a level-up bonus) happened in that window,
+// syncAccountToServer() would silently skip it — and worse, once the
+// auth check DID complete, it would then overwrite localStorage with
+// the server's OLDER coin value, permanently losing the bonus. Storing
+// the check as a Promise lets sync calls simply WAIT for the real
+// answer instead of guessing based on a not-yet-updated variable.
+let notewavAuthCheckPromise = null;
+
 async function checkGoogleAuthStatus() {
     try {
         const res = await fetch('/auth/me');
@@ -136,7 +148,14 @@ async function checkGoogleAuthStatus() {
 // Pushes the CURRENT coins/streak values up to the server — a no-op
 // (server just replies 'ignored') for guests, so this is always safe
 // to call regardless of login state.
-function syncAccountToServer(partial) {
+async function syncAccountToServer(partial) {
+    // Wait for the initial /auth/me check to actually finish before
+    // deciding — this closes the race condition where an early coin
+    // change (e.g. a level-up bonus right after page load) could be
+    // silently skipped because notewavIsLoggedIn hadn't been set yet.
+    if (notewavAuthCheckPromise) {
+        try { await notewavAuthCheckPromise; } catch (e) { /* proceed with whatever we know */ }
+    }
     if (!notewavIsLoggedIn) return;
     fetch('/user/sync', {
         method: 'POST',
@@ -145,7 +164,9 @@ function syncAccountToServer(partial) {
     }).catch(() => { /* best-effort only */ });
 }
 
-document.addEventListener('DOMContentLoaded', checkGoogleAuthStatus);
+document.addEventListener('DOMContentLoaded', function() {
+    notewavAuthCheckPromise = checkGoogleAuthStatus();
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     const loginModalBackdrop = document.getElementById('login-required-modal-backdrop');
