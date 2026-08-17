@@ -873,7 +873,9 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # in another language (Sinhala/Tamil), for best results.
     directed_prefix = (
         "Style: Empathetic — warm, caring, and encouraging delivery, "
-        "like a supportive teacher patiently explaining something to a student.\n"
+        "like a supportive teacher patiently explaining something to a student. "
+        "IMPORTANT: speak clearly and audibly at a normal, full speaking volume — "
+        "NOT a whisper, NOT hushed or breathy, every word should be crisp and easy to hear.\n"
         "Pace: Natural, comfortable speaking speed — not rushed, not slow.\n\n"
     )
 
