@@ -832,6 +832,56 @@ def calculate_gemini_tts_coin_cost(text_length, model_version='v25'):
     return base * 2 if model_version == 'v31' else base
 
 
+# ========================================
+# GEMINI TTS CALL GATE (queue/throttle)
+# ========================================
+# WHY: Google's rate limit for the TTS models is only 10 requests per
+# minute (RPM) at our current billing tier — if several students click
+# "Generate Audio" (Natural AI) around the same time, the 11th+ request
+# in that minute gets flatly REJECTED by Google with a 429 error.
+#
+# This tracks how many Gemini TTS calls THIS worker process has made
+# in the last 60 seconds. If we're near the safety threshold, new
+# requests WAIT (sleep in short increments) for a slot to free up,
+# instead of firing immediately and risking a hard rejection. From the
+# student's perspective, the request just takes a bit longer — the
+# frontend shows friendly rotating "in progress" messages the whole
+# time (see the JS side), so it never looks like a failure.
+#
+# NOTE: this is a PER-WORKER-PROCESS gate (in-memory, not shared across
+# gunicorn's multiple worker processes). With --workers 2, the
+# practical safety margin is set conservatively (4 per worker) so the
+# worst-case combined total across both workers still stays safely
+# under Google's shared 10 RPM limit.
+_gemini_tts_call_times = deque()
+_gemini_tts_gate_lock = threading.Lock()
+GEMINI_TTS_SAFE_RPM_PER_WORKER = 4
+GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS = 45
+
+
+def _gemini_tts_call_gate():
+    """Blocks (in short sleeps) until it's safe to make another Gemini
+    TTS call, or gives up after GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS (at
+    which point the caller proceeds anyway — the existing retry logic
+    is the backstop if Google still rejects it)."""
+    waited = 0
+    while waited < GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS:
+        with _gemini_tts_gate_lock:
+            now = time.time()
+            while _gemini_tts_call_times and now - _gemini_tts_call_times[0] > 60:
+                _gemini_tts_call_times.popleft()
+            if len(_gemini_tts_call_times) < GEMINI_TTS_SAFE_RPM_PER_WORKER:
+                _gemini_tts_call_times.append(now)
+                return
+        time.sleep(2)
+        waited += 2
+    # Gave up waiting — record the attempt anyway and proceed; the
+    # per-request retry logic in synthesize_gemini_tts will catch a
+    # 429 if Google does reject it.
+    with _gemini_tts_gate_lock:
+        _gemini_tts_call_times.append(time.time())
+
+
 def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25'):
     """Generates natural-sounding audio using Gemini's native TTS model
     — a genuinely different voice engine from gTTS (LLM-driven, not a
@@ -909,6 +959,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     response = None
     last_tts_error = None
     for attempt in range(1, max_tts_retries + 1):
+        _gemini_tts_call_gate()  # queue/wait for a safe slot before calling Gemini
         try:
             response = client.models.generate_content(
                 model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),

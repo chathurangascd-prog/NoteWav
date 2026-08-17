@@ -2177,12 +2177,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        generateAudioBtn.innerHTML = ttsEngine === 'gemini'
-            ? '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> AI Voice Generating (ටිකක් වේලා ගන්නවා)...'
-            : '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Generating...';
+        const genLang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+        const generatingLabel = ttsEngine === 'gemini'
+            ? (genLang === 'en' ? 'AI Voice Generating (takes a bit longer)...' : 'AI Voice Generating (ටිකක් වේලා ගන්නවා)...')
+            : (genLang === 'en' ? 'Generating...' : 'තරංග උත්පාදනය වෙමින්...');
+        generateAudioBtn.innerHTML = `<span class="mini-wave"><span></span><span></span><span></span><span></span></span> ${generatingLabel}`;
         generateAudioBtn.disabled = true;
         const progressTrack = document.getElementById('audio-gen-progress-track');
         if (progressTrack) progressTrack.classList.remove('hidden');
+        startAudioGenStatusCycle(ttsEngine);
 
         try {
             const response = await fetch('/tts', {
@@ -2340,9 +2343,12 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error:', error);
             showErrorBanner('Network error. කරුණාකර නැවත උත්සාහ කරන්න.');
         } finally {
-            generateAudioBtn.innerHTML = '<i class="fas fa-microphone"></i> තරංග උත්පාදනය කරන්න';
+            const resetLang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+            const resetLabel = resetLang === 'en' ? 'Generate Audio' : 'තරංග උත්පාදනය කරන්න';
+            generateAudioBtn.innerHTML = `<i class="fas fa-microphone"></i> <span data-i18n="generate_audio_btn">${resetLabel}</span>`;
             generateAudioBtn.disabled = false;
             if (progressTrack) progressTrack.classList.add('hidden');
+            stopAudioGenStatusCycle();
         }
     });
 
@@ -2921,6 +2927,62 @@ function estimateGeminiCoinCost(textLength, modelVersion) {
     else if (textLength <= 1200) base = 12;
     else base = 20;
     return modelVersion === 'v31' ? base * 2 : base;
+}
+
+// ========================================
+// AUDIO GENERATION — Animated waiting messages
+// ========================================
+// Makes the wait feel purposeful instead of a dead/frozen screen —
+// especially relevant now that Gemini TTS requests can sit briefly in
+// a server-side queue during busy periods. Cycles through friendly
+// phase-like messages; if generation runs long, it gently loops the
+// later messages instead of getting stuck on one line.
+const AUDIO_GEN_STATUS_MESSAGES = {
+    si: [
+        '📖 ඔබේ note එක කියවමින්...',
+        '🧠 AI එකෙන් audio එක හදමින්...',
+        '🎙️ හඬ (voice) සකසමින්...',
+        '✨ හොඳම result එකක් සූදානම් කරමින්...',
+    ],
+    en: [
+        '📖 Reading your note...',
+        '🧠 AI is creating the audio...',
+        '🎙️ Preparing the voice...',
+        '✨ Putting together a great result for you...',
+    ],
+};
+let audioGenStatusInterval = null;
+
+function startAudioGenStatusCycle(engine) {
+    const el = document.getElementById('audio-gen-status-text');
+    if (!el) return;
+    const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+    const messages = AUDIO_GEN_STATUS_MESSAGES[lang];
+    let index = 0;
+    el.textContent = messages[0];
+    el.classList.remove('hidden');
+    el.style.opacity = '1';
+
+    // Gemini (Natural AI) requests can genuinely take longer (queueing
+    // + generation) — cycle a bit slower so messages don't feel rushed.
+    const stepMs = engine === 'gemini' ? 4500 : 3000;
+
+    clearInterval(audioGenStatusInterval);
+    audioGenStatusInterval = setInterval(() => {
+        el.style.opacity = '0';
+        setTimeout(() => {
+            index = (index + 1) % messages.length;
+            el.textContent = messages[index];
+            el.style.opacity = '1';
+        }, 300);
+    }, stepMs);
+}
+
+function stopAudioGenStatusCycle() {
+    clearInterval(audioGenStatusInterval);
+    audioGenStatusInterval = null;
+    const el = document.getElementById('audio-gen-status-text');
+    if (el) el.classList.add('hidden');
 }
 
 // ========================================
