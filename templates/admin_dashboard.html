@@ -72,6 +72,7 @@
             padding: 14px 12px 6px;
         }
         .nav-group-label:first-child { padding-top: 4px; }
+        .hidden { display: none !important; }
         .nav-item {
             display: flex;
             align-items: center;
@@ -404,7 +405,10 @@
                 <a href="#" class="nav-item" data-view="features"><span class="nav-ic">🎯</span> Feature Usage</a>
                 <a href="#" class="nav-item" data-view="subjects"><span class="nav-ic">📚</span> Top Subjects</a>
                 <a href="#" class="nav-item" data-view="notes"><span class="nav-ic">📖</span> Library</a>
-                <a href="#" class="nav-item" data-view="reports"><span class="nav-ic">🚩</span> Reports</a>
+                <a href="#" class="nav-item" data-view="reports" style="position: relative;">
+                    <span class="nav-ic">🚩</span> Reports
+                    <span id="reports-badge-dot" class="hidden" style="position: absolute; top: 6px; left: 20px; width: 9px; height: 9px; border-radius: 50%; background: #fb923c; box-shadow: 0 0 0 2px var(--surface-1, #16161f);"></span>
+                </a>
 
                 <div class="nav-group-label">Insights</div>
                 <a href="#" class="nav-item" data-view="insights"><span class="nav-ic">💡</span> Insights</a>
@@ -993,6 +997,7 @@
             loadTopSubjects();
             loadNotes();
             loadAnnouncements();
+            loadReports();
         }
 
         setInterval(pollDashboard, 20000); // was 8s — reduced to lower Turso rows-read usage (this page calls 8 endpoints per poll)
@@ -1272,11 +1277,20 @@
         }
 
         // ===== NEW: Reports =====
+        let expandedReportIds = new Set(); // remembers which reports are expanded, across auto-refresh re-renders
+
         async function loadReports() {
             try {
                 const res = await fetch('/admin/reports');
                 const data = await res.json();
                 if (data.status !== 'success') return;
+
+                // NEW: orange dot on the "Reports" nav item whenever
+                // there's at least one open report — visible even while
+                // the admin is on a different tab, no manual refresh needed.
+                const badge = document.getElementById('reports-badge-dot');
+                if (badge) badge.classList.toggle('hidden', data.reports.length === 0);
+
                 const wrap = document.getElementById('reports-wrap');
                 if (!data.reports.length) {
                     wrap.innerHTML = '<div class="empty-state">No open reports. 🎉</div>';
@@ -1284,11 +1298,15 @@
                 }
                 let html = '';
                 data.reports.forEach(r => {
+                    const fullText = r.note_text || '';
+                    const isExpanded = expandedReportIds.has(r.id);
+                    const preview = fullText.length > 160 ? fullText.slice(0, 160) + '…' : fullText;
                     html += `<div class="note-item">
                         <div class="note-item-info">
                             <div class="note-item-title">🚩 ${escapeHtml(r.title || '(deleted note)')}</div>
                             <div class="note-item-subject">${escapeHtml(r.subject || '')} · Reason: ${escapeHtml(r.reason || '(none given)')}</div>
-                            <div class="note-item-snippet">${escapeHtml((r.note_text || '').slice(0, 160))}</div>
+                            <div class="note-item-snippet">${escapeHtml(isExpanded ? fullText : preview)}</div>
+                            ${fullText.length > 160 ? `<button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${isExpanded ? '▲ Show less' : '▼ View full note'}</button>` : ''}
                             <div class="note-item-date">Reported: ${r.created_at}</div>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1303,9 +1321,19 @@
             }
         }
 
+        function toggleReportView(reportId) {
+            if (expandedReportIds.has(reportId)) {
+                expandedReportIds.delete(reportId);
+            } else {
+                expandedReportIds.add(reportId);
+            }
+            loadReports();
+        }
+
         async function dismissReport(id) {
             try {
                 await fetch(`/admin/reports/${id}/dismiss`, { method: 'POST' });
+                expandedReportIds.delete(id);
                 loadReports();
             } catch (e) {
                 alert('Failed to dismiss report.');
