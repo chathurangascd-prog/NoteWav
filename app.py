@@ -867,13 +867,13 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
 
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
-    # Director's notes: fixed Style (Newscaster) + Pace (Natural), per
+    # Director's notes: fixed Style (Empathetic) + Pace (Natural), per
     # Gemini TTS's own prompting convention. Docs recommend keeping
     # these instructions in English even when the transcript itself is
     # in another language (Sinhala/Tamil), for best results.
     directed_prefix = (
-        "Style: Newscaster — clear, professional, and authoritative delivery, "
-        "as if reading a news broadcast.\n"
+        "Style: Empathetic — warm, caring, and encouraging delivery, "
+        "like a supportive teacher patiently explaining something to a student.\n"
         "Pace: Natural, comfortable speaking speed — not rushed, not slow.\n\n"
     )
 
