@@ -863,7 +863,15 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None):
         return AudioSegment(data=audio_data, sample_width=2, frame_rate=24000, channels=1)
 
     if len(paragraphs) > 1:
-        with ThreadPoolExecutor(max_workers=min(len(paragraphs), 4)) as executor:
+        # FIX (increased 503 "high demand" errors app-wide): this was
+        # max_workers=4 — a burst of 4 SIMULTANEOUS Gemini calls all
+        # hitting the same API project at once likely contributed to
+        # tripping Google's project-level rate/capacity limits, which
+        # then surfaced as "high demand" 503 errors even on totally
+        # unrelated features (like script generation) sharing the same
+        # API key. Reduced to 2 concurrent calls — still faster than
+        # one-at-a-time, but a much gentler burst on the shared quota.
+        with ThreadPoolExecutor(max_workers=min(len(paragraphs), 2)) as executor:
             paragraph_segments = list(executor.map(_generate_paragraph_audio, paragraphs))
     else:
         paragraph_segments = [_generate_paragraph_audio(paragraphs[0])]
@@ -1293,7 +1301,7 @@ def call_gemini_quiz(content_text, max_retries=5):
     return questions
 
 
-def call_gemini_structured(note_text, output_language='si', max_retries=6):
+def call_gemini_structured(note_text, output_language='si', max_retries=8):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -1337,11 +1345,11 @@ def call_gemini_structured(note_text, output_language='si', max_retries=6):
                 # FIX: was only 1s/2s (≈3s total across all retries) —
                 # far too short for a genuine "Google servers under
                 # high demand" spike (503 UNAVAILABLE) to actually
-                # clear. Now backs off 2s, 4s, 6s, 8s, 10s — a much
-                # more realistic window for a transient overload to
-                # resolve, while still bounded well under Render's
-                # gunicorn worker timeout.
-                wait_seconds = min(attempt * 2, 10)
+                # clear. Now backs off 2s, 4s, 6s, 8s, 10s, 12s (8
+                # attempts total) — a much more realistic window for a
+                # transient overload to resolve, while still bounded
+                # well under Render's gunicorn worker timeout.
+                wait_seconds = min(attempt * 2, 12)
                 print(f"⚠️ Gemini transient error (attempt {attempt}/{max_retries}), retrying in {wait_seconds}s: {e}")
                 time.sleep(wait_seconds)
                 continue
