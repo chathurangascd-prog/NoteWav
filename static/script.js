@@ -376,6 +376,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const cameraInput = document.getElementById('camera-input');
     const ocrStatus = document.getElementById('ocr-status');
 
+    // ===== State =====
+    let audio = null;
+    let currentAudioEngine = 'gtts'; // tracks which engine generated the current `audio`, so the speed slider knows whether to apply
+    let isPlaying = false;
+    let isOCRRunning = false;
+    let highlightUnits = [];
+    let playbackSpeed = 1;
+    let playbackVolume = 1;
+
     // ===== Playback Speed / Volume Controls =====
     const speedButtons = document.querySelectorAll('.speed-btn');
     const volumeSlider = document.getElementById('volume-slider');
@@ -418,15 +427,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (audio) audio.volume = playbackVolume;
         });
     }
-
-    // ===== State =====
-    let audio = null;
-    let currentAudioEngine = 'gtts'; // tracks which engine generated the current `audio`, so the speed slider knows whether to apply
-    let isPlaying = false;
-    let isOCRRunning = false;
-    let highlightUnits = [];
-    let playbackSpeed = 1;
-    let playbackVolume = 1;
 
     const SPEED_BOOST_MULTIPLIER = 1.15;
     function getEffectivePlaybackRate() {

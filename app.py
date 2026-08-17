@@ -1895,6 +1895,7 @@ def user_update_profile():
     except Exception as e:
         print(f"⚠️ /user/update-profile failed: {e}")
         return jsonify({'status': 'error'}), 200
+@app.route('/user/sync', methods=['POST'])
 def user_sync():
     """Lets the client push updated coins/streak values back up to the
     signed-in user's account record, so they stay in sync everywhere.
