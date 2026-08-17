@@ -1278,7 +1278,7 @@ def call_gemini_quiz(content_text, max_retries=5):
     for attempt in range(1, max_retries + 1):
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',  # FIX: pinned to a stable, established GA model instead of the '-latest' alias — 'latest' currently points to the newest Gemini 3.6 Flash release, which (being brand new) has less-provisioned capacity and hits 'high demand' 503 errors far more often than the mature, heavily-scaled 2.5 Flash.
+                model='gemini-3.6-flash',  # FIX: pinned to this SPECIFIC stable GA model ID (not the '-latest' alias, which moves automatically to whatever's newest — currently gemini-3.7-flash, released just days ago with barely any provisioned capacity yet). gemini-3.6-flash has been GA for about a month now, giving it time to scale, while still getting the Gemini 3 family's better accuracy/lower hallucination rate over 2.5 Flash.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=QUIZ_SYSTEM_INSTRUCTION,
@@ -1341,7 +1341,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
     for attempt in range(1, max_retries + 1):
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',  # FIX: pinned to a stable, established GA model instead of the '-latest' alias — 'latest' currently points to the newest Gemini 3.6 Flash release, which (being brand new) has less-provisioned capacity and hits 'high demand' 503 errors far more often than the mature, heavily-scaled 2.5 Flash.
+                model='gemini-3.6-flash',  # FIX: pinned to this SPECIFIC stable GA model ID (not the '-latest' alias, which moves automatically to whatever's newest — currently gemini-3.7-flash, released just days ago with barely any provisioned capacity yet). gemini-3.6-flash has been GA for about a month now, giving it time to scale, while still getting the Gemini 3 family's better accuracy/lower hallucination rate over 2.5 Flash.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
