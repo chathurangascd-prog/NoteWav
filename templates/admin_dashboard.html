@@ -487,6 +487,11 @@
                 </div>
                 <div class="announce-row">
                     <textarea id="announce-input" placeholder="Message එක මෙතන ලියන්න..." maxlength="500"></textarea>
+                    <label style="font-size:0.76rem; color:var(--text-muted); display:flex; align-items:center; gap:8px; margin:6px 0;">
+                        <input type="checkbox" id="announce-schedule-toggle" style="width:15px; height:15px;">
+                        📅 Schedule for later (leave unchecked to send now)
+                    </label>
+                    <input type="datetime-local" id="announce-schedule-input" style="display:none; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.8rem; font-family:inherit; margin-bottom:8px;">
                     <button id="announce-send-btn">Send</button>
                 </div>
                 <p id="announce-status" class="announce-status"></p>
@@ -996,21 +1001,49 @@
         const announceInput = document.getElementById('announce-input');
         const announceBtn = document.getElementById('announce-send-btn');
         const announceStatus = document.getElementById('announce-status');
+        const announceScheduleToggle = document.getElementById('announce-schedule-toggle');
+        const announceScheduleInput = document.getElementById('announce-schedule-input');
+
+        if (announceScheduleToggle && announceScheduleInput) {
+            announceScheduleToggle.addEventListener('change', function() {
+                announceScheduleInput.style.display = this.checked ? 'block' : 'none';
+            });
+        }
 
         async function sendAnnouncement() {
             const message = announceInput.value.trim();
             if (!message) return;
+
+            // NEW: if "Schedule for later" is checked, this announcement
+            // stays hidden from students until the chosen date/time.
+            let scheduledAt = null;
+            if (announceScheduleToggle && announceScheduleToggle.checked) {
+                const localValue = announceScheduleInput.value;
+                if (!localValue) {
+                    announceStatus.textContent = '❌ Pick a date/time, or uncheck "Schedule for later".';
+                    announceStatus.style.color = '#f87171';
+                    return;
+                }
+                // datetime-local gives local time with no timezone —
+                // convert to a proper UTC ISO string so it compares
+                // correctly against the server's own UTC "now".
+                scheduledAt = new Date(localValue).toISOString();
+            }
+
             announceBtn.disabled = true;
             try {
                 const res = await fetch('/admin/announce', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message }),
+                    body: JSON.stringify({ message, scheduled_at: scheduledAt }),
                 });
                 const data = await res.json();
                 if (data.status === 'success') {
-                    announceStatus.textContent = '✅ Sent!';
+                    announceStatus.textContent = scheduledAt ? `✅ Scheduled for ${new Date(scheduledAt).toLocaleString()}!` : '✅ Sent!';
+                    announceStatus.style.color = '#4ade80';
                     announceInput.value = '';
+                    if (announceScheduleToggle) announceScheduleToggle.checked = false;
+                    if (announceScheduleInput) { announceScheduleInput.value = ''; announceScheduleInput.style.display = 'none'; }
                     loadAnnouncements();
                 } else {
                     announceStatus.textContent = '❌ ' + (data.message || 'Failed to send.');
@@ -1021,7 +1054,7 @@
                 announceStatus.style.color = '#f87171';
             }
             announceBtn.disabled = false;
-            setTimeout(() => { announceStatus.textContent = ''; }, 5000);
+            setTimeout(() => { announceStatus.textContent = ''; }, 6000);
         }
         announceBtn.addEventListener('click', sendAnnouncement);
         announceInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendAnnouncement(); });
@@ -1202,13 +1235,21 @@
                     return;
                 }
                 let html = '';
+                const nowMs = Date.now();
                 data.announcements.forEach(a => {
                     const tag = a.target_anon_id
                         ? `<span style="color:#f59e0b; font-size:0.68rem; font-weight:700;">🔒 PRIVATE → ${escapeHtml(a.target_name || ('device: ' + a.target_anon_id.slice(0, 10) + '...'))}</span>`
                         : '<span style="color:#4ade80; font-size:0.68rem; font-weight:700;">📢 BROADCAST</span>';
+                    // NEW: if scheduled_at is in the future, this
+                    // announcement hasn't actually reached anyone yet —
+                    // make that clearly visible in the history list.
+                    const isPending = a.scheduled_at && new Date(a.scheduled_at).getTime() > nowMs;
+                    const scheduleTag = isPending
+                        ? ` <span style="color:#a78bfa; font-size:0.68rem; font-weight:700;">⏳ SCHEDULED for ${new Date(a.scheduled_at).toLocaleString()}</span>`
+                        : '';
                     html += `<div class="ann-item">
                         <div>
-                            <div class="ann-item-text">${tag} ${escapeHtml(a.message)}</div>
+                            <div class="ann-item-text">${tag}${scheduleTag} ${escapeHtml(a.message)}</div>
                             <div class="ann-item-date">${a.created_at}</div>
                         </div>
                         <button class="ann-delete-btn" onclick="deleteAnnouncement(${a.id})" title="Delete">🗑️</button>

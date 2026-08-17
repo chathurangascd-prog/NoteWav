@@ -3034,7 +3034,7 @@ def admin_announcements_list():
     try:
         conn = get_db()
         rows = conn.execute(
-            "SELECT id, message, created_at, target_anon_id FROM announcements ORDER BY id DESC LIMIT 30"
+            "SELECT id, message, created_at, target_anon_id, scheduled_at FROM announcements ORDER BY id DESC LIMIT 30"
         ).fetchall()
 
         sl_offset = timedelta(hours=5, minutes=30)

@@ -695,6 +695,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="library-note-actions">
                             <button class="library-load-btn" data-id="${note.id}" aria-label="Load"><i class="fas fa-folder-open"></i></button>
+                            <button class="library-report-btn" data-id="${note.id}" aria-label="Report" title="Report inappropriate content"><i class="fas fa-flag"></i></button>
                             <button class="library-delete-btn" data-id="${note.id}" aria-label="Delete"><i class="fas fa-trash"></i></button>
                         </div>
                     </div>`;
@@ -707,6 +708,9 @@ document.addEventListener('DOMContentLoaded', function() {
         libraryModalBody.querySelectorAll('.library-load-btn').forEach(btn => {
             btn.addEventListener('click', () => loadLibraryNote(btn.dataset.id));
         });
+        libraryModalBody.querySelectorAll('.library-report-btn').forEach(btn => {
+            btn.addEventListener('click', () => reportLibraryNote(btn.dataset.id));
+        });
         libraryModalBody.querySelectorAll('.library-delete-btn').forEach(btn => {
             btn.addEventListener('click', () => deleteLibraryNote(btn.dataset.id));
         });
@@ -717,6 +721,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateCombineGenerateButton();
             });
         });
+    }
+
+    // NEW: lets a student flag a Library note as inappropriate/spam —
+    // admin reviews it in the dashboard's "Reports" section instead of
+    // the note just silently staying up with no way to raise it.
+    async function reportLibraryNote(noteId) {
+        const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+        const promptText = lang === 'en'
+            ? 'Why are you reporting this note? (optional)'
+            : 'ඇයි මේ note එක report කරන්නේ? (optional)';
+        const reason = window.prompt(promptText, '') || '';
+        try {
+            const res = await fetch(`/library/report/${noteId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: reason.slice(0, 200) }),
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                showErrorBanner(lang === 'en' ? '🚩 Reported. Thank you!' : '🚩 Report එක ලැබුණා. ස්තූතියි!');
+            } else {
+                showErrorBanner(data.message || (lang === 'en' ? 'Failed to report.' : 'Report කිරීම අසාර්ථක විය.'));
+            }
+        } catch (e) {
+            showErrorBanner(lang === 'en' ? 'Network error. Failed to report.' : 'Network error. Report කිරීම අසාර්ථක විය.');
+        }
     }
 
     function updateCombineGenerateButton() {
