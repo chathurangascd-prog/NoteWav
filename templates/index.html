@@ -368,7 +368,7 @@
             <div id="notification-popup" class="notification-popup hidden">
                 <div class="notification-popup-header">
                     <div class="notification-popup-icon"><i class="fas fa-bullhorn"></i></div>
-                    <p class="notification-popup-title">Notification</p>
+                    <p class="notification-popup-title" data-i18n="notification_title">Notification</p>
                     <button type="button" id="notification-popup-close" class="notification-popup-close" aria-label="Close">
                         <i class="fas fa-times"></i>
                     </button>
@@ -376,7 +376,7 @@
                 <div class="notification-popup-body">
                     <div id="notification-popup-list" style="max-height: 320px; overflow-y: auto;"></div>
                     <button type="button" id="notification-clear-btn" class="btn-secondary" style="width: 100%; margin-top: 12px; padding: 8px; font-size: 0.8rem;">
-                        <i class="fas fa-check-double"></i> Clear All
+                        <i class="fas fa-check-double"></i> <span data-i18n="clear_all_btn">Clear All</span>
                     </button>
                 </div>
             </div>
@@ -525,7 +525,7 @@
                 <div class="mode-selector">
                     <p class="section-title">
                         <i class="fas fa-microphone-lines"></i>
-                        <span>Voice Engine (Audio):</span>
+                        <span data-i18n="voice_engine_title">Voice Engine (Audio):</span>
                     </p>
                     <div class="mindmap-lang-toggle" id="tts-engine-toggle">
                         <button type="button" class="lang-toggle-btn active" data-ttsengine="gtts" id="tts-engine-gtts-btn">🤖 Standard</button>
@@ -533,16 +533,16 @@
                     </div>
                     <p id="gemini-trial-status" class="hidden" style="font-size: 0.76rem; color: var(--text-secondary); margin: 8px 0 0;"></p>
                     <div id="tts-model-picker-wrap" class="hidden" style="margin-top: 10px;">
-                        <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;">⚙️ AI Model Version:</label>
+                        <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;" data-i18n="ai_model_version_label">⚙️ AI Model Version:</label>
                         <div class="mindmap-lang-toggle" id="tts-model-toggle">
                             <button type="button" class="lang-toggle-btn active" data-ttsmodel="v25" id="tts-model-v25-btn">NoteWav 2.5</button>
                             <button type="button" class="lang-toggle-btn" data-ttsmodel="v31" id="tts-model-v31-btn">NoteWav 3.1</button>
                         </div>
-                        <p id="tts-model-v25-hint" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;">💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.</p>
-                        <p id="tts-model-v31-hint" class="hidden" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;">💡 Premium quality — වේගවත්, ගොඩක් expressive/natural.</p>
+                        <p id="tts-model-v25-hint" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;" data-i18n="tts_model_v25_hint">💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.</p>
+                        <p id="tts-model-v31-hint" class="hidden" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;" data-i18n="tts_model_v31_hint">💡 Premium quality — වේගවත්, ගොඩක් expressive/natural.</p>
                     </div>
                     <div id="tts-voice-picker-wrap" class="hidden" style="margin-top: 10px;">
-                        <label for="tts-voice-select" style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;">🗣️ Voice:</label>
+                        <label for="tts-voice-select" style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;" data-i18n="voice_label">🗣️ Voice:</label>
                         <select id="tts-voice-select" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 0.85rem; font-family: inherit;">
                             <option value="Leda">👩 Female</option>
                             <option value="Sadaltager">👨 Male</option>

@@ -4,6 +4,19 @@
 // reasonable max, and let the textarea scroll INTERNALLY (its own
 // scrollbar) once content exceeds that, instead of the whole page
 // growing without limit.
+// FIX: several newer features (Voice Engine hints, level popup, coin
+// gating messages, notification empty-state) had hardcoded Sinhala
+// text with no language check at all, so switching the app language
+// to English didn't affect them. This helper gives every part of the
+// file a single, consistent way to read the current app language.
+function getAppLanguage() {
+    try {
+        return localStorage.getItem('notewav_app_language') || 'si';
+    } catch (e) {
+        return 'si';
+    }
+}
+
 function autoResizeTextarea(el, maxHeightPx) {
     maxHeightPx = maxHeightPx || 320;
     el.style.height = 'auto';
@@ -270,7 +283,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const freeLeft = (typeof getGeminiFreeTrialsLeft === 'function') ? getGeminiFreeTrialsLeft() : 0;
         if (freeLeft > 0) {
             statusEl.classList.remove('hidden');
-            statusEl.textContent = `🎁 Free trials ඉතුරුයි: ${freeLeft}/${GEMINI_FREE_TRIALS_TOTAL}`;
+            const lang = (typeof getAppLanguage === 'function') ? getAppLanguage() : 'si';
+            statusEl.textContent = lang === 'en'
+                ? `🎁 Free trials left: ${freeLeft}/${GEMINI_FREE_TRIALS_TOTAL}`
+                : `🎁 Free trials ඉතුරුයි: ${freeLeft}/${GEMINI_FREE_TRIALS_TOTAL}`;
         } else {
             // NEW: never show the coin price/balance — the exact
             // pricing tiers are an internal business detail, not
@@ -2092,7 +2108,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (freeUsesLeft <= 0) {
                 estimatedCoinCost = estimateGeminiCoinCost(text.length, ttsModelVersion);
                 if (getCoinsBalance() < estimatedCoinCost) {
-                    showErrorBanner('Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ. Coins මිලදී ගන්න පුළුවන් වෙන feature එකක් ඉක්මනින් එනවා!');
+                    showErrorBanner(getAppLanguage() === 'en'
+                        ? 'Not enough coins for Natural (AI) Voice. A way to buy coins is coming soon!'
+                        : 'Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ. Coins මිලදී ගන්න පුළුවන් වෙන feature එකක් ඉක්මනින් එනවා!');
                     return;
                 }
             }
@@ -2793,6 +2811,13 @@ const NOTEWAV_TRANSLATIONS = {
     share_whatsapp_btn: { si: 'WhatsApp (Text විතරයි)', en: 'WhatsApp (Text only)' },
     share_telegram_btn: { si: 'Telegram (Text විතරයි)', en: 'Telegram (Text only)' },
     lyrics_placeholder: { si: 'Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...', en: 'Text will highlight here as the Audio plays...' },
+    voice_engine_title: { si: 'Voice Engine (Audio):', en: 'Voice Engine (Audio):' },
+    ai_model_version_label: { si: '⚙️ AI Model Version:', en: '⚙️ AI Model Version:' },
+    tts_model_v25_hint: { si: '💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.', en: '💡 Standard quality — dependable, processes easily.' },
+    tts_model_v31_hint: { si: '💡 Premium quality — වේගවත්, ගොඩක් expressive/natural.', en: '💡 Premium quality — faster, much more expressive/natural.' },
+    voice_label: { si: '🗣️ Voice:', en: '🗣️ Voice:' },
+    notification_title: { si: 'Notification', en: 'Notification' },
+    clear_all_btn: { si: 'Clear All', en: 'Clear All' },
 };
 
 // ========================================
@@ -2914,9 +2939,14 @@ function renderLevelBadge() {
     const popupNextEl = document.getElementById('level-popup-next');
     if (popupCurrentEl) popupCurrentEl.textContent = `${info.icon} Level ${info.level}: ${info.title}`;
     if (popupNextEl) {
-        popupNextEl.textContent = info.next
-            ? `📈 තව notes ${info.next.min - count}ක් process කළොත් "${info.next.icon} ${info.next.title}" (Level ${info.next.level}) වෙනවා! (${count}/${info.next.min})`
-            : `🎉 ඔබ ඉහළම level එකට ළඟා වුනා!`;
+        const lang = getAppLanguage();
+        if (info.next) {
+            popupNextEl.textContent = lang === 'en'
+                ? `📈 Process ${info.next.min - count} more notes to reach "${info.next.icon} ${info.next.title}" (Level ${info.next.level})! (${count}/${info.next.min})`
+                : `📈 තව notes ${info.next.min - count}ක් process කළොත් "${info.next.icon} ${info.next.title}" (Level ${info.next.level}) වෙනවා! (${count}/${info.next.min})`;
+        } else {
+            popupNextEl.textContent = lang === 'en' ? `🎉 You've reached the highest level!` : `🎉 ඔබ ඉහළම level එකට ළඟා වුනා!`;
+        }
     }
 }
 
@@ -2950,7 +2980,11 @@ function showLevelUpCelebration(newLevelInfo) {
 
     if (iconEl) iconEl.textContent = newLevelInfo.icon;
     if (headingEl) headingEl.textContent = `Level ${newLevelInfo.level}: ${newLevelInfo.title}!`;
-    if (subtextEl) subtextEl.textContent = `🎉 Congrats! ඔබ notes process කරලා level up වුනා — 🪙 ${LEVEL_UP_COINS_REWARD} coins reward එකක්! ඉගෙනීම දිගටම කරගෙන යන්න!`;
+    if (subtextEl) {
+        subtextEl.textContent = getAppLanguage() === 'en'
+            ? `🎉 Congrats! You leveled up by processing notes — 🪙 ${LEVEL_UP_COINS_REWARD} coins reward! Keep up the learning!`
+            : `🎉 Congrats! ඔබ notes process කරලා level up වුනා — 🪙 ${LEVEL_UP_COINS_REWARD} coins reward එකක්! ඉගෙනීම දිගටම කරගෙන යන්න!`;
+    }
     overlay.classList.add('show');
 }
 
@@ -3980,7 +4014,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderPopupList() {
         if (!announcements.length || isCleared()) {
-            popupList.innerHTML = '<p class="notification-popup-message">නව notifications නෑ.</p>';
+            const lang = getAppLanguage();
+            popupList.innerHTML = `<p class="notification-popup-message">${lang === 'en' ? 'No new notifications.' : 'නව notifications නෑ.'}</p>`;
             if (clearBtn) clearBtn.classList.add('hidden');
             return;
         }
