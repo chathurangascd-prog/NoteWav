@@ -2774,6 +2774,24 @@ def admin_user_timeline(anon_id):
             "SELECT action, user_name, created_at FROM usage_events WHERE anon_id = ? ORDER BY created_at DESC",
             (anon_id,)
         ).fetchall()
+
+        # NEW: also report whether this device (or its associated
+        # account email, if signed in) is CURRENTLY banned — the admin
+        # dashboard needs this to show "Ban" vs "Unban" correctly when
+        # the timeline modal is opened, instead of always assuming
+        # "not banned".
+        email_row = conn.execute(
+            "SELECT user_email FROM usage_events WHERE anon_id = ? AND user_email IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+            (anon_id,)
+        ).fetchone()
+        latest_email = email_row['user_email'] if email_row else None
+
+        is_banned_row = conn.execute(
+            "SELECT identity FROM banned_identities WHERE identity = ? OR identity = ?",
+            (anon_id, latest_email or anon_id)
+        ).fetchone()
+        is_banned = is_banned_row is not None
+
         conn.close()
 
         sl_offset = timedelta(hours=5, minutes=30)
@@ -2786,7 +2804,7 @@ def admin_user_timeline(anon_id):
             except Exception:
                 pass
             events.append(e)
-        return jsonify({'status': 'success', 'events': events})
+        return jsonify({'status': 'success', 'events': events, 'is_banned': is_banned})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

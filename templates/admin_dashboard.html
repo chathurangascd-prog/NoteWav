@@ -814,7 +814,11 @@
             const banStatusEl = document.getElementById('ban-status');
             const banBtnEl = document.getElementById('ban-toggle-btn');
             if (banStatusEl) banStatusEl.textContent = '';
-            if (banBtnEl) banBtnEl.textContent = '🚫 Ban this device';
+            // FIX: this used to always reset to "Ban this device" no
+            // matter what — even for an already-banned user. It now
+            // shows a neutral placeholder until the actual ban status
+            // arrives from the /admin/user-timeline fetch below.
+            if (banBtnEl) banBtnEl.textContent = '⏳ Checking ban status...';
             if (addCoinsStatus) addCoinsStatus.textContent = '';
             if (currentTimelineEmail) {
                 if (addCoinsInput) addCoinsInput.disabled = false;
@@ -837,6 +841,15 @@
             try {
                 const res = await fetch('/admin/user-timeline/' + encodeURIComponent(anonId));
                 const data = await res.json();
+
+                // FIX: this must run BEFORE the empty-events early
+                // return below — otherwise a user with zero timeline
+                // events would never get their real ban status shown.
+                const banBtnEl = document.getElementById('ban-toggle-btn');
+                if (banBtnEl && data.status === 'success') {
+                    banBtnEl.textContent = data.is_banned ? '✅ Unban this device' : '🚫 Ban this device';
+                }
+
                 if (data.status !== 'success' || !data.events.length) {
                     document.getElementById('timeline-modal-body').innerHTML = 'No events found.';
                     return;
