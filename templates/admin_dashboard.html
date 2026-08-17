@@ -704,9 +704,6 @@
                 document.getElementById('content-header-title').textContent = titles[0];
                 document.getElementById('content-header-sub').textContent = titles[1];
             }
-            if (viewName === 'reports' && typeof markReportsSeen === 'function') {
-                markReportsSeen();
-            }
             window.scrollTo({ top: 0, behavior: 'instant' });
             closeMobileSidebar();
         }
@@ -1296,28 +1293,42 @@
 
         // ===== NEW: Reports =====
         let expandedReportIds = new Set(); // remembers which reports are expanded, across auto-refresh re-renders
-
-        // NEW: mirrors the notification bell's "seen" pattern — the
-        // dot shows for NEW reports (higher id than the admin has
-        // already looked at), and clears the moment the admin opens
-        // the Reports tab, independent of whether the report itself
-        // has been dismissed yet.
         let lastReportsData = [];
-        function getLastSeenReportId() {
+
+        // FIX: this used to be a single "seen up to this ID" threshold
+        // that cleared for ALL reports just from visiting the Reports
+        // tab — even ones the admin never actually opened. Now tracks
+        // a SET of individually-viewed report IDs — a report only
+        // stops being highlighted once the admin has actually opened
+        // ITS content (via "View full note", or automatically for
+        // short reports whose full text is already visible with no
+        // click needed).
+        function getViewedReportIds() {
             try {
-                return parseInt(localStorage.getItem('notewav_admin_seen_report_id') || '0', 10);
+                return new Set(JSON.parse(localStorage.getItem('notewav_admin_viewed_report_ids') || '[]'));
             } catch (e) {
-                return 0;
+                return new Set();
             }
         }
-        function markReportsSeen() {
-            if (!lastReportsData.length) return;
-            const highestId = Math.max(...lastReportsData.map(r => r.id));
+        function saveViewedReportIds(idSet) {
             try {
-                localStorage.setItem('notewav_admin_seen_report_id', String(highestId));
+                localStorage.setItem('notewav_admin_viewed_report_ids', JSON.stringify(Array.from(idSet)));
             } catch (e) { /* ignore */ }
+        }
+        function markReportViewed(reportId) {
+            const viewed = getViewedReportIds();
+            viewed.add(reportId);
+            saveViewedReportIds(viewed);
+            updateReportsBadge();
+            // Re-render so THIS report's highlight clears immediately,
+            // without waiting for the next poll cycle.
+            renderReportsList();
+        }
+        function updateReportsBadge() {
+            const viewed = getViewedReportIds();
+            const hasUnviewed = lastReportsData.some(r => !viewed.has(r.id));
             const badge = document.getElementById('reports-badge-dot');
-            if (badge) badge.classList.add('hidden');
+            if (badge) badge.classList.toggle('hidden', !hasUnviewed);
         }
 
         async function loadReports() {
@@ -1325,61 +1336,75 @@
                 const res = await fetch('/admin/reports');
                 const data = await res.json();
                 if (data.status !== 'success') return;
-
                 lastReportsData = data.reports;
 
-                // FIX: dot used to stay lit for ANY open report, only
-                // clearing when the report was dismissed — now it
-                // behaves like the notification bell: shows only for
-                // reports NEWER than the last one the admin actually
-                // viewed, and clears the moment they open the Reports
-                // tab (see markReportsSeen), regardless of dismiss state.
-                const lastSeenId = getLastSeenReportId();
-                const hasUnseen = data.reports.some(r => r.id > lastSeenId);
-                const badge = document.getElementById('reports-badge-dot');
-                if (badge) badge.classList.toggle('hidden', !hasUnseen);
-
-                const wrap = document.getElementById('reports-wrap');
-                if (!data.reports.length) {
-                    wrap.innerHTML = '<div class="empty-state">No open reports. 🎉</div>';
-                    return;
-                }
-                let html = '';
-                data.reports.forEach(r => {
-                    const fullText = r.note_text || '';
-                    const isExpanded = expandedReportIds.has(r.id);
-                    const preview = fullText.length > 160 ? fullText.slice(0, 160) + '…' : fullText;
-                    // NEW: highlight reports the admin hasn't looked at
-                    // yet (based on the SAME lastSeenId snapshot used
-                    // for the badge dot above) — this naturally goes
-                    // back to normal starting the NEXT time this list
-                    // reloads (poll cycle or revisit), since
-                    // markReportsSeen() will have updated the seen-id
-                    // by then. It intentionally does NOT vanish on this
-                    // exact render, so the admin actually gets to see
-                    // which ones are new before they fade to normal.
-                    const isNew = r.id > lastSeenId;
-                    const itemClass = isNew ? 'note-item report-item-new' : 'note-item';
-                    const newTag = isNew
-                        ? '<span style="background:#fb923c; color:#1a1208; font-size:0.62rem; font-weight:800; padding:2px 7px; border-radius:20px; margin-left:8px; vertical-align:middle;">NEW</span>'
-                        : '';
-                    html += `<div class="${itemClass}">
-                        <div class="note-item-info">
-                            <div class="note-item-title">🚩 ${escapeHtml(r.title || '(deleted note)')}${newTag}</div>
-                            <div class="note-item-subject">${escapeHtml(r.subject || '')} · Reason: ${escapeHtml(r.reason || '(none given)')}</div>
-                            <div class="note-item-snippet">${escapeHtml(isExpanded ? fullText : preview)}</div>
-                            ${fullText.length > 160 ? `<button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${isExpanded ? '▲ Show less' : '▼ View full note'}</button>` : ''}
-                            <div class="note-item-date">Reported: ${r.created_at}</div>
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:6px;">
-                            <button class="note-delete-btn" onclick="deleteNote(${r.note_id}); dismissReport(${r.id});" title="Delete the note">🗑️</button>
-                            <button class="note-delete-btn" onclick="dismissReport(${r.id})" title="Dismiss (keep the note)">✅</button>
-                        </div>
-                    </div>`;
+                // Housekeeping: drop viewed-IDs for reports that are no
+                // longer in the active list (dismissed/note deleted) —
+                // keeps localStorage from growing forever.
+                const activeIds = new Set(lastReportsData.map(r => r.id));
+                const viewed = getViewedReportIds();
+                let pruned = false;
+                viewed.forEach(id => {
+                    if (!activeIds.has(id)) { viewed.delete(id); pruned = true; }
                 });
-                wrap.innerHTML = html;
+                if (pruned) saveViewedReportIds(viewed);
+
+                renderReportsList();
             } catch (e) {
                 document.getElementById('reports-wrap').innerHTML = '<div class="empty-state">Failed to load reports.</div>';
+            }
+        }
+
+        function renderReportsList() {
+            const viewed = getViewedReportIds();
+            updateReportsBadge();
+
+            const wrap = document.getElementById('reports-wrap');
+            if (!lastReportsData.length) {
+                wrap.innerHTML = '<div class="empty-state">No open reports. 🎉</div>';
+                return;
+            }
+            let html = '';
+            let viewedChanged = false;
+            lastReportsData.forEach(r => {
+                const fullText = r.note_text || '';
+                const isExpanded = expandedReportIds.has(r.id);
+                const hasMore = fullText.length > 160;
+                const preview = hasMore ? fullText.slice(0, 160) + '…' : fullText;
+
+                // FIX: a report only clears its highlight once THIS
+                // specific report has been viewed — not just from
+                // visiting the Reports tab. Short reports with no
+                // "View full note" button (their whole content is
+                // already visible right here) count as viewed
+                // automatically, since there's nothing further to click.
+                if (!hasMore && !viewed.has(r.id)) {
+                    viewed.add(r.id);
+                    viewedChanged = true;
+                }
+                const isNew = !viewed.has(r.id);
+                const itemClass = isNew ? 'note-item report-item-new' : 'note-item';
+                const newTag = isNew
+                    ? '<span style="background:#fb923c; color:#1a1208; font-size:0.62rem; font-weight:800; padding:2px 7px; border-radius:20px; margin-left:8px; vertical-align:middle;">NEW</span>'
+                    : '';
+                html += `<div class="${itemClass}">
+                    <div class="note-item-info">
+                        <div class="note-item-title">🚩 ${escapeHtml(r.title || '(deleted note)')}${newTag}</div>
+                        <div class="note-item-subject">${escapeHtml(r.subject || '')} · Reason: ${escapeHtml(r.reason || '(none given)')}</div>
+                        <div class="note-item-snippet">${escapeHtml(isExpanded ? fullText : preview)}</div>
+                        ${hasMore ? `<button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${isExpanded ? '▲ Show less' : '▼ View full note'}</button>` : ''}
+                        <div class="note-item-date">Reported: ${r.created_at}</div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        <button class="note-delete-btn" onclick="deleteNote(${r.note_id}); dismissReport(${r.id});" title="Delete the note">🗑️</button>
+                        <button class="note-delete-btn" onclick="dismissReport(${r.id})" title="Dismiss (keep the note)">✅</button>
+                    </div>
+                </div>`;
+            });
+            wrap.innerHTML = html;
+            if (viewedChanged) {
+                saveViewedReportIds(viewed);
+                updateReportsBadge();
             }
         }
 
@@ -1388,8 +1413,12 @@
                 expandedReportIds.delete(reportId);
             } else {
                 expandedReportIds.add(reportId);
+                // Expanding = actually reading the full content — mark
+                // it viewed so its highlight clears from now on.
+                markReportViewed(reportId);
+                return; // markReportViewed already re-renders
             }
-            loadReports();
+            renderReportsList();
         }
 
         async function dismissReport(id) {
