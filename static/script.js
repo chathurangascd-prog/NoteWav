@@ -567,8 +567,22 @@ document.addEventListener('DOMContentLoaded', function() {
             grouped[subject].push(note);
         });
 
+        // FIX: subjects were sorted alphabetically (A-Z), which meant a
+        // note just saved under a subject starting with a later letter
+        // (e.g. "Zoology") wouldn't appear "on top" even though it was
+        // the most recent save — the notes ARRAY itself is already
+        // correctly ordered newest-first by the backend, so subject
+        // GROUPS are now ordered by their own most-recent note's
+        // timestamp instead, keeping the just-saved note's group at
+        // the very top regardless of its subject name.
+        const sortedSubjects = Object.keys(grouped).sort((a, b) => {
+            const aLatest = new Date(grouped[a][0].created_at).getTime();
+            const bLatest = new Date(grouped[b][0].created_at).getTime();
+            return bLatest - aLatest;
+        });
+
         let html = '';
-        Object.keys(grouped).sort().forEach(subject => {
+        sortedSubjects.forEach(subject => {
             html += `<div class="library-subject-group">`;
             html += `<div class="library-subject-heading">${escapeHtml(subject)} (${grouped[subject].length})</div>`;
             grouped[subject].forEach(note => {
