@@ -885,6 +885,16 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         f"{text}"
     )
 
+    # FIX (worker SIGKILL crash): a Gemini TTS call can occasionally
+    # hang waiting on a network response that never arrives. Without an
+    # explicit timeout here, that hang runs past gunicorn's own 120s
+    # worker timeout, at which point gunicorn forcibly SIGKILLs the
+    # entire worker process — the client gets an empty/broken 500
+    # response with no useful error message (this is what caused the
+    # 'JSON.parse SyntaxError' bug on the frontend). 90s here is safely
+    # under that 120s limit, so if Gemini stalls, OUR code raises a
+    # clean, catchable timeout exception well before gunicorn has to
+    # intervene.
     response = client.models.generate_content(
         model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
         contents=directed_prompt,
@@ -895,6 +905,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
                 )
             ),
+            http_options=types.HttpOptions(timeout=90_000),  # milliseconds
         )
     )
 
