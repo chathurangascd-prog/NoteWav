@@ -4024,6 +4024,11 @@ document.addEventListener('DOMContentLoaded', function() {
     bellBtn.addEventListener('click', function() {
         renderPopupList();
         popup.classList.toggle('hidden');
+        // FIX: opening the popup should also clear the red badge dot —
+        // a recent rewrite accidentally only cleared it via the
+        // separate "Clear All" button, so the dot stayed red even
+        // after the person had already read the notifications.
+        markAllSeen();
     });
 
     if (clearBtn) {
