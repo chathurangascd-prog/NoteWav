@@ -789,14 +789,50 @@ GEMINI_TTS_VOICES = {
 
 # Simplified to just two curated choices — a clear Male and Female
 # newscaster-style voice, instead of overwhelming students with all 30
-# of Gemini's built-in options.
+# of Gemini's built-in options. Voice names are identical across both
+# model versions below, so no extra mapping needed there.
 GEMINI_TTS_VOICE_OPTIONS = {
     'Sadaltager': 'Male',
     'Leda': 'Female',
 }
 
+# Two selectable model generations — 3.1 is a real generational upgrade
+# (lower latency, more expressive/natural, richer style control) but
+# costs 2x as much per output token ($20/1M vs $10/1M), so it's offered
+# as a distinct, separately-priced choice rather than silently
+# replacing 2.5.
+GEMINI_TTS_MODEL_VERSIONS = {
+    'v25': 'gemini-2.5-flash-preview-tts',
+    'v31': 'gemini-3.1-flash-tts-preview',
+}
 
-def synthesize_gemini_tts(text, lang='si', voice_name=None):
+
+def calculate_gemini_tts_coin_cost(text_length, model_version='v25'):
+    """Tiered pricing for Gemini (Natural AI) TTS generation, based on
+    script length AND which model version was used — real Gemini API
+    cost scales with audio duration (roughly proportional to text
+    length), so a flat per-generation price wouldn't be fair: a short
+    note and a full 2000-character chapter cost very different amounts
+    to actually generate. The 3.1 model also costs exactly 2x as much
+    per output token as 2.5 ($20/1M vs $10/1M), so its coin tiers are
+    scaled up to match.
+
+    v25 tiers (character count of the SCRIPT, capped app-wide at
+    MAX_TEXT_LENGTH=2000):
+      0-500     -> 5 coins   (~50s audio, real cost ≈ $0.0125 / Rs 4)
+      501-1200  -> 12 coins  (~2min audio, real cost ≈ $0.03 / Rs 9)
+      1201+     -> 20 coins  (~3min+ audio, real cost ≈ $0.05 / Rs 15)
+    v31 tiers are exactly double, matching its 2x per-token price."""
+    if text_length <= 500:
+        base = 5
+    elif text_length <= 1200:
+        base = 12
+    else:
+        base = 20
+    return base * 2 if model_version == 'v31' else base
+
+
+def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25'):
     """Generates natural-sounding audio using Gemini's native TTS model
     — a genuinely different voice engine from gTTS (LLM-driven, not a
     classic speech synthesizer), currently in Preview.
@@ -843,7 +879,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None):
 
     def _generate_paragraph_audio(paragraph_text):
         response = client.models.generate_content(
-            model='gemini-2.5-flash-preview-tts',
+            model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
             contents=directed_prefix + paragraph_text,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
@@ -1567,27 +1603,6 @@ def ocr_image():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def calculate_gemini_tts_coin_cost(text_length):
-    """Tiered pricing for Gemini (Natural AI) TTS generation, based on
-    script length — real Gemini API cost scales with audio duration
-    (roughly proportional to text length), so a flat per-generation
-    price wouldn't be fair: a short note and a full 2000-character
-    chapter cost very different amounts to actually generate.
-
-    Tiers (character count of the SCRIPT being converted to audio,
-    capped app-wide at MAX_TEXT_LENGTH=2000):
-      0-500     -> 5 coins   (~50s audio, real cost ≈ $0.0125 / Rs 4)
-      501-1200  -> 12 coins  (~2min audio, real cost ≈ $0.03 / Rs 9)
-      1201+     -> 20 coins  (~3min+ audio, real cost ≈ $0.05 / Rs 15)
-    Coin prices include a margin over the raw Gemini API cost."""
-    if text_length <= 500:
-        return 5
-    elif text_length <= 1200:
-        return 12
-    else:
-        return 20
-
-
 @app.route('/tts', methods=['POST'])
 @rate_limited(10, 60)  # 10 audio generations per minute per device
 def text_to_speech():
@@ -1600,6 +1615,9 @@ def text_to_speech():
     if engine not in ('gtts', 'gemini'):
         engine = 'gtts'
     voice_name = (data.get('voice_name') or '').strip()
+    model_version = (data.get('model_version') or 'v25').strip()
+    if model_version not in GEMINI_TTS_MODEL_VERSIONS:
+        model_version = 'v25'
 
     if not text:
         return jsonify({'status': 'error', 'message': 'කියවීමට කිසිම text එකක් ලැබී නැත.'}), 400
@@ -1622,7 +1640,7 @@ def text_to_speech():
     if engine == 'gemini':
         try:
             print(f"🎙️ Requesting Gemini TTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
-            audio_segment, sentence_timings = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name)
+            audio_segment, sentence_timings = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name, model_version=model_version)
             unique_name = f"output_{uuid.uuid4().hex}.mp3"
             filename = os.path.join('static', unique_name)
             audio_segment.export(filename, format='mp3')
@@ -1632,7 +1650,8 @@ def text_to_speech():
                 'audio_url': '/' + filename.replace('\\', '/'),
                 'sentence_timings': sentence_timings,
                 'engine': 'gemini',
-                'coin_cost': calculate_gemini_tts_coin_cost(len(formatted_text)),
+                'coin_cost': calculate_gemini_tts_coin_cost(len(formatted_text), model_version=model_version),
+                'model_version': model_version,
             })
         except Exception as e:
             print(f"❌ Gemini TTS Error: {str(e)}")

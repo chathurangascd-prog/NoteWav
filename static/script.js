@@ -201,21 +201,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ===== TTS Voice Engine (Standard gTTS vs Natural Gemini AI) =====
     let ttsEngine = 'gtts';
+    let ttsModelVersion = 'v25';
     const ttsEngineGttsBtn = document.getElementById('tts-engine-gtts-btn');
     const ttsEngineGeminiBtn = document.getElementById('tts-engine-gemini-btn');
     const ttsVoicePickerWrap = document.getElementById('tts-voice-picker-wrap');
     const ttsVoiceSelect = document.getElementById('tts-voice-select');
+    const ttsModelPickerWrap = document.getElementById('tts-model-picker-wrap');
+    const ttsModelV25Btn = document.getElementById('tts-model-v25-btn');
+    const ttsModelV31Btn = document.getElementById('tts-model-v31-btn');
+    const ttsModelV25Hint = document.getElementById('tts-model-v25-hint');
+    const ttsModelV31Hint = document.getElementById('tts-model-v31-hint');
 
     function setTtsEngineUI(engine) {
         ttsEngine = engine;
         if (ttsEngineGttsBtn) ttsEngineGttsBtn.classList.toggle('active', engine === 'gtts');
         if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.classList.toggle('active', engine === 'gemini');
         if (ttsVoicePickerWrap) ttsVoicePickerWrap.classList.toggle('hidden', engine !== 'gemini');
+        if (ttsModelPickerWrap) ttsModelPickerWrap.classList.toggle('hidden', engine !== 'gemini');
         updateGeminiTrialStatus();
         try {
             localStorage.setItem('notewav_tts_engine', engine);
         } catch (e) {
             console.warn('Could not save TTS engine preference:', e);
+        }
+    }
+
+    function setTtsModelVersionUI(version) {
+        ttsModelVersion = version;
+        if (ttsModelV25Btn) ttsModelV25Btn.classList.toggle('active', version === 'v25');
+        if (ttsModelV31Btn) ttsModelV31Btn.classList.toggle('active', version === 'v31');
+        if (ttsModelV25Hint) ttsModelV25Hint.classList.toggle('hidden', version !== 'v25');
+        if (ttsModelV31Hint) ttsModelV31Hint.classList.toggle('hidden', version !== 'v31');
+        try {
+            localStorage.setItem('notewav_tts_model_version', version);
+        } catch (e) {
+            console.warn('Could not save TTS model version preference:', e);
         }
     }
 
@@ -247,12 +267,18 @@ document.addEventListener('DOMContentLoaded', function() {
         if (savedTtsVoice && ttsVoiceSelect) {
             ttsVoiceSelect.value = savedTtsVoice;
         }
+        const savedTtsModelVersion = localStorage.getItem('notewav_tts_model_version');
+        if (savedTtsModelVersion === 'v25' || savedTtsModelVersion === 'v31') {
+            setTtsModelVersionUI(savedTtsModelVersion);
+        }
     } catch (e) {
-        // ignore, default to 'gtts' / first voice option
+        // ignore, default to 'gtts' / first voice option / v25
     }
 
     if (ttsEngineGttsBtn) ttsEngineGttsBtn.addEventListener('click', () => setTtsEngineUI('gtts'));
     if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.addEventListener('click', () => setTtsEngineUI('gemini'));
+    if (ttsModelV25Btn) ttsModelV25Btn.addEventListener('click', () => setTtsModelVersionUI('v25'));
+    if (ttsModelV31Btn) ttsModelV31Btn.addEventListener('click', () => setTtsModelVersionUI('v31'));
     if (ttsVoiceSelect) {
         ttsVoiceSelect.addEventListener('change', function() {
             try {
@@ -2029,7 +2055,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (ttsEngine === 'gemini') {
             const freeUsesLeft = getGeminiFreeTrialsLeft();
             if (freeUsesLeft <= 0) {
-                estimatedCoinCost = estimateGeminiCoinCost(text.length);
+                estimatedCoinCost = estimateGeminiCoinCost(text.length, ttsModelVersion);
                 if (getCoinsBalance() < estimatedCoinCost) {
                     showErrorBanner('Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ. Coins මිලදී ගන්න පුළුවන් වෙන feature එකක් ඉක්මනින් එනවා!');
                     return;
@@ -2050,6 +2076,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     text,
                     engine: ttsEngine,
                     voice_name: (ttsEngine === 'gemini' && ttsVoiceSelect) ? ttsVoiceSelect.value : undefined,
+                    model_version: ttsEngine === 'gemini' ? ttsModelVersion : undefined,
                 }),
             });
 
@@ -2069,7 +2096,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (freeUsesLeft > 0) {
                         useGeminiFreeTrial();
                     } else {
-                        const coinCost = data.coin_cost || estimateGeminiCoinCost(text.length);
+                        const coinCost = data.coin_cost || estimateGeminiCoinCost(text.length, ttsModelVersion);
                         spendCoins(coinCost);
                     }
                     if (typeof updateGeminiTrialStatus === 'function') updateGeminiTrialStatus();
@@ -2746,11 +2773,14 @@ function useGeminiFreeTrial() {
 // Mirrors the backend's calculate_gemini_tts_coin_cost() tiers exactly
 // — used here only to check affordability BEFORE sending the request;
 // the actual authoritative charge always comes from the server's own
-// `coin_cost` in the /tts response.
-function estimateGeminiCoinCost(textLength) {
-    if (textLength <= 500) return 5;
-    if (textLength <= 1200) return 12;
-    return 20;
+// `coin_cost` in the /tts response. v31 costs exactly 2x v25, matching
+// its 2x per-token API price.
+function estimateGeminiCoinCost(textLength, modelVersion) {
+    let base;
+    if (textLength <= 500) base = 5;
+    else if (textLength <= 1200) base = 12;
+    else base = 20;
+    return modelVersion === 'v31' ? base * 2 : base;
 }
 
 // ========================================

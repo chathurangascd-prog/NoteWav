@@ -530,6 +530,15 @@
                         <button type="button" class="lang-toggle-btn" data-ttsengine="gemini" id="tts-engine-gemini-btn">✨ Natural (AI) — Beta</button>
                     </div>
                     <p id="gemini-trial-status" class="hidden" style="font-size: 0.76rem; color: var(--text-secondary); margin: 8px 0 0;"></p>
+                    <div id="tts-model-picker-wrap" class="hidden" style="margin-top: 10px;">
+                        <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;">⚙️ AI Model Version:</label>
+                        <div class="mindmap-lang-toggle" id="tts-model-toggle">
+                            <button type="button" class="lang-toggle-btn active" data-ttsmodel="v25" id="tts-model-v25-btn">NoteWav 2.5</button>
+                            <button type="button" class="lang-toggle-btn" data-ttsmodel="v31" id="tts-model-v31-btn">NoteWav 3.1</button>
+                        </div>
+                        <p id="tts-model-v25-hint" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;">💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.</p>
+                        <p id="tts-model-v31-hint" class="hidden" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;">💡 Premium quality — වේගවත්, ගොඩක් expressive/natural.</p>
+                    </div>
                     <div id="tts-voice-picker-wrap" class="hidden" style="margin-top: 10px;">
                         <label for="tts-voice-select" style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;">🗣️ Voice:</label>
                         <select id="tts-voice-select" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 0.85rem; font-family: inherit;">
