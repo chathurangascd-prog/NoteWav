@@ -2080,7 +2080,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 }),
             });
 
-            const data = await response.json();
+            // FIX: if the server times out or the connection drops
+            // mid-request (e.g. a slow AI generation getting cut off),
+            // the response body isn't valid JSON — it might be an
+            // empty body or an HTML error page from a gateway timeout.
+            // response.json() would throw a raw, confusing
+            // 'SyntaxError: JSON.parse...' in that case. Parsing text
+            // first and JSON.parse-ing it ourselves lets us catch that
+            // specific failure and show a clear message instead.
+            const rawBody = await response.text();
+            let data;
+            try {
+                data = JSON.parse(rawBody);
+            } catch (parseErr) {
+                console.error('TTS response was not valid JSON (likely a server timeout):', rawBody.slice(0, 200));
+                showErrorBanner('Audio generation එකට වැඩි වේලාවක් ගියා — Server එකෙන් හරියට reply එකක් ලැබුනේ නෑ. නැවත උත්සාහ කරන්න.');
+                return;
+            }
 
             if (data.status === 'success') {
                 audioSection.classList.remove('hidden');

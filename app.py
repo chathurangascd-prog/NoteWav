@@ -1339,7 +1339,7 @@ def call_gemini_quiz(content_text, max_retries=5):
     return questions
 
 
-def call_gemini_structured(note_text, output_language='si', max_retries=8):
+def call_gemini_structured(note_text, output_language='si', max_retries=5):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -1380,14 +1380,20 @@ def call_gemini_structured(note_text, output_language='si', max_retries=8):
                 )
 
             if attempt < max_retries and _is_transient_gemini_error(e):
-                # FIX: was only 1s/2s (≈3s total across all retries) —
-                # far too short for a genuine "Google servers under
-                # high demand" spike (503 UNAVAILABLE) to actually
-                # clear. Now backs off 2s, 4s, 6s, 8s, 10s, 12s (8
-                # attempts total) — a much more realistic window for a
-                # transient overload to resolve, while still bounded
-                # well under Render's gunicorn worker timeout.
-                wait_seconds = min(attempt * 2, 12)
+                # FIX: an earlier version of this bumped retries up to
+                # 8 attempts with backoff up to 12s, aiming to survive
+                # longer "high demand" spikes. But the WORST-CASE total
+                # time (sleep + actual API call time across all
+                # attempts) came dangerously close to gunicorn's 120s
+                # worker timeout — when that timeout hit mid-retry,
+                # gunicorn killed the worker and the client received a
+                # truncated/non-JSON response, causing a confusing
+                # 'JSON.parse SyntaxError' in the browser console
+                # instead of a clean error message. Pulled back to 5
+                # attempts / 8s backoff cap (worst case ≈ 2+4+6+8+8 =
+                # 28s of sleep, safely leaving well over half the 120s
+                # budget for the actual API calls themselves).
+                wait_seconds = min(attempt * 2, 8)
                 print(f"⚠️ Gemini transient error (attempt {attempt}/{max_retries}), retrying in {wait_seconds}s: {e}")
                 time.sleep(wait_seconds)
                 continue
