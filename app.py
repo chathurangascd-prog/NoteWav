@@ -895,19 +895,49 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # under that 120s limit, so if Gemini stalls, OUR code raises a
     # clean, catchable timeout exception well before gunicorn has to
     # intervene.
-    response = client.models.generate_content(
-        model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
-        contents=directed_prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+    #
+    # FIX (no retry resilience under concurrent load): this call used
+    # to have NO retry logic at all — unlike script generation
+    # (call_gemini_structured), a single transient hiccup OR a 429
+    # rate-limit (much more likely when several people generate audio
+    # around the same time, since the Gemini API quota is shared
+    # across the whole app, not per-device) failed the request
+    # immediately with zero attempt to recover. Now retries both
+    # transient overload errors AND rate-limit errors, same pattern as
+    # script generation.
+    max_tts_retries = 4
+    response = None
+    last_tts_error = None
+    for attempt in range(1, max_tts_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
+                contents=directed_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+                        )
+                    ),
+                    http_options=types.HttpOptions(timeout=90_000),  # milliseconds
                 )
-            ),
-            http_options=types.HttpOptions(timeout=90_000),  # milliseconds
-        )
-    )
+            )
+            break  # success
+        except Exception as e:
+            last_tts_error = e
+            if _is_rate_limit_error(e) and attempt < max_tts_retries:
+                print(f"⚠️ Gemini TTS rate-limited (attempt {attempt}), retrying in 5s: {e}")
+                time.sleep(5)
+                continue
+            if _is_transient_gemini_error(e) and attempt < max_tts_retries:
+                wait_seconds = min(attempt * 3, 8)
+                print(f"⚠️ Gemini TTS transient error (attempt {attempt}), retrying in {wait_seconds}s: {e}")
+                time.sleep(wait_seconds)
+                continue
+            raise
+    if response is None:
+        raise last_tts_error or GeminiGenerationError("Gemini TTS failed after retries.")
 
     if not getattr(response, 'candidates', None):
         raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
@@ -1241,6 +1271,8 @@ def _friendly_gemini_error_message(exc):
     """Turns a raw Gemini exception (often a big JSON error dump) into
     a short, clean message a student can actually understand, instead
     of showing them '503 UNAVAILABLE {...}' verbatim."""
+    if _is_rate_limit_error(exc):
+        return 'දැනට NoteWav AI එකේ ගොඩක් අය එකවර use කරනවා. තත්පර කිහිපයක් ඉඳලා නැවත උත්සාහ කරන්න.'
     if _is_transient_gemini_error(exc):
         return 'NoteWav AI servers දැනට busy වී ඇත (high demand). මිනිත්තුවක් විතර ඉඳලා නැවත උත්සාහ කරන්න.'
     return 'AI processing එකේදී මොකක් හරි ගැටලුවක් ආවා. නැවත උත්සාහ කරන්න.'
