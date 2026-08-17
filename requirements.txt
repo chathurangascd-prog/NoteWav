@@ -9,4 +9,3 @@ audioop-lts
 libsql-client
 sentry-sdk
 pymupdf
-pymupdf
