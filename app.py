@@ -2763,6 +2763,37 @@ def admin_announce():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/announcements/list')
+def announcements_list():
+    """Public — returns the recent LIST of announcements relevant to
+    this device (global broadcasts + any private ones targeted at this
+    anon_id), newest first, capped at 20. FIX: the older
+    /announcements/latest only ever returned the single most recent
+    message — if admin sent several announcements close together, a
+    student who hadn't checked in a while would only ever see the
+    LAST one and never know earlier ones existed. This lets the
+    notification popup show the full recent list instead."""
+    try:
+        anon_id = (request.args.get('anon_id') or '').strip()[:64]
+        conn = get_db()
+        if anon_id:
+            rows = conn.execute(
+                "SELECT id, message, created_at FROM announcements "
+                "WHERE target_anon_id IS NULL OR target_anon_id = ? "
+                "ORDER BY id DESC LIMIT 20",
+                (anon_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, message, created_at FROM announcements WHERE target_anon_id IS NULL ORDER BY id DESC LIMIT 20"
+            ).fetchall()
+        conn.close()
+        return jsonify({'status': 'success', 'announcements': [dict(row) for row in rows]})
+    except Exception as e:
+        print(f"❌ Announcements list fetch error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/announcements/latest')
 def announcements_latest():
     """Public — every visitor's browser polls this periodically to

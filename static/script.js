@@ -3897,18 +3897,31 @@ document.addEventListener('DOMContentLoaded', function() {
 // NOTIFICATION BELL (admin → users broadcast)
 // ========================================
 document.addEventListener('DOMContentLoaded', function() {
+    // FIX: this used to only ever fetch/show the SINGLE most recent
+    // announcement — if admin sent several messages close together, a
+    // student who checked in late would only ever see the LAST one
+    // and never know earlier ones existed. Now fetches the full recent
+    // list and shows all of them; "Clear All" dismisses the whole
+    // batch at once (marks the highest id seen).
     const SEEN_KEY = 'notewav_last_seen_announcement_id';
+    const CLEARED_KEY = 'notewav_notifications_cleared';
     const bellBtn = document.getElementById('notification-bell-btn');
     const badge = document.getElementById('notification-badge');
     const popup = document.getElementById('notification-popup');
-    const popupMessage = document.getElementById('notification-popup-message');
-    const popupTimeText = document.getElementById('notification-popup-time-text');
+    const popupList = document.getElementById('notification-popup-list');
     const popupClose = document.getElementById('notification-popup-close');
     const clearBtn = document.getElementById('notification-clear-btn');
-    if (!bellBtn || !badge || !popup) return;
+    if (!bellBtn || !badge || !popup || !popupList) return;
 
-    let latestAnnouncement = null;
-    let isCleared = false;
+    let announcements = [];
+
+    // Local helper — the main escapeHtml() lives in a different
+    // DOMContentLoaded closure and isn't accessible from this one.
+    function escapeNotificationHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
 
     function getSeenId() {
         try {
@@ -3918,9 +3931,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function markSeen(id) {
+    function isCleared() {
         try {
-            localStorage.setItem(SEEN_KEY, String(id));
+            return localStorage.getItem(CLEARED_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function setCleared(value) {
+        try {
+            localStorage.setItem(CLEARED_KEY, value ? '1' : '0');
+        } catch (e) { /* ignore */ }
+    }
+
+    function markAllSeen() {
+        if (!announcements.length) return;
+        const highestId = Math.max(...announcements.map(a => a.id));
+        try {
+            localStorage.setItem(SEEN_KEY, String(highestId));
         } catch (e) { /* ignore */ }
         badge.classList.add('hidden');
     }
@@ -3928,54 +3957,56 @@ document.addEventListener('DOMContentLoaded', function() {
     async function checkForAnnouncement() {
         try {
             const anonId = (typeof getOrCreateAnonId === 'function') ? getOrCreateAnonId() : '';
-            const res = await fetch('/announcements/latest?anon_id=' + encodeURIComponent(anonId));
+            const res = await fetch('/announcements/list?anon_id=' + encodeURIComponent(anonId));
             const data = await res.json();
-            // TEMP DEBUG — remove once the notification issue is
-            // confirmed fixed. Open DevTools (F12) → Console on the
-            // STUDENT device to see exactly what the server returns
-            // for this device's own anon_id.
-            console.log('[NoteWav debug] my anon_id:', anonId, '| server response:', data, '| my seen_id:', getSeenId());
-            if (data.status !== 'success' || !data.announcement) return;
-            const isNew = data.announcement.id > getSeenId();
-            if (latestAnnouncement && latestAnnouncement.id !== data.announcement.id) {
-                isCleared = false; // a genuinely new message arrived — un-clear
-            }
-            latestAnnouncement = data.announcement;
-            if (isNew) {
+            if (data.status !== 'success') return;
+            const fresh = data.announcements || [];
+
+            // A genuinely new message (higher id than anything we had
+            // before) un-clears the list, so it becomes visible again.
+            const previousMaxId = announcements.length ? Math.max(...announcements.map(a => a.id)) : 0;
+            const freshMaxId = fresh.length ? Math.max(...fresh.map(a => a.id)) : 0;
+            if (freshMaxId > previousMaxId) setCleared(false);
+
+            announcements = fresh;
+            const hasUnseen = announcements.some(a => a.id > getSeenId());
+            if (hasUnseen && !isCleared()) {
                 badge.classList.remove('hidden');
-                // Auto-popup removed per request — badge dot only now.
-                // Person clicks the bell to actually read the message.
             }
         } catch (e) {
             // silent — notifications are non-critical
         }
     }
 
-    bellBtn.addEventListener('click', function() {
-        if (!latestAnnouncement || isCleared) {
-            popupMessage.textContent = 'නව notifications නෑ.';
-            popupTimeText.textContent = '';
+    function renderPopupList() {
+        if (!announcements.length || isCleared()) {
+            popupList.innerHTML = '<p class="notification-popup-message">නව notifications නෑ.</p>';
             if (clearBtn) clearBtn.classList.add('hidden');
-            popup.classList.toggle('hidden');
             return;
         }
-        popupMessage.textContent = latestAnnouncement.message;
-        try {
-            const dt = new Date(latestAnnouncement.created_at);
-            popupTimeText.textContent = dt.toLocaleString();
-        } catch (e) {
-            popupTimeText.textContent = '';
-        }
         if (clearBtn) clearBtn.classList.remove('hidden');
+        popupList.innerHTML = announcements.map(a => {
+            let timeText = '';
+            try { timeText = new Date(a.created_at).toLocaleString(); } catch (e) { /* ignore */ }
+            return `
+                <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+                    <p class="notification-popup-message" style="margin: 0 0 4px;">${escapeNotificationHtml(a.message)}</p>
+                    <p class="notification-popup-time" style="margin: 0;"><i class="fas fa-clock"></i> ${escapeNotificationHtml(timeText)}</p>
+                </div>`;
+        }).join('');
+    }
+
+    bellBtn.addEventListener('click', function() {
+        renderPopupList();
         popup.classList.toggle('hidden');
-        markSeen(latestAnnouncement.id);
+        markAllSeen();
     });
 
     if (clearBtn) {
         clearBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            isCleared = true;
-            if (latestAnnouncement) markSeen(latestAnnouncement.id);
+            setCleared(true);
+            markAllSeen();
             popup.classList.add('hidden');
         });
     }
