@@ -1278,7 +1278,7 @@ def call_gemini_quiz(content_text, max_retries=5):
     for attempt in range(1, max_retries + 1):
         try:
             response = client.models.generate_content(
-                model='gemini-flash-latest',
+                model='gemini-2.5-flash',  # FIX: pinned to a stable, established GA model instead of the '-latest' alias — 'latest' currently points to the newest Gemini 3.6 Flash release, which (being brand new) has less-provisioned capacity and hits 'high demand' 503 errors far more often than the mature, heavily-scaled 2.5 Flash.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=QUIZ_SYSTEM_INSTRUCTION,
@@ -1341,7 +1341,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
     for attempt in range(1, max_retries + 1):
         try:
             response = client.models.generate_content(
-                model='gemini-flash-latest',
+                model='gemini-2.5-flash',  # FIX: pinned to a stable, established GA model instead of the '-latest' alias — 'latest' currently points to the newest Gemini 3.6 Flash release, which (being brand new) has less-provisioned capacity and hits 'high demand' 503 errors far more often than the mature, heavily-scaled 2.5 Flash.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
