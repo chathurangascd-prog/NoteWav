@@ -3137,13 +3137,13 @@ const DAILY_QUOTES = [
     { si: { text: 'හොඳින් පටන් ගැනීම වැඩේ අඩක් ඉවර කිරීමක්.', author: 'Aristotle' }, en: { text: 'Well begun is half done.', author: 'Aristotle' } },
     { si: { text: 'මම අසාර්ථක වුනේ නෑ — වැඩ නොකරන ක්‍රම 10,000ක් සොයාගත්තා විතරයි.', author: 'Thomas Edison' }, en: { text: "I have not failed. I've just found ways that won't work.", author: 'Thomas Edison' } },
     { si: { text: 'ඕනම ක්ෂේත්‍රයක expert කෙනෙක් වුනත්, කලින් beginner කෙනෙක්ම වුනා.', author: 'Helen Hayes' }, en: { text: 'The expert in anything was once a beginner.', author: 'Helen Hayes' } },
-    { si: { text: 'අතීතේ ජීවත් නොවී, අනාගතේ නොහීන්දී, වර්තමානේ මනස තියන්න.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'Do not dwell in the past or dream of the future — focus the mind on the present.', author: 'Lord Buddha' } },
+    { si: { text: 'අර්ථ රහිත වචන දහසකට වඩා, සාමය ගෙනෙන එක වචනයක් අගනේ.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'Better than a thousand hollow words is one word that brings peace.', author: 'Lord Buddha' } },
     { si: { text: 'ඔබ කොච්චර හෙමින් ගියත් කමක් නෑ, නවතින්නම එපා.', author: 'Confucius' }, en: { text: 'It does not matter how slowly you go, as long as you do not stop.', author: 'Confucius' } },
-    { si: { text: 'දැනුමයි බලය.', author: 'Francis Bacon' }, en: { text: 'Knowledge is power.', author: 'Francis Bacon' } },
+    { si: { text: 'ඉගෙනීම නවත්තාගත් දිනයේ ඉඳන්, ඔබ මැරෙන්නත් පටන් ගන්නවා.', author: 'Albert Einstein' }, en: { text: 'Once you stop learning, you start dying.', author: 'Albert Einstein' } },
     { si: { text: 'අලුත් ඉලක්කයක් තියාගන්න, අලුත් සිහිනයක් දකින්න — ඔබ කිසිදාක වයසක නෑ.', author: 'C.S. Lewis' }, en: { text: 'You are never too old to set another goal or dream a new dream.', author: 'C.S. Lewis' } },
     { si: { text: 'අපි හිතන දේම, අපි බවටම පත් වෙනවා.', author: 'ගෞතම බුදුන් වහන්සේ' }, en: { text: 'What we think, we become.', author: 'Lord Buddha' } },
     { si: { text: 'සැතපුම් දහසක ගමන පටන් ගන්නේ එක පියවරකින්.', author: 'Lao Tzu' }, en: { text: 'The journey of a thousand miles begins with a single step.', author: 'Lao Tzu' } },
-    { si: { text: 'තරහයි නොඉවසීමයි — නිවැරදි අවබෝධයේ සතුරන්.', author: 'Mahatma Gandhi' }, en: { text: 'Anger and intolerance are the enemies of correct understanding.', author: 'Mahatma Gandhi' } },
+    { si: { text: 'හෙට මැරෙනවා කියලා හිතලා ජීවත් වෙන්න. සදාකල් ජීවත් වෙනවා කියලා හිතලා ඉගෙන ගන්න.', author: 'Mahatma Gandhi' }, en: { text: 'Live as if you were to die tomorrow. Learn as if you were to live forever.', author: 'Mahatma Gandhi' } },
 ];
 
 function getDayOfYear(date) {
