@@ -2,7 +2,6 @@
 credentials/
 *.json
 __pycache__/
-*.pyc
 venv_new/
 venv/
 env/
@@ -11,3 +10,16 @@ static/output_*.mp3
 .DS_Store
 *.log
 .env.save
+
+# CRITICAL: never commit the Android signing keystore or its password —
+# if pushed to a public repo, anyone could impersonate/tamper with the
+# published app. Keep this folder LOCAL ONLY (back it up somewhere
+# private, e.g. a password manager or encrypted drive — NOT git).
+Signin key APK/
+*.keystore
+
+# Old/unused icon backups — no need to version-control these
+static/icons/Old/
+
+# Local test/debug scripts not meant for production
+test_turso.py
