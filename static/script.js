@@ -459,7 +459,60 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     // ERROR BANNER (Feature 2: friendly error UI)
     // ========================================
+    // FIX: error messages across the app were hardcoded in Sinhala at
+    // every call site (38 of them) — switching app language to English
+    // didn't translate these at all. Rather than editing every call
+    // site individually, showErrorBanner() itself now looks up a
+    // translation when the app language is English, covering both
+    // exact-match messages and ones with a dynamic suffix (like
+    // "...අසාර්ථක විය: " + err.message).
+    const ERROR_MESSAGE_TRANSLATIONS_EN = {
+        'කරුණාකර පාඩම් සටහනක් ඇතුළත් කරන්න.': 'Please enter your study note.',
+        'Network error. කරුණාකර නැවත උත්සාහ කරන්න.': 'Network error. Please try again.',
+        'Audio එකට හරවන්න text එකක් නැහැ. කරුණාකර පළමුව සටහන process කරන්න.': 'There is no text to convert to audio. Please process the note first.',
+        'Audio generation එකට වැඩි වේලාවක් ගියා — Server එකෙන් හරියට reply එකක් ලැබුනේ නෑ. නැවත උත්සාහ කරන්න.': 'Audio generation took too long — the server did not respond properly. Please try again.',
+        'Audio එකක් නැහැ. කරුණාකර පළමුව audio generate කරන්න.': 'There is no audio. Please generate audio first.',
+        'Download කරන්න audio එකක් නැහැ.': 'No audio to download.',
+        'Copy කරන්න මොකුත් නෑ.': 'Nothing to copy.',
+        'Combine කරන්න content එකක් හම්බුනේ නෑ.': 'No content found to combine.',
+        'Notes combine කරගැනීම අසාර්ථක විය.': 'Failed to combine notes.',
+        'Note එක load කරගැනීම අසාර්ථක විය.': 'Failed to load the note.',
+        'Delete කිරීම අසාර්ථක විය.': 'Failed to delete.',
+        'Save කරන්න note එකක් නෑ.': 'No note to save.',
+        'Network error. Save කිරීම අසාර්ථක විය.': 'Network error. Failed to save.',
+        'Share කරන්න Audio එකක් නෑ — කලින් Audio එකක් Generate කරන්න.': 'No audio to share — generate audio first.',
+        'මේ browser එකේ Audio file share කිරීම support කරන්නේ නෑ — WhatsApp/Telegram (Text) option එක try කරන්න.': "This browser doesn't support sharing audio files — try the WhatsApp/Telegram (Text) option instead.",
+        'මේ device එකේ Audio file share කිරීම support කරන්නේ නෑ.': "This device doesn't support sharing audio files.",
+        'විශාල කර බලන්න Mind Map එකක් නෑ.': 'No mind map to view.',
+        'Download කරන්න Mind Map එකක් නෑ.': 'No mind map to download.',
+        'Mind Map එක load වී නොමැත.': 'Mind map has not loaded.',
+        'PDF එක open වෙනවා — Share/Download icon එකෙන් save කරගන්න.': 'The PDF is opening — use the Share/Download icon to save it.',
+        'Quiz එකක් හදන්න content එකක් නෑ — කලින් note එකක් process කරන්න.': 'No content to create a quiz — process a note first.',
+        'Network error. Quiz එක හදාගැනීම අසාර්ථක විය.': 'Network error. Failed to create the quiz.',
+        'Microphone access ලබා දෙන්න ඕන Voice Input use කරන්න.': 'Please allow microphone access to use Voice Input.',
+        'Export කිරීම අසාර්ථක විය.': 'Failed to export.',
+        'Import file එකේ notes හමු නොවීය.': 'No notes found in the import file.',
+    };
+    const ERROR_MESSAGE_PREFIX_TRANSLATIONS_EN = [
+        ['Audio share කරගැනීම අසාර්ථක විය: ', 'Failed to share audio: '],
+        ['Mind map render කරගැනීම අසාර්ථක විය: ', 'Failed to render the mind map: '],
+        ['PDF share කරගැනීම අසාර්ථක විය: ', 'Failed to share PDF: '],
+        ['PDF හදන්න බැරි උනා: ', 'Failed to create PDF: '],
+        ['PNG share කරගැනීම අසාර්ථක විය: ', 'Failed to share PNG: '],
+        ['PNG හදන්න බැරි උනා: ', 'Failed to create PNG: '],
+        ['Export කිරීම අසාර්ථක විය: ', 'Failed to export: '],
+        ['Import කිරීම අසාර්ථක විය: ', 'Failed to import: '],
+    ];
+
     function showErrorBanner(message) {
+        if (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') {
+            if (ERROR_MESSAGE_TRANSLATIONS_EN[message]) {
+                message = ERROR_MESSAGE_TRANSLATIONS_EN[message];
+            } else {
+                const match = ERROR_MESSAGE_PREFIX_TRANSLATIONS_EN.find(([si]) => message.startsWith(si));
+                if (match) message = match[1] + message.slice(match[0].length);
+            }
+        }
         if (!errorBanner || !errorBannerText) {
             alert(message);
             return;
