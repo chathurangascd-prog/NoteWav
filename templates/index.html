@@ -280,7 +280,7 @@
         </div>
     </div>
 
-    <div id="login-required-modal-backdrop" class="mindmap-modal-backdrop hidden">
+    <div id="login-required-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Login required">
         <div class="mindmap-modal-card welcome-modal-card">
             <div class="welcome-modal-body">
                 <div class="welcome-icon"><i class="fab fa-google"></i></div>
@@ -296,7 +296,7 @@
         </div>
     </div>
 
-    <div id="welcome-modal-backdrop" class="mindmap-modal-backdrop hidden">
+    <div id="welcome-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Welcome">
         <div class="mindmap-modal-card welcome-modal-card">
             <div class="welcome-modal-body">
                 <div class="welcome-icon"><i class="fas fa-hand-sparkles"></i></div>
@@ -311,7 +311,65 @@
         </div>
     </div>
 
-    <div id="info-modal-backdrop" class="mindmap-modal-backdrop hidden">
+    <div id="stats-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
+        <div class="mindmap-modal-card info-modal-card">
+            <div class="mindmap-modal-header">
+                <h3 id="stats-modal-title">📊 My Stats</h3>
+                <button id="stats-modal-close" class="mindmap-modal-close" aria-label="Close My Stats">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="info-modal-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; text-align: center;">
+                        <div id="stats-level-icon" style="font-size: 1.8rem; line-height: 1;">🌱</div>
+                        <div id="stats-level-title" style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 4px;">Beginner</div>
+                        <div style="font-size: 0.68rem; color: var(--text-muted);">Level</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; text-align: center;">
+                        <div id="stats-notes-count" style="font-size: 1.8rem; line-height: 1; font-weight: 800; color: #a78bfa;">0</div>
+                        <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 4px;">Notes Processed</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; text-align: center;">
+                        <div id="stats-streak-count" style="font-size: 1.8rem; line-height: 1; font-weight: 800; color: #fb923c;">0</div>
+                        <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 4px;">🔥 Day Streak</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; text-align: center;">
+                        <div id="stats-active-days" style="font-size: 1.8rem; line-height: 1; font-weight: 800; color: #4ade80;">0</div>
+                        <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 4px;">Active Days (Total)</div>
+                    </div>
+                </div>
+
+                <h4>🗓️ Activity — Last 90 Days</h4>
+                <div id="stats-heatmap-wrap" style="overflow-x: auto; padding: 4px 0 8px;">
+                    <div id="stats-heatmap-grid" role="img" aria-label="Activity heatmap for the last 90 days" style="display: grid; grid-template-rows: repeat(7, 12px); grid-auto-flow: column; gap: 3px; width: max-content;"></div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.68rem; color: var(--text-muted); margin-top: 6px;">
+                    <span>අඩු</span>
+                    <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(167,139,250,0.12); display: inline-block;"></span>
+                    <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(167,139,250,0.35); display: inline-block;"></span>
+                    <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(167,139,250,0.6); display: inline-block;"></span>
+                    <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(167,139,250,0.9); display: inline-block;"></span>
+                    <span>වැඩි</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="onboarding-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <div class="mindmap-modal-card welcome-modal-card">
+            <div class="welcome-modal-body">
+                <div id="onboarding-step-content"></div>
+                <div style="display: flex; gap: 10px; margin-top: 18px;">
+                    <button type="button" id="onboarding-skip-btn" class="btn-secondary" style="flex: 1;">Skip</button>
+                    <button type="button" id="onboarding-next-btn" class="btn-primary" style="flex: 1;">ඊළඟට →</button>
+                </div>
+                <div id="onboarding-dots" style="display: flex; justify-content: center; gap: 6px; margin-top: 14px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="info-modal-title">
         <div class="mindmap-modal-card info-modal-card">
             <div class="mindmap-modal-header">
                 <h3 id="info-modal-title"></h3>
@@ -595,7 +653,7 @@
                 <div id="quiz-body" style="margin-top: 16px;"></div>
             </div>
 
-            <div id="library-modal-backdrop" class="mindmap-modal-backdrop hidden">
+            <div id="library-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="My Library">
                 <div id="library-modal-card" class="mindmap-modal-card library-modal-card">
                     <div class="mindmap-modal-header">
                         <h3>📚 <span data-i18n="my_library">My Library</span></h3>
@@ -639,7 +697,7 @@
                 </div>
             </div>
 
-            <div id="menu-drawer-backdrop" class="menu-drawer-backdrop">
+            <div id="menu-drawer-backdrop" class="menu-drawer-backdrop" role="dialog" aria-modal="true" aria-label="Menu">
                 <div class="menu-drawer">
                     <div class="menu-drawer-header">
                         <h3><i class="fas fa-bars"></i> <span data-i18n="menu_title">මෙනුව (Menu)</span></h3>
@@ -701,6 +759,9 @@
                             <span class="settings-label" style="margin-bottom:0;">📚 අද පාඩම් කරපු වෙලාව (Studied Today)</span>
                             <span id="study-time-value" class="study-time-value">0 min</span>
                         </div>
+                        <button type="button" id="open-stats-btn" class="library-nav-btn" style="width: 100%; justify-content: center; margin-top: 10px;">
+                            <i class="fas fa-chart-simple"></i> 📊 My Stats
+                        </button>
                         <hr class="menu-divider">
                         <p class="settings-label" data-i18n="settings_language_label">App භාෂාව (Language)</p>
                         <div class="settings-lang-buttons">
@@ -717,7 +778,7 @@
                 </div>
             </div>
 
-            <div id="mindmap-modal-backdrop" class="mindmap-modal-backdrop hidden">
+            <div id="mindmap-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Mind Map">
                 <div id="mindmap-modal-card" class="mindmap-modal-card">
                     <div class="mindmap-modal-header">
                         <h3>🧠 Smart Mind Map</h3>

@@ -3007,6 +3007,146 @@ function getNotesProcessedCount() {
     }
 }
 
+// ========================================
+// MY STATS MODAL (level, streak, notes, calendar heatmap)
+// ========================================
+function getStreakCountForStats() {
+    try {
+        const data = JSON.parse(localStorage.getItem('notewav_streak_data'));
+        return (data && typeof data.streak === 'number') ? data.streak : 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function renderStatsModal() {
+    const count = getNotesProcessedCount();
+    const info = getLevelInfo(count);
+    const log = getDailyActivityLog();
+    const activeDays = Object.keys(log).length;
+
+    const levelIconEl = document.getElementById('stats-level-icon');
+    const levelTitleEl = document.getElementById('stats-level-title');
+    const notesCountEl = document.getElementById('stats-notes-count');
+    const streakCountEl = document.getElementById('stats-streak-count');
+    const activeDaysEl = document.getElementById('stats-active-days');
+    if (levelIconEl) levelIconEl.textContent = info.icon;
+    if (levelTitleEl) levelTitleEl.textContent = info.title;
+    if (notesCountEl) notesCountEl.textContent = count;
+    if (streakCountEl) streakCountEl.textContent = getStreakCountForStats();
+    if (activeDaysEl) activeDaysEl.textContent = activeDays;
+
+    // Calendar heatmap — last 90 days, GitHub-style grid (7 rows = weekdays)
+    const grid = document.getElementById('stats-heatmap-grid');
+    if (!grid) return;
+    const maxCount = Math.max(1, ...Object.values(log));
+    const today = new Date();
+    const cells = [];
+    for (let i = 89; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        const dayCount = log[key] || 0;
+        let opacity = 0.08;
+        if (dayCount > 0) opacity = Math.min(0.9, 0.3 + (dayCount / maxCount) * 0.6);
+        cells.push({ key, dayCount, opacity, label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) });
+    }
+    grid.innerHTML = cells.map(c =>
+        `<div title="${c.label}: ${c.dayCount} notes" style="width: 12px; height: 12px; border-radius: 2px; background: rgba(167,139,250,${c.opacity});"></div>`
+    ).join('');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const openStatsBtn = document.getElementById('open-stats-btn');
+    const statsModal = document.getElementById('stats-modal-backdrop');
+    const statsCloseBtn = document.getElementById('stats-modal-close');
+    if (openStatsBtn && statsModal) {
+        openStatsBtn.addEventListener('click', function() {
+            renderStatsModal();
+            statsModal.classList.remove('hidden');
+        });
+    }
+    if (statsCloseBtn && statsModal) {
+        statsCloseBtn.addEventListener('click', () => statsModal.classList.add('hidden'));
+    }
+    if (statsModal) {
+        statsModal.addEventListener('click', function(e) {
+            if (e.target === statsModal) statsModal.classList.add('hidden');
+        });
+    }
+});
+
+// ========================================
+// ONBOARDING TUTORIAL (first-time visitors)
+// ========================================
+const ONBOARDING_SEEN_KEY = 'notewav_onboarding_seen';
+const ONBOARDING_STEPS = [
+    { icon: '👋', title: 'ආයුබෝවන්! NoteWav AI වලට සාදරයෙන් පිළිගන්නවා', body: 'ඔබේ study notes — podcast audio + mind map බවට හරවන app එකක්. Steps කිහිපයකින් පෙන්නන්නම්! 🚀' },
+    { icon: '📝', title: '1️⃣ Notes එකතු කරන්න', body: 'Type කරන්න, photos upload කරන්න (OCR), හෝ PDF එකක් upload කරන්න — ඕනම විදිහකින් notes එකතු කරගන්න පුළුවන්.' },
+    { icon: '🧠', title: '2️⃣ Study Mode එකක් තෝරන්න', body: '"Smart Study" — AI එකෙන් script + mind map හදනවා. "Full Text Mode" — ඔබේම text එකම audio බවට හරවනවා.' },
+    { icon: '🎙️', title: '3️⃣ Audio Generate කරන්න', body: 'Voice Engine එකක් තෝරලා (Standard/Natural AI), audio එකක් generate කරගන්න — play, speed, skip controls සමඟ.' },
+    { icon: '🌱', title: '4️⃣ Level Up වෙන්න!', body: 'Notes process කරන ගණන අනුව Level up වෙනවා, coins bonus ලැබෙනවා. Header එකේ level badge එකම click කරලා progress එක බලන්න පුළුවන්.' },
+    { icon: '📚', title: '5️⃣ Library එකට Save කරන්න', body: 'Notes save කරගන්න, search කරන්න, Offline Audio Player එකෙන් internet නැතුවත් අහන්න. ඔන්න, ඔබ ready! 🎉' },
+];
+let onboardingStepIndex = 0;
+
+function renderOnboardingStep() {
+    const contentEl = document.getElementById('onboarding-step-content');
+    const dotsEl = document.getElementById('onboarding-dots');
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    if (!contentEl) return;
+    const step = ONBOARDING_STEPS[onboardingStepIndex];
+    contentEl.innerHTML = `
+        <div class="welcome-icon" style="font-size: 2.2rem; background: none;">${step.icon}</div>
+        <h3 class="welcome-title">${step.title}</h3>
+        <p class="welcome-subtitle" style="margin-bottom: 0;">${step.body}</p>
+    `;
+    if (dotsEl) {
+        dotsEl.innerHTML = ONBOARDING_STEPS.map((_, i) =>
+            `<span style="width: 7px; height: 7px; border-radius: 50%; background: ${i === onboardingStepIndex ? '#6b30ff' : 'rgba(255,255,255,0.15)'};"></span>`
+        ).join('');
+    }
+    if (nextBtn) {
+        nextBtn.textContent = onboardingStepIndex === ONBOARDING_STEPS.length - 1 ? 'ආරම්භ කරමු! 🚀' : 'ඊළඟට →';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const onboardingModal = document.getElementById('onboarding-modal-backdrop');
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const skipBtn = document.getElementById('onboarding-skip-btn');
+    if (!onboardingModal) return;
+
+    function closeOnboarding() {
+        onboardingModal.classList.add('hidden');
+        try { localStorage.setItem(ONBOARDING_SEEN_KEY, '1'); } catch (e) { /* ignore */ }
+    }
+
+    let alreadySeen = false;
+    try { alreadySeen = localStorage.getItem(ONBOARDING_SEEN_KEY) === '1'; } catch (e) { /* ignore */ }
+
+    if (!alreadySeen) {
+        // Small delay so it doesn't compete with the splash screen animation
+        setTimeout(() => {
+            onboardingStepIndex = 0;
+            renderOnboardingStep();
+            onboardingModal.classList.remove('hidden');
+        }, 3600);
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function() {
+            if (onboardingStepIndex < ONBOARDING_STEPS.length - 1) {
+                onboardingStepIndex++;
+                renderOnboardingStep();
+            } else {
+                closeOnboarding();
+            }
+        });
+    }
+    if (skipBtn) skipBtn.addEventListener('click', closeOnboarding);
+});
+
 function getLevelInfo(count) {
     let current = LEVEL_THRESHOLDS[0];
     for (const lvl of LEVEL_THRESHOLDS) {
@@ -3122,11 +3262,36 @@ function incrementNotesProcessedCount() {
     } catch (e) {
         console.warn('Could not save notes processed count:', e);
     }
+    recordDailyActivity();
     const beforeInfo = getLevelInfo(before);
     const afterInfo = getLevelInfo(after);
     renderLevelBadge();
     if (afterInfo.level > beforeInfo.level) {
         showLevelUpCelebration(afterInfo);
+    }
+}
+
+// ========================================
+// DAILY ACTIVITY LOG (for the Calendar Heatmap in My Stats)
+// ========================================
+const DAILY_ACTIVITY_KEY = 'notewav_daily_activity';
+
+function recordDailyActivity() {
+    try {
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const log = JSON.parse(localStorage.getItem(DAILY_ACTIVITY_KEY) || '{}');
+        log[today] = (log[today] || 0) + 1;
+        localStorage.setItem(DAILY_ACTIVITY_KEY, JSON.stringify(log));
+    } catch (e) {
+        console.warn('Could not record daily activity:', e);
+    }
+}
+
+function getDailyActivityLog() {
+    try {
+        return JSON.parse(localStorage.getItem(DAILY_ACTIVITY_KEY) || '{}');
+    } catch (e) {
+        return {};
     }
 }
 
