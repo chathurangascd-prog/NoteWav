@@ -3937,7 +3937,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // and never know earlier ones existed. Now fetches the full recent
     // list and shows all of them; "Clear All" dismisses the whole
     // batch at once (marks the highest id seen).
+    //
+    // Two SEPARATE tracking ids, on purpose:
+    // - SEEN_KEY: only controls the red badge DOT. Updates the moment
+    //   the bell is clicked (opening the popup = "I've seen there's
+    //   something new"), same as most notification systems.
+    // - CLEARED_KEY: only controls which messages actually DISAPPEAR
+    //   from the popup's message list. Only updates when the person
+    //   explicitly presses "Clear All" — just opening/viewing the
+    //   popup must NOT erase the messages themselves.
     const SEEN_KEY = 'notewav_last_seen_announcement_id';
+    const CLEARED_KEY = 'notewav_last_cleared_announcement_id';
     const bellBtn = document.getElementById('notification-bell-btn');
     const badge = document.getElementById('notification-badge');
     const popup = document.getElementById('notification-popup');
@@ -3964,6 +3974,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function getClearedId() {
+        try {
+            return parseInt(localStorage.getItem(CLEARED_KEY) || '0', 10);
+        } catch (e) {
+            return 0;
+        }
+    }
+
     function markAllSeen() {
         if (!announcements.length) return;
         const highestId = Math.max(...announcements.map(a => a.id));
@@ -3971,6 +3989,14 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem(SEEN_KEY, String(highestId));
         } catch (e) { /* ignore */ }
         badge.classList.add('hidden');
+    }
+
+    function markAllCleared() {
+        if (!announcements.length) return;
+        const highestId = Math.max(...announcements.map(a => a.id));
+        try {
+            localStorage.setItem(CLEARED_KEY, String(highestId));
+        } catch (e) { /* ignore */ }
     }
 
     async function checkForAnnouncement() {
@@ -3981,14 +4007,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status !== 'success') return;
             announcements = data.announcements || [];
 
-            // FIX: previously used a global "cleared" on/off flag —
-            // clearing set it true, but ANY new message set it back to
-            // false, which revealed the ENTIRE list again (old cleared
-            // ones included), not just the new message. Now each
-            // announcement is judged individually by whether its OWN id
-            // is greater than the last-seen id — once something is
-            // marked seen (via Clear All), it stays hidden forever,
-            // and only genuinely new (higher-id) messages ever show up.
             const hasUnseen = announcements.some(a => a.id > getSeenId());
             if (hasUnseen) {
                 badge.classList.remove('hidden');
@@ -3999,15 +4017,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderPopupList() {
-        const unread = announcements.filter(a => a.id > getSeenId());
-        if (!unread.length) {
+        // Shows everything NOT explicitly cleared yet (independent of
+        // the seen/badge state) — so opening the bell never erases
+        // messages, only "Clear All" does.
+        const visible = announcements.filter(a => a.id > getClearedId());
+        if (!visible.length) {
             const lang = getAppLanguage();
             popupList.innerHTML = `<p class="notification-popup-message">${lang === 'en' ? 'No new notifications.' : 'නව notifications නෑ.'}</p>`;
             if (clearBtn) clearBtn.classList.add('hidden');
             return;
         }
         if (clearBtn) clearBtn.classList.remove('hidden');
-        popupList.innerHTML = unread.map(a => {
+        popupList.innerHTML = visible.map(a => {
             let timeText = '';
             try {
                 const dt = new Date(a.created_at);
@@ -4024,17 +4045,17 @@ document.addEventListener('DOMContentLoaded', function() {
     bellBtn.addEventListener('click', function() {
         renderPopupList();
         popup.classList.toggle('hidden');
-        // FIX: opening the popup should also clear the red badge dot —
-        // a recent rewrite accidentally only cleared it via the
-        // separate "Clear All" button, so the dot stayed red even
-        // after the person had already read the notifications.
+        // Clears only the red dot — the message list itself is
+        // untouched, so it stays readable until explicitly cleared.
         markAllSeen();
     });
 
     if (clearBtn) {
         clearBtn.addEventListener('click', function(e) {
             e.stopPropagation();
+            markAllCleared();
             markAllSeen();
+            renderPopupList();
             popup.classList.add('hidden');
         });
     }
