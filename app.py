@@ -1242,7 +1242,7 @@ def _friendly_gemini_error_message(exc):
     a short, clean message a student can actually understand, instead
     of showing them '503 UNAVAILABLE {...}' verbatim."""
     if _is_transient_gemini_error(exc):
-        return 'Google ගේම AI servers දැනට busy වී ඇත (high demand). මිනිත්තුවක් විතර ඉඳලා නැවත උත්සාහ කරන්න.'
+        return 'NoteWav AI servers දැනට busy වී ඇත (high demand). මිනිත්තුවක් විතර ඉඳලා නැවත උත්සාහ කරන්න.'
     return 'AI processing එකේදී මොකක් හරි ගැටලුවක් ආවා. නැවත උත්සාහ කරන්න.'
 
 
@@ -1663,7 +1663,7 @@ def text_to_speech():
             print(f"❌ Gemini TTS Error: {str(e)}")
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini AI Voice (Preview) එකෙන් audio එක generate කරගැනීම අසාර්ථක විය — Standard Voice එකෙන් try කරන්න.'
+                'message': 'NoteWav AI Voice (Beta) එකෙන් audio එක generate කරගැනීම අසාර්ථක විය — Standard Voice එකෙන් try කරන්න.'
             }), 500
 
     try:
@@ -2019,7 +2019,7 @@ def process_note():
             'mermaid_code_si': '',
             'mermaid_code_en': '',
             'ai_processed': False,
-            'warning': 'Gemini API configure වී නොමැති බැවින් Smart Study සහ Mind Map ලබාගත නොහැක.'
+            'warning': 'NoteWav AI configure වී නොමැති බැවින් Smart Study සහ Mind Map ලබාගත නොහැක.'
         })
 
     try:
