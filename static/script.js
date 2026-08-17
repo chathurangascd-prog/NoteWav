@@ -3996,11 +3996,17 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status !== 'success') return;
             const fresh = data.announcements || [];
 
-            // A genuinely new message (higher id than anything we had
-            // before) un-clears the list, so it becomes visible again.
-            const previousMaxId = announcements.length ? Math.max(...announcements.map(a => a.id)) : 0;
+            // FIX: this used to compare against the in-memory
+            // `announcements` array's previous max id — but that array
+            // always starts EMPTY on every page load/refresh, so
+            // "freshMaxId > previousMaxId(=0)" was true on literally
+            // every reload, incorrectly un-clearing a list the person
+            // had already cleared. Comparing against the PERSISTED
+            // seen-id (localStorage) instead only un-clears when
+            // there's a genuinely new announcement the person has
+            // never seen before — which survives refreshes correctly.
             const freshMaxId = fresh.length ? Math.max(...fresh.map(a => a.id)) : 0;
-            if (freshMaxId > previousMaxId) setCleared(false);
+            if (freshMaxId > getSeenId()) setCleared(false);
 
             announcements = fresh;
             const hasUnseen = announcements.some(a => a.id > getSeenId());
