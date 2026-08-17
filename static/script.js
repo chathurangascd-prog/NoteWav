@@ -553,7 +553,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let librarySearchDebounceTimer = null;
 
     async function loadLibraryList(query) {
-        libraryModalBody.innerHTML = '<p class="mindmap-empty"><span class="mini-wave"><span></span><span></span><span></span><span></span></span> Loading...</p>';
+        libraryModalBody.innerHTML = Array.from({ length: 4 }).map(() => `
+            <div class="skeleton-item">
+                <div class="skeleton-block skeleton-icon"></div>
+                <div class="skeleton-lines">
+                    <div class="skeleton-block skeleton-line"></div>
+                    <div class="skeleton-block skeleton-line short"></div>
+                </div>
+            </div>
+        `).join('');
         if (!query && librarySearchInput) librarySearchInput.value = '';
         try {
             const url = query ? `/library/notes?q=${encodeURIComponent(query)}` : '/library/notes';
@@ -2120,6 +2128,8 @@ document.addEventListener('DOMContentLoaded', function() {
             ? '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> AI Voice Generating (ටිකක් වේලා ගන්නවා)...'
             : '<span class="mini-wave"><span></span><span></span><span></span><span></span></span> Generating...';
         generateAudioBtn.disabled = true;
+        const progressTrack = document.getElementById('audio-gen-progress-track');
+        if (progressTrack) progressTrack.classList.remove('hidden');
 
         try {
             const response = await fetch('/tts', {
@@ -2279,6 +2289,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } finally {
             generateAudioBtn.innerHTML = '<i class="fas fa-microphone"></i> තරංග උත්පාදනය කරන්න';
             generateAudioBtn.disabled = false;
+            if (progressTrack) progressTrack.classList.add('hidden');
         }
     });
 

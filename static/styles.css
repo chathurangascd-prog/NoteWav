@@ -626,6 +626,7 @@ textarea:hover {
     background: var(--primary-grad);
     color: white;
     box-shadow: 0 4px 20px rgba(107, 48, 255, 0.25);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, opacity 0.15s ease;
 }
 
 .btn-primary:hover {
@@ -634,13 +635,15 @@ textarea:hover {
 }
 
 .btn-primary:active {
-    transform: translateY(0px) scale(0.98);
+    transform: translateY(0px) scale(0.94);
+    transition-duration: 0.08s;
 }
 
 .btn-secondary {
     background: rgba(255, 255, 255, 0.06);
     color: white;
     border: 1px solid var(--border-color);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, border-color 0.2s ease;
 }
 
 .btn-secondary:hover {
@@ -650,7 +653,8 @@ textarea:hover {
 }
 
 .btn-secondary:active {
-    transform: translateY(0px);
+    transform: translateY(0px) scale(0.96);
+    transition-duration: 0.08s;
 }
 
 .btn-primary:disabled,
@@ -709,6 +713,45 @@ textarea:hover {
 .card-step-1 { animation-delay: 0.05s; }
 .card-step-2 { animation-delay: 0.15s; }
 .card-step-3 { animation-delay: 0.25s; }
+
+/* ===== SKELETON LOADING (Library, etc.) =====
+   GPU-safe: animates background-position only, no blur/backdrop-filter. */
+.skeleton-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+}
+.skeleton-block {
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+.skeleton-icon { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; }
+.skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.skeleton-line { height: 12px; width: 100%; }
+.skeleton-line.short { width: 45%; }
+
+@keyframes skeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ===== INDETERMINATE PROGRESS BAR (audio generation) =====
+   GPU-safe: transform: translateX only. */
+#audio-gen-progress-bar {
+    animation: indeterminateSlide 1.3s ease-in-out infinite;
+}
+@keyframes indeterminateSlide {
+    0% { transform: translateX(-120%); }
+    50% { transform: translateX(60%); }
+    100% { transform: translateX(220%); }
+}
 
 /* ========================================
    INFO TEXT
