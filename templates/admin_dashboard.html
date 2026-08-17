@@ -404,6 +404,10 @@
                 <a href="#" class="nav-item" data-view="features"><span class="nav-ic">🎯</span> Feature Usage</a>
                 <a href="#" class="nav-item" data-view="subjects"><span class="nav-ic">📚</span> Top Subjects</a>
                 <a href="#" class="nav-item" data-view="notes"><span class="nav-ic">📖</span> Library</a>
+                <a href="#" class="nav-item" data-view="reports"><span class="nav-ic">🚩</span> Reports</a>
+
+                <div class="nav-group-label">Insights</div>
+                <a href="#" class="nav-item" data-view="insights"><span class="nav-ic">💡</span> Insights</a>
 
                 <div class="nav-group-label">Communication</div>
                 <a href="#" class="nav-item" data-view="announcements"><span class="nav-ic">📜</span> Announcements</a>
@@ -507,6 +511,7 @@
             <input type="text" id="search-input" placeholder="Name එකෙන් search කරන්න...">
             <div id="table-wrapper">
                 {% if users %}
+                <input type="text" id="user-search-input" placeholder="🔍 Search by name or email..." style="width:100%; max-width:320px; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.82rem; font-family:inherit; margin-bottom:12px;">
                 <table>
                     <thead>
                         <tr>
@@ -595,7 +600,28 @@
                 <h2 class="section-title">Library Notes Browser</h2>
             </div>
             <input type="text" id="notes-search-input" placeholder="Subject/Title එකෙන් search කරන්න...">
+            <button id="bulk-delete-notes-btn" style="margin-bottom:10px; padding:8px 14px; border-radius:8px; border:1px solid rgba(248,113,113,0.4); background:rgba(248,113,113,0.1); color:#f87171; font-size:0.78rem; font-weight:700; cursor:pointer; display:none;">🗑️ Delete Selected (<span id="bulk-delete-count">0</span>)</button>
             <div id="notes-wrap"></div>
+        </div>
+        </div>
+
+        <div class="view-section" data-view="reports">
+        <div class="section-card" id="section-reports">
+            <div class="section-head">
+                <div class="chip">🚩</div>
+                <h2 class="section-title">Reported Notes</h2>
+            </div>
+            <div id="reports-wrap"></div>
+        </div>
+        </div>
+
+        <div class="view-section" data-view="insights">
+        <div class="section-card" id="section-insights">
+            <div class="section-head">
+                <div class="chip">💡</div>
+                <h2 class="section-title">Insights</h2>
+            </div>
+            <div id="insights-wrap"></div>
         </div>
         </div>
     </div>
@@ -626,6 +652,13 @@
                     <p id="add-coins-status" style="font-size:0.74rem; color:var(--green); margin:6px 0 0; min-height:1em; font-weight:600;"></p>
                 </div>
 
+                <div style="border-top:1px solid var(--border); padding-top:14px; margin-bottom:14px;">
+                    <p style="font-size:0.8rem; font-weight:700; margin:0 0 6px;">🚫 Ban / Suspend</p>
+                    <p style="font-size:0.7rem; color:var(--text-muted); margin:0 0 8px;">Banned device/account can't process notes or generate audio. Existing saved notes stay.</p>
+                    <button id="ban-toggle-btn" style="width:100%; padding:9px 16px; border-radius:8px; border:1px solid rgba(248,113,113,0.4); background:rgba(248,113,113,0.1); color:#f87171; font-size:0.8rem; font-weight:700; cursor:pointer;">🚫 Ban this device</button>
+                    <p id="ban-status" style="font-size:0.74rem; color:var(--green); margin:6px 0 0; min-height:1em; font-weight:600;"></p>
+                </div>
+
                 <div id="timeline-modal-body"></div>
             </div>
         </div>
@@ -643,6 +676,8 @@
             features: ['Feature Usage', 'What people actually use'],
             subjects: ['Top Subjects', 'Most-saved note subjects'],
             notes: ['Library', 'Browse and manage saved notes'],
+            reports: ['Reports', 'Notes flagged by students'],
+            insights: ['Insights', 'Coins economy, levels, retention, leaderboard'],
             announcements: ['Announcements', 'Send and review notifications'],
         };
 
@@ -729,6 +764,20 @@
             attachRowClickHandlers();
         }
 
+        // NEW: client-side search filter for the users table
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('user-search-input');
+            if (!searchInput) return;
+            searchInput.addEventListener('input', function() {
+                const term = this.value.trim().toLowerCase();
+                document.querySelectorAll('#users-tbody tr').forEach(row => {
+                    const name = (row.dataset.name || '').toLowerCase();
+                    const email = (row.dataset.email || '').toLowerCase();
+                    row.style.display = (!term || name.includes(term) || email.includes(term)) ? '' : 'none';
+                });
+            });
+        });
+
         function attachRowClickHandlers() {
             document.querySelectorAll('#users-tbody tr').forEach(row => {
                 row.addEventListener('click', function() {
@@ -753,6 +802,10 @@
             const addCoinsStatus = document.getElementById('add-coins-status');
             const addCoinsNote = document.getElementById('add-coins-note');
             if (addCoinsInput) addCoinsInput.value = '';
+            const banStatusEl = document.getElementById('ban-status');
+            const banBtnEl = document.getElementById('ban-toggle-btn');
+            if (banStatusEl) banStatusEl.textContent = '';
+            if (banBtnEl) banBtnEl.textContent = '🚫 Ban this device';
             if (addCoinsStatus) addCoinsStatus.textContent = '';
             if (currentTimelineEmail) {
                 if (addCoinsInput) addCoinsInput.disabled = false;
@@ -846,6 +899,39 @@
                     input.value = '';
                 } else {
                     status.textContent = '❌ ' + (data.message || 'Failed to add coins.');
+                    status.style.color = '#f87171';
+                }
+            } catch (e) {
+                status.textContent = '❌ Network error.';
+                status.style.color = '#f87171';
+            }
+            this.disabled = false;
+        });
+
+        document.getElementById('ban-toggle-btn').addEventListener('click', async function() {
+            const status = document.getElementById('ban-status');
+            if (!currentTimelineAnonId) {
+                status.textContent = '❌ No device identity found.';
+                status.style.color = '#f87171';
+                return;
+            }
+            this.disabled = true;
+            try {
+                const res = await fetch('/admin/ban', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        identity: currentTimelineEmail || currentTimelineAnonId,
+                        identity_type: currentTimelineEmail ? 'email' : 'anon_id',
+                    }),
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    status.textContent = data.action === 'banned' ? '🚫 Banned.' : '✅ Unbanned.';
+                    status.style.color = data.action === 'banned' ? '#f87171' : '#4ade80';
+                    this.textContent = data.action === 'banned' ? '✅ Unban this device' : '🚫 Ban this device';
+                } else {
+                    status.textContent = '❌ ' + (data.message || 'Failed.');
                     status.style.color = '#f87171';
                 }
             } catch (e) {
@@ -1049,6 +1135,7 @@
             filtered.forEach(n => {
                 const savedBy = n.user_name ? escapeHtml(n.user_name) : 'Unknown';
                 html += `<div class="note-item">
+                    <input type="checkbox" class="note-select-checkbox" data-note-id="${n.id}" style="margin-right:10px; margin-top:4px; width:16px; height:16px; flex-shrink:0;">
                     <div class="note-item-info">
                         <div class="note-item-title">${escapeHtml(n.title || '(No title)')}</div>
                         <div class="note-item-subject">${escapeHtml(n.subject)} · 👤 ${savedBy}</div>
@@ -1059,6 +1146,9 @@
                 </div>`;
             });
             document.getElementById('notes-wrap').innerHTML = html;
+            document.querySelectorAll('.note-select-checkbox').forEach(cb => {
+                cb.addEventListener('change', updateBulkDeleteButton);
+            });
         }
 
         async function deleteNote(id) {
@@ -1071,6 +1161,37 @@
             }
         }
         document.getElementById('notes-search-input').addEventListener('input', renderNotes);
+
+        function updateBulkDeleteButton() {
+            const checked = document.querySelectorAll('.note-select-checkbox:checked');
+            const btn = document.getElementById('bulk-delete-notes-btn');
+            const countEl = document.getElementById('bulk-delete-count');
+            if (countEl) countEl.textContent = checked.length;
+            if (btn) btn.style.display = checked.length > 0 ? 'inline-block' : 'none';
+        }
+
+        document.getElementById('bulk-delete-notes-btn').addEventListener('click', async function() {
+            const checked = Array.from(document.querySelectorAll('.note-select-checkbox:checked')).map(cb => cb.dataset.noteId);
+            if (!checked.length) return;
+            if (!confirm(`Delete ${checked.length} selected note(s)? This can't be undone.`)) return;
+            this.disabled = true;
+            try {
+                const res = await fetch('/admin/notes/bulk-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note_ids: checked }),
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    loadNotes();
+                } else {
+                    alert('Bulk delete failed: ' + (data.message || ''));
+                }
+            } catch (e) {
+                alert('Bulk delete failed (network error).');
+            }
+            this.disabled = false;
+        });
 
         async function loadAnnouncements() {
             try {
@@ -1109,12 +1230,112 @@
             }
         }
 
+        // ===== NEW: Reports =====
+        async function loadReports() {
+            try {
+                const res = await fetch('/admin/reports');
+                const data = await res.json();
+                if (data.status !== 'success') return;
+                const wrap = document.getElementById('reports-wrap');
+                if (!data.reports.length) {
+                    wrap.innerHTML = '<div class="empty-state">No open reports. 🎉</div>';
+                    return;
+                }
+                let html = '';
+                data.reports.forEach(r => {
+                    html += `<div class="note-item">
+                        <div class="note-item-info">
+                            <div class="note-item-title">🚩 ${escapeHtml(r.title || '(deleted note)')}</div>
+                            <div class="note-item-subject">${escapeHtml(r.subject || '')} · Reason: ${escapeHtml(r.reason || '(none given)')}</div>
+                            <div class="note-item-snippet">${escapeHtml((r.note_text || '').slice(0, 160))}</div>
+                            <div class="note-item-date">Reported: ${r.created_at}</div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <button class="note-delete-btn" onclick="deleteNote(${r.note_id}); dismissReport(${r.id});" title="Delete the note">🗑️</button>
+                            <button class="note-delete-btn" onclick="dismissReport(${r.id})" title="Dismiss (keep the note)">✅</button>
+                        </div>
+                    </div>`;
+                });
+                wrap.innerHTML = html;
+            } catch (e) {
+                document.getElementById('reports-wrap').innerHTML = '<div class="empty-state">Failed to load reports.</div>';
+            }
+        }
+
+        async function dismissReport(id) {
+            try {
+                await fetch(`/admin/reports/${id}/dismiss`, { method: 'POST' });
+                loadReports();
+            } catch (e) {
+                alert('Failed to dismiss report.');
+            }
+        }
+
+        // ===== NEW: Insights (coins economy, level distribution, retention, leaderboard, Gemini load) =====
+        async function loadInsights() {
+            try {
+                const res = await fetch('/admin/insights');
+                const data = await res.json();
+                if (data.status !== 'success') {
+                    document.getElementById('insights-wrap').innerHTML = '<div class="empty-state">Failed to load insights.</div>';
+                    return;
+                }
+                const ce = data.coins_economy;
+                const ret = data.retention;
+                const load = data.gemini_load;
+
+                let html = '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:24px;">';
+                html += statCard('🪙 Coins (signed-in accounts)', ce.signed_in_total);
+                html += statCard('🪙 Coins (guest devices)', ce.guest_total);
+                html += statCard('📅 Weekly Active Devices', ret.weekly_active);
+                html += statCard('📅 Monthly Active Devices', ret.monthly_active);
+                html += statCard('🎙️ Gemini TTS calls (last 60s)', `${load.recent_calls_last_60s} / ${load.safe_limit_per_worker}`);
+                html += '</div>';
+
+                html += '<h3 style="font-size:0.95rem; margin:0 0 10px;">🌱 Level Distribution</h3>';
+                const levelEntries = Object.entries(data.level_distribution);
+                const maxLevelCount = Math.max(1, ...levelEntries.map(e => e[1]));
+                if (!levelEntries.length) {
+                    html += '<div class="empty-state">No level data yet.</div>';
+                } else {
+                    levelEntries.forEach(([label, count]) => {
+                        const pct = Math.round((count / maxLevelCount) * 100);
+                        html += `<div class="subject-row"><div class="subject-name">${escapeHtml(label)}</div><div class="subject-bar-track"><div class="subject-bar-fill" style="width:${pct}%"></div></div><div class="subject-count">${count}</div></div>`;
+                    });
+                }
+
+                html += '<h3 style="font-size:0.95rem; margin:24px 0 10px;">🏆 Leaderboard — Top 10 (Notes Processed)</h3>';
+                if (!data.leaderboard.length) {
+                    html += '<div class="empty-state">No activity yet.</div>';
+                } else {
+                    html += '<table><thead><tr><th>#</th><th>Name</th><th>Notes Processed</th></tr></thead><tbody>';
+                    data.leaderboard.forEach((row, i) => {
+                        html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.name)}</td><td>${row.notes_processed}</td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                }
+
+                document.getElementById('insights-wrap').innerHTML = html;
+            } catch (e) {
+                document.getElementById('insights-wrap').innerHTML = '<div class="empty-state">Failed to load insights.</div>';
+            }
+        }
+
+        function statCard(label, value) {
+            return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:800;">${value}</div>
+                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">${label}</div>
+            </div>`;
+        }
+
         loadActivityChart();
         loadUserGrowth();
         loadFeatureUsage();
         loadTopSubjects();
         loadNotes();
         loadAnnouncements();
+        loadReports();
+        loadInsights();
     </script>
 </body>
 </html>

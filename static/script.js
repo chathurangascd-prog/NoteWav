@@ -2095,7 +2095,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/process-note', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, mode, output_language: outputLanguage }),
+                body: JSON.stringify({ text, mode, output_language: outputLanguage, anon_id: (typeof getOrCreateAnonId === 'function' ? getOrCreateAnonId() : '') }),
             });
 
             const data = await response.json();
@@ -2196,6 +2196,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     engine: ttsEngine,
                     voice_name: (ttsEngine === 'gemini' && ttsVoiceSelect) ? ttsVoiceSelect.value : undefined,
                     model_version: ttsEngine === 'gemini' ? ttsModelVersion : undefined,
+                    anon_id: (typeof getOrCreateAnonId === 'function' ? getOrCreateAnonId() : ''),
                 }),
             });
 

@@ -380,6 +380,37 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # NEW: lets admin ban an abusive device (by anon_id) or account (by
+    # email) — a banned identity can't process notes or generate audio
+    # anymore, but their existing saved notes aren't deleted.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS banned_identities (
+            identity TEXT PRIMARY KEY,
+            identity_type TEXT NOT NULL,
+            reason TEXT,
+            banned_at TEXT NOT NULL
+        )
+    """)
+    # NEW: lets a student flag a note in the (shared, guest-visible)
+    # Library as inappropriate/spam — admin reviews these in a
+    # dedicated "Reports" section instead of having to browse the
+    # entire library looking for problems.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS note_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_id INTEGER NOT NULL,
+            reason TEXT,
+            created_at TEXT NOT NULL,
+            dismissed INTEGER DEFAULT 0
+        )
+    """)
+    # NEW: an announcement with a future scheduled_at won't show to
+    # students until that time arrives — NULL (default) means "show
+    # immediately", exactly like before.
+    try:
+        conn.execute("ALTER TABLE announcements ADD COLUMN scheduled_at TEXT")
+    except Exception:
+        pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -1718,6 +1749,9 @@ def ocr_image():
 def text_to_speech():
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
+    # NEW: block banned devices/accounts from generating audio.
+    if _is_banned(anon_id=(data.get('anon_id') or '').strip()[:64], email=session.get('user_email')):
+        return jsonify({'status': 'error', 'message': 'ඔබේ account/device එකට මේ feature එක restrict කර ඇත.'}), 403
     # NEW: which voice engine to use — 'gtts' (default, free, classic
     # robotic TTS) or 'gemini' (natural LLM-driven voice, Preview,
     # costs Gemini API usage). Anything unrecognized falls back to gtts.
@@ -2101,6 +2135,9 @@ def process_note():
     data = request.get_json(silent=True) or {}
     note_text = (data.get('text') or '').strip()
     mode = data.get('mode', 'full')
+    # NEW: block banned devices/accounts from processing notes.
+    if _is_banned(anon_id=(data.get('anon_id') or '').strip()[:64], email=session.get('user_email')):
+        return jsonify({'status': 'error', 'message': 'ඔබේ account/device එකට මේ feature එක restrict කර ඇත.'}), 403
     # NEW: the person now explicitly chooses the OUTPUT language for the
     # podcast script via a toggle in the UI ('si' or 'en') — independent
     # of whatever language the note itself is written in. Defaults to
@@ -2365,6 +2402,25 @@ def track_event():
     except Exception as e:
         print(f"⚠️ Track event failed (non-critical): {e}")
         return jsonify({'status': 'error'}), 200  # 200 on purpose — never surface this as a real error to the client
+
+
+def _is_banned(anon_id=None, email=None):
+    """Checks whether a device (anon_id) or account (email) has been
+    banned by an admin. Either match blocks the action."""
+    if not anon_id and not email:
+        return False
+    try:
+        conn = get_db()
+        row = None
+        if anon_id:
+            row = conn.execute("SELECT 1 FROM banned_identities WHERE identity = ?", (anon_id,)).fetchone()
+        if not row and email:
+            row = conn.execute("SELECT 1 FROM banned_identities WHERE identity = ?", (email,)).fetchone()
+        conn.close()
+        return row is not None
+    except Exception as e:
+        print(f"⚠️ Ban check failed (allowing request through): {e}")
+        return False  # fail open — never block legitimate users due to a DB hiccup
 
 
 def _is_admin_logged_in():
@@ -2778,6 +2834,199 @@ def admin_delete_note(note_id):
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/admin/notes/bulk-delete', methods=['POST'])
+def admin_bulk_delete_notes():
+    """NEW: delete several library notes at once — used by the admin
+    dashboard's checkbox-select UI, instead of deleting one at a time."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        data = request.get_json(silent=True) or {}
+        note_ids = data.get('note_ids') or []
+        note_ids = [int(i) for i in note_ids if str(i).isdigit()][:200]  # sanity cap
+        if not note_ids:
+            return jsonify({'status': 'error', 'message': 'No note IDs provided.'}), 400
+        conn = get_db()
+        placeholders = ','.join('?' * len(note_ids))
+        conn.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", note_ids)
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'deleted': len(note_ids)})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/ban', methods=['POST'])
+def admin_ban_identity():
+    """NEW: bans (or unbans) a device (anon_id) or account (email) —
+    toggles based on current state. A banned identity can no longer
+    process notes or generate audio; their existing saved notes are
+    NOT deleted."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        data = request.get_json(silent=True) or {}
+        identity = (data.get('identity') or '').strip()
+        identity_type = (data.get('identity_type') or 'anon_id').strip()
+        reason = (data.get('reason') or '').strip()[:200]
+        if not identity:
+            return jsonify({'status': 'error', 'message': 'No identity provided.'}), 400
+
+        conn = get_db()
+        existing = conn.execute("SELECT 1 FROM banned_identities WHERE identity = ?", (identity,)).fetchone()
+        if existing:
+            conn.execute("DELETE FROM banned_identities WHERE identity = ?", (identity,))
+            action = 'unbanned'
+        else:
+            conn.execute(
+                "INSERT INTO banned_identities (identity, identity_type, reason, banned_at) VALUES (?, ?, ?, ?)",
+                (identity, identity_type, reason, datetime.now(timezone.utc).isoformat())
+            )
+            action = 'banned'
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'action': action})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/library/report/<int:note_id>', methods=['POST'])
+@rate_limited(5, 300)
+def report_note(note_id):
+    """NEW (public): lets any student flag a Library note as
+    inappropriate/spam — reviewed by the admin in a dedicated Reports
+    section, rather than the note just silently staying up."""
+    try:
+        data = request.get_json(silent=True) or {}
+        reason = (data.get('reason') or '').strip()[:200]
+        conn = get_db()
+        note_exists = conn.execute("SELECT 1 FROM notes WHERE id = ?", (note_id,)).fetchone()
+        if not note_exists:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Note not found.'}), 404
+        conn.execute(
+            "INSERT INTO note_reports (note_id, reason, created_at) VALUES (?, ?, ?)",
+            (note_id, reason, datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': 'Report එක ලැබුණා. ස්තූතියි!'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/reports')
+def admin_reports():
+    """NEW: lists open (not-yet-dismissed) note reports for the admin,
+    joined with the note's own title/subject so they don't need to
+    look it up separately."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT r.id, r.note_id, r.reason, r.created_at,
+                   n.title, n.subject, n.note_text
+            FROM note_reports r
+            LEFT JOIN notes n ON n.id = r.note_id
+            WHERE r.dismissed = 0
+            ORDER BY r.created_at DESC
+        """).fetchall()
+        conn.close()
+        return jsonify({'status': 'success', 'reports': [dict(row) for row in rows]})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/reports/<int:report_id>/dismiss', methods=['POST'])
+def admin_dismiss_report(report_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        conn.execute("UPDATE note_reports SET dismissed = 1 WHERE id = ?", (report_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/insights')
+def admin_insights():
+    """NEW: one consolidated endpoint for several admin dashboard
+    additions — coins economy total, level distribution, weekly/
+    monthly active user counts, a Top-10 leaderboard by notes
+    processed, and a live snapshot of recent Gemini TTS call volume
+    (a proxy for how close the app is to Google's own rate limit)."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+
+        # --- Coins economy ---
+        signed_in_coins = conn.execute("SELECT COALESCE(SUM(coins), 0) AS total FROM users").fetchone()['total']
+        guest_coins = conn.execute("SELECT COALESCE(SUM(coins), 0) AS total FROM user_state").fetchone()['total']
+
+        # --- Notes processed per device (drives level distribution + leaderboard) ---
+        per_device = conn.execute("""
+            SELECT anon_id,
+                   (SELECT user_name FROM usage_events ue2 WHERE ue2.anon_id = ue1.anon_id AND ue2.user_name IS NOT NULL ORDER BY ue2.created_at DESC LIMIT 1) AS display_name,
+                   SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed
+            FROM usage_events ue1
+            GROUP BY anon_id
+            HAVING notes_processed > 0
+        """).fetchall()
+
+        # Mirrors the frontend's LEVEL_THRESHOLDS exactly.
+        level_thresholds = [
+            (1, 0, '🌱 Beginner'), (2, 5, '📖 Learner'), (3, 10, '✏️ Note Taker'),
+            (4, 20, '🎓 Scholar'), (5, 40, '🧠 Expert'), (6, 75, '🏆 Master'), (7, 150, '👑 Legend'),
+        ]
+
+        def level_for_count(n):
+            current = level_thresholds[0]
+            for lvl in level_thresholds:
+                if n >= lvl[1]:
+                    current = lvl
+            return current[2]
+
+        level_distribution = {}
+        for row in per_device:
+            label = level_for_count(row['notes_processed'])
+            level_distribution[label] = level_distribution.get(label, 0) + 1
+
+        leaderboard = sorted(
+            [{'name': r['display_name'] or 'Anonymous', 'notes_processed': r['notes_processed']} for r in per_device],
+            key=lambda x: x['notes_processed'], reverse=True
+        )[:10]
+
+        # --- Retention: distinct devices active in the last 7 / 30 days ---
+        now = datetime.now(timezone.utc)
+        wau_cutoff = (now - timedelta(days=7)).isoformat()
+        mau_cutoff = (now - timedelta(days=30)).isoformat()
+        wau = conn.execute("SELECT COUNT(DISTINCT anon_id) AS c FROM usage_events WHERE created_at >= ?", (wau_cutoff,)).fetchone()['c']
+        mau = conn.execute("SELECT COUNT(DISTINCT anon_id) AS c FROM usage_events WHERE created_at >= ?", (mau_cutoff,)).fetchone()['c']
+
+        conn.close()
+
+        # --- Gemini TTS live load (proxy for quota headroom) ---
+        with _gemini_tts_gate_lock:
+            gemini_recent_calls = len(_gemini_tts_call_times)
+
+        return jsonify({
+            'status': 'success',
+            'coins_economy': {'signed_in_total': signed_in_coins, 'guest_total': guest_coins},
+            'level_distribution': level_distribution,
+            'leaderboard': leaderboard,
+            'retention': {'weekly_active': wau, 'monthly_active': mau},
+            'gemini_load': {'recent_calls_last_60s': gemini_recent_calls, 'safe_limit_per_worker': GEMINI_TTS_SAFE_RPM_PER_WORKER},
+        })
+    except Exception as e:
+        print(f"❌ Admin insights error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/admin/announcements-list')
 def admin_announcements_list():
     if not _is_admin_logged_in():
@@ -2864,12 +3113,17 @@ def admin_announce():
         # just that one device (anon_id). Left out/empty, it broadcasts
         # to everyone exactly as announcements always have.
         target_anon_id = (data.get('target_anon_id') or '').strip()[:64] or None
+        # NEW: optional ISO datetime string — if in the future, this
+        # announcement stays hidden from students until that time
+        # arrives (checked on every /announcements/list poll, no
+        # separate scheduler/cron job needed).
+        scheduled_at = (data.get('scheduled_at') or '').strip() or None
         if not message:
             return jsonify({'status': 'error', 'message': 'Message එකක් ලියන්න.'}), 400
         conn = get_db()
         conn.execute(
-            "INSERT INTO announcements (message, created_at, target_anon_id) VALUES (?, ?, ?)",
-            (message, datetime.now(timezone.utc).isoformat(), target_anon_id)
+            "INSERT INTO announcements (message, created_at, target_anon_id, scheduled_at) VALUES (?, ?, ?, ?)",
+            (message, datetime.now(timezone.utc).isoformat(), target_anon_id, scheduled_at)
         )
         conn.commit()
         conn.close()
@@ -2891,17 +3145,22 @@ def announcements_list():
     notification popup show the full recent list instead."""
     try:
         anon_id = (request.args.get('anon_id') or '').strip()[:64]
+        now_iso = datetime.now(timezone.utc).isoformat()
         conn = get_db()
         if anon_id:
             rows = conn.execute(
                 "SELECT id, message, created_at FROM announcements "
-                "WHERE target_anon_id IS NULL OR target_anon_id = ? "
+                "WHERE (target_anon_id IS NULL OR target_anon_id = ?) "
+                "AND (scheduled_at IS NULL OR scheduled_at <= ?) "
                 "ORDER BY id DESC LIMIT 20",
-                (anon_id,)
+                (anon_id, now_iso)
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT id, message, created_at FROM announcements WHERE target_anon_id IS NULL ORDER BY id DESC LIMIT 20"
+                "SELECT id, message, created_at FROM announcements "
+                "WHERE target_anon_id IS NULL AND (scheduled_at IS NULL OR scheduled_at <= ?) "
+                "ORDER BY id DESC LIMIT 20",
+                (now_iso,)
             ).fetchall()
         conn.close()
         return jsonify({'status': 'success', 'announcements': [dict(row) for row in rows]})
