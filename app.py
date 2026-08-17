@@ -837,24 +837,23 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     — a genuinely different voice engine from gTTS (LLM-driven, not a
     classic speech synthesizer), currently in Preview.
 
-    SPEED: instead of sending the entire script as ONE Gemini TTS
-    request (which made generation time scale with total script
-    length), each PARAGRAPH is sent as its own request and all of them
-    run CONCURRENTLY via a thread pool — real parallel API calls, not
-    just async bookkeeping. For a typical multi-paragraph note this
-    cuts wall-clock generation time roughly in proportion to how many
-    paragraphs run at once (up to 4 at a time), since Gemini TTS
-    latency is dominated by the length of what it's asked to speak in
-    a single call. Each paragraph still gets its own continuous,
-    natural-flowing delivery — only the pause BETWEEN paragraphs is
-    stitched in afterward, exactly like the gTTS pipeline already does.
+    SPEED: sends the ENTIRE script as ONE single Gemini TTS request —
+    exactly how Google AI Studio's own Playground does it, which is
+    why testing directly there feels fast. An earlier version of this
+    function split the script into paragraphs and ran multiple
+    SEPARATE calls (even in parallel, batched 2-at-a-time), but that
+    turned out to be SLOWER overall for typical multi-paragraph notes:
+    each separate API call pays its own per-request setup/network
+    overhead, and with only 2 running at once, a note with e.g. 5
+    paragraphs needed 3 sequential batches — compounding that overhead
+    instead of paying it once. One request for the whole script avoids
+    all of that.
 
-    NOTE on sentence timings: since each paragraph is now its own
-    separately-measured audio segment, sentence timings are estimated
-    by distributing each paragraph's own real measured duration
-    proportionally across its sentences by character count — an
-    approximation, but a more locally-accurate one than spreading a
-    single total duration across the whole script.
+    NOTE on sentence timings: Gemini TTS doesn't return per-sentence
+    boundaries, so timings are ESTIMATED by distributing the total
+    measured audio duration proportionally across sentences by
+    character count — an approximation, not exact, but close enough
+    for karaoke-style highlighting in practice.
     """
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
@@ -866,82 +865,70 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         voice_name = GEMINI_TTS_VOICES.get(lang, 'Leda')
 
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
+    flat_sentences = []
+    for paragraph in paragraphs:
+        sentences = split_into_sentences(paragraph) or [paragraph]
+        flat_sentences.extend(sentences)
+    if not flat_sentences:
+        flat_sentences = [text]
 
     # Director's notes: fixed Style (Empathetic) + Pace (Natural), per
     # Gemini TTS's own prompting convention. Docs recommend keeping
     # these instructions in English even when the transcript itself is
     # in another language (Sinhala/Tamil), for best results.
-    directed_prefix = (
+    directed_prompt = (
         "Style: Empathetic — warm, caring, and encouraging delivery, "
         "like a supportive teacher patiently explaining something to a student. "
         "IMPORTANT: speak clearly and audibly at a normal, full speaking volume — "
         "NOT a whisper, NOT hushed or breathy, every word should be crisp and easy to hear.\n"
         "Pace: Natural, comfortable speaking speed — not rushed, not slow.\n\n"
+        f"{text}"
     )
 
-    def _generate_paragraph_audio(paragraph_text):
-        response = client.models.generate_content(
-            model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
-            contents=directed_prefix + paragraph_text,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
-                    )
-                ),
-            )
+    response = client.models.generate_content(
+        model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
+        contents=directed_prompt,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+                )
+            ),
         )
-        if not getattr(response, 'candidates', None):
-            raise GeminiGenerationError("Gemini TTS returned no audio for a section (possibly blocked by safety filters).")
-        audio_data = response.candidates[0].content.parts[0].inline_data.data
-        # Gemini TTS returns raw 24kHz 16-bit mono PCM — wrap it as an
-        # AudioSegment the same way the rest of this file already handles
-        # audio (so export/duration/etc. all work identically to gTTS output).
-        return AudioSegment(data=audio_data, sample_width=2, frame_rate=24000, channels=1)
+    )
 
-    if len(paragraphs) > 1:
-        # FIX (increased 503 "high demand" errors app-wide): this was
-        # max_workers=4 — a burst of 4 SIMULTANEOUS Gemini calls all
-        # hitting the same API project at once likely contributed to
-        # tripping Google's project-level rate/capacity limits, which
-        # then surfaced as "high demand" 503 errors even on totally
-        # unrelated features (like script generation) sharing the same
-        # API key. Reduced to 2 concurrent calls — still faster than
-        # one-at-a-time, but a much gentler burst on the shared quota.
-        with ThreadPoolExecutor(max_workers=min(len(paragraphs), 2)) as executor:
-            paragraph_segments = list(executor.map(_generate_paragraph_audio, paragraphs))
-    else:
-        paragraph_segments = [_generate_paragraph_audio(paragraphs[0])]
+    if not getattr(response, 'candidates', None):
+        raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
 
-    paragraph_silence = AudioSegment.silent(duration=500, frame_rate=24000)
-    combined = AudioSegment.silent(duration=0, frame_rate=24000)
+    audio_data = response.candidates[0].content.parts[0].inline_data.data
+    # Gemini TTS returns raw 24kHz 16-bit mono PCM — wrap it as an
+    # AudioSegment the same way the rest of this file already handles
+    # audio (so export/duration/etc. all work identically to gTTS output).
+    audio_segment = AudioSegment(
+        data=audio_data,
+        sample_width=2,
+        frame_rate=24000,
+        channels=1,
+    )
+
+    total_duration_ms = len(audio_segment)
+    total_chars = sum(len(s) for s in flat_sentences) or 1
     sentence_timings = []
+    cursor_ms = 0
+    for sentence_text in flat_sentences:
+        share = len(sentence_text) / total_chars
+        duration_ms = total_duration_ms * share
+        start_ms = cursor_ms
+        end_ms = cursor_ms + duration_ms
+        sentence_timings.append({
+            'text': sentence_text,
+            'start': round(start_ms / 1000, 3),
+            'end': round(end_ms / 1000, 3),
+        })
+        cursor_ms = end_ms
 
-    for p_index, paragraph in enumerate(paragraphs):
-        paragraph_segment = paragraph_segments[p_index]
-        paragraph_offset_ms = len(combined)
-        combined += paragraph_segment
-
-        sentences = split_into_sentences(paragraph) or [paragraph]
-        total_chars = sum(len(s) for s in sentences) or 1
-        cursor_ms = paragraph_offset_ms
-        for sentence_text in sentences:
-            share = len(sentence_text) / total_chars
-            duration_ms = len(paragraph_segment) * share
-            start_ms = cursor_ms
-            end_ms = cursor_ms + duration_ms
-            sentence_timings.append({
-                'text': sentence_text,
-                'start': round(start_ms / 1000, 3),
-                'end': round(end_ms / 1000, 3),
-            })
-            cursor_ms = end_ms
-
-        if p_index != len(paragraphs) - 1:
-            combined += paragraph_silence
-
-    return combined, sentence_timings
+    return audio_segment, sentence_timings
 
 
 class GeminiGenerationError(Exception):
