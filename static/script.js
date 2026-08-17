@@ -4028,7 +4028,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (clearBtn) clearBtn.classList.remove('hidden');
         popupList.innerHTML = announcements.map(a => {
             let timeText = '';
-            try { timeText = new Date(a.created_at).toLocaleString(); } catch (e) { /* ignore */ }
+            try {
+                const dt = new Date(a.created_at);
+                timeText = dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ', ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (e) { /* ignore */ }
             return `
                 <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
                     <p class="notification-popup-message" style="margin: 0 0 4px;">${escapeNotificationHtml(a.message)}</p>
