@@ -1365,34 +1365,34 @@
                 return;
             }
             let html = '';
-            let viewedChanged = false;
             lastReportsData.forEach(r => {
                 const fullText = r.note_text || '';
                 const isExpanded = expandedReportIds.has(r.id);
                 const hasMore = fullText.length > 160;
                 const preview = hasMore ? fullText.slice(0, 160) + '…' : fullText;
 
-                // FIX: a report only clears its highlight once THIS
-                // specific report has been viewed — not just from
-                // visiting the Reports tab. Short reports with no
-                // "View full note" button (their whole content is
-                // already visible right here) count as viewed
-                // automatically, since there's nothing further to click.
-                if (!hasMore && !viewed.has(r.id)) {
-                    viewed.add(r.id);
-                    viewedChanged = true;
-                }
+                // FIX: previously, reports whose full text was already
+                // short enough to show with no "expand" needed got
+                // AUTO-marked as viewed the instant they rendered —
+                // meaning the highlight/NEW tag never actually showed
+                // for them at all (most real reports are short, so
+                // this broke the feature almost entirely). Every
+                // report now requires an explicit click on "👁️ View"
+                // to clear its highlight, regardless of length.
                 const isNew = !viewed.has(r.id);
                 const itemClass = isNew ? 'note-item report-item-new' : 'note-item';
                 const newTag = isNew
                     ? '<span style="background:#fb923c; color:#1a1208; font-size:0.62rem; font-weight:800; padding:2px 7px; border-radius:20px; margin-left:8px; vertical-align:middle;">NEW</span>'
                     : '';
+                const viewLabel = hasMore
+                    ? (isExpanded ? '▲ Show less' : '👁️ View full note')
+                    : (isExpanded ? '▲ Hide' : '👁️ View');
                 html += `<div class="${itemClass}">
                     <div class="note-item-info">
                         <div class="note-item-title">🚩 ${escapeHtml(r.title || '(deleted note)')}${newTag}</div>
                         <div class="note-item-subject">${escapeHtml(r.subject || '')} · Reason: ${escapeHtml(r.reason || '(none given)')}</div>
                         <div class="note-item-snippet">${escapeHtml(isExpanded ? fullText : preview)}</div>
-                        ${hasMore ? `<button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${isExpanded ? '▲ Show less' : '▼ View full note'}</button>` : ''}
+                        <button onclick="toggleReportView(${r.id})" style="background:none; border:none; color:var(--accent); font-size:0.72rem; font-weight:700; cursor:pointer; padding:4px 0;">${viewLabel}</button>
                         <div class="note-item-date">Reported: ${r.created_at}</div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1402,10 +1402,6 @@
                 </div>`;
             });
             wrap.innerHTML = html;
-            if (viewedChanged) {
-                saveViewedReportIds(viewed);
-                updateReportsBadge();
-            }
         }
 
         function toggleReportView(reportId) {

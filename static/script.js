@@ -731,7 +731,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const promptText = lang === 'en'
             ? 'Why are you reporting this note? (optional)'
             : 'ඇයි මේ note එක report කරන්නේ? (optional)';
-        const reason = window.prompt(promptText, '') || '';
+        const rawReason = window.prompt(promptText, '');
+        // FIX: window.prompt() returns null specifically when the
+        // person clicks Cancel — the old code did `|| ''`, which
+        // silently turned that null into an empty string and still
+        // submitted the report anyway. Now Cancel genuinely aborts.
+        if (rawReason === null) return;
+        const reason = rawReason;
         try {
             const res = await fetch(`/library/report/${noteId}`, {
                 method: 'POST',
