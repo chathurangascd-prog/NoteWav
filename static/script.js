@@ -3769,34 +3769,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 title: 'ℹ️ NoteWav AI ගැන — App එක Use කරන විදිහ',
                 html: `
                     <h4>1️⃣ පාඩම් සටහන ඇතුළත් කරන්න</h4>
-                    <p>ඔබේ පාඩම් සටහන type කරන්න, හෝ පාඩමේ රූපයක් (photo) upload කරන්න — app එක automatic ලෙස රූපයෙන් text එක උපුටාගනියි (OCR).</p>
+                    <p>Type කරන්න, photos කිහිපයක් (batch) upload කරන්න, PDF එකක් upload කරන්න, හෝ camera එකෙන් photo ගන්න — app එක automatic ලෙස text එක උපුටාගනියි (OCR).</p>
                     <h4>2️⃣ Study Mode එකක් තෝරන්න</h4>
                     <p><b>Smart Study:</b> AI මගින් podcast script එකක් සහ mind map එකක් සකසනවා.<br><b>Full Text Mode:</b> ඔබේ text එකම audio + mind map බවට හැරවෙනවා.</p>
                     <h4>3️⃣ "Script එක සකසන්න" click කරන්න</h4>
                     <p>AI එක ඔබේ සටහන process කරයි. ඕන නම් script එක Edit කරන්න (Safety Check step එකේදී).</p>
-                    <h4>4️⃣ Audio Generate කරන්න</h4>
-                    <p>"තරංග උත්පාදනය කරන්න" click කරන්න — podcast-style audio එකක් සකසේවි, play/pause/speed/skip controls සමඟ.</p>
-                    <h4>5️⃣ Mind Map එක බලන්න</h4>
+                    <h4>4️⃣ Voice Engine එකක් තෝරන්න</h4>
+                    <p><b>🤖 Standard:</b> Free, ඉක්මන්.<br><b>✨ Natural (AI):</b> ගොඩක් human-like voice, Male/Female choice — free trials 3ක් ලැබෙනවා.</p>
+                    <h4>5️⃣ Audio Generate කරන්න</h4>
+                    <p>Play/pause/speed/skip controls සමඟ podcast-style audio එකක් — sentence-by-sentence highlight වෙනවා.</p>
+                    <h4>6️⃣ Mind Map එක බලන්න</h4>
                     <p>Visual mind map එකක් auto-generate වේ — click කර විශාල කර, PNG/PDF විදිහට download කරගන්න පුළුවන්.</p>
-                    <h4>6️⃣ Library එකට Save කරන්න</h4>
-                    <p>ඔබේ notes පසුව use කරන්න Library එකට save කරගන්න, subject එකකින් organize කරගන්න.</p>
+                    <h4>7️⃣ Library එකට Save කරන්න</h4>
+                    <p>Notes save කරන්න, search කරන්න, notes කිහිපයක් Combine කරන්න, Offline Audio Player එකෙන් internet නැතුවත් අහන්න.</p>
+                    <h4>🌱 Levels & Progress</h4>
+                    <p>Notes process කරන ගණන අනුව Level up වෙනවා (Beginner → Legend) — coins bonus එකකුත් ලැබෙනවා!</p>
                 `,
             },
             en: {
                 title: 'ℹ️ About NoteWav AI — How to Use the App',
                 html: `
                     <h4>1️⃣ Enter Your Note</h4>
-                    <p>Type your study note, or upload a photo of your lesson — the app automatically extracts the text from the image (OCR).</p>
+                    <p>Type it, upload multiple photos (batch), upload a PDF, or take a photo with your camera — the app automatically extracts the text (OCR).</p>
                     <h4>2️⃣ Choose a Study Mode</h4>
                     <p><b>Smart Study:</b> AI prepares a podcast script and a mind map for you.<br><b>Full Text Mode:</b> Your own text becomes the audio + mind map directly.</p>
                     <h4>3️⃣ Click "Prepare Script"</h4>
                     <p>The AI processes your note. You can edit the script if needed (during the Safety Check step).</p>
-                    <h4>4️⃣ Generate Audio</h4>
-                    <p>Click "Generate Audio" — a podcast-style narration is created, with play/pause/speed/skip controls.</p>
-                    <h4>5️⃣ View the Mind Map</h4>
+                    <h4>4️⃣ Choose a Voice Engine</h4>
+                    <p><b>🤖 Standard:</b> Free, fast.<br><b>✨ Natural (AI):</b> Much more human-like voice, Male/Female choice — you get 3 free trials.</p>
+                    <h4>5️⃣ Generate Audio</h4>
+                    <p>A podcast-style narration with play/pause/speed/skip controls — highlights sentence-by-sentence as it plays.</p>
+                    <h4>6️⃣ View the Mind Map</h4>
                     <p>A visual mind map is auto-generated — click to enlarge it, and download it as a PNG or PDF.</p>
-                    <h4>6️⃣ Save to Library</h4>
-                    <p>Save your notes to the Library to use later, organized by subject.</p>
+                    <h4>7️⃣ Save to Library</h4>
+                    <p>Save notes, search them, Combine multiple notes together, and use the Offline Audio Player to listen without internet.</p>
+                    <h4>🌱 Levels & Progress</h4>
+                    <p>Level up (Beginner → Legend) based on how many notes you process — with a coins bonus each time!</p>
                 `,
             },
         },
@@ -3896,9 +3904,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const popupMessage = document.getElementById('notification-popup-message');
     const popupTimeText = document.getElementById('notification-popup-time-text');
     const popupClose = document.getElementById('notification-popup-close');
+    const clearBtn = document.getElementById('notification-clear-btn');
     if (!bellBtn || !badge || !popup) return;
 
     let latestAnnouncement = null;
+    let isCleared = false;
 
     function getSeenId() {
         try {
@@ -3927,6 +3937,9 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('[NoteWav debug] my anon_id:', anonId, '| server response:', data, '| my seen_id:', getSeenId());
             if (data.status !== 'success' || !data.announcement) return;
             const isNew = data.announcement.id > getSeenId();
+            if (latestAnnouncement && latestAnnouncement.id !== data.announcement.id) {
+                isCleared = false; // a genuinely new message arrived — un-clear
+            }
             latestAnnouncement = data.announcement;
             if (isNew) {
                 badge.classList.remove('hidden');
@@ -3939,7 +3952,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     bellBtn.addEventListener('click', function() {
-        if (!latestAnnouncement) {
+        if (!latestAnnouncement || isCleared) {
+            popupMessage.textContent = 'නව notifications නෑ.';
+            popupTimeText.textContent = '';
+            if (clearBtn) clearBtn.classList.add('hidden');
             popup.classList.toggle('hidden');
             return;
         }
@@ -3950,9 +3966,19 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {
             popupTimeText.textContent = '';
         }
+        if (clearBtn) clearBtn.classList.remove('hidden');
         popup.classList.toggle('hidden');
         markSeen(latestAnnouncement.id);
     });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            isCleared = true;
+            if (latestAnnouncement) markSeen(latestAnnouncement.id);
+            popup.classList.add('hidden');
+        });
+    }
 
     if (popupClose) {
         popupClose.addEventListener('click', function(e) {
