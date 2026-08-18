@@ -3009,6 +3009,20 @@ def admin_insights():
         signed_in_coins = conn.execute("SELECT COALESCE(SUM(coins), 0) AS total FROM users").fetchone()['total']
         guest_coins = conn.execute("SELECT COALESCE(SUM(coins), 0) AS total FROM user_state").fetchone()['total']
 
+        # NEW: estimated storage used by saved photo attachments — since
+        # images are stored as base64 text directly in the (persistent,
+        # free-tier-capped) database rather than as files, this is
+        # worth watching so a real capacity issue is caught early
+        # rather than as a surprise when the database suddenly rejects
+        # writes.
+        image_stats = conn.execute("""
+            SELECT COUNT(*) AS image_count, COALESCE(SUM(LENGTH(source_image_data)), 0) AS total_bytes
+            FROM notes WHERE source_image_data IS NOT NULL
+        """).fetchone()
+        image_storage_mb = round(image_stats['total_bytes'] / (1024 * 1024), 2)
+        FREE_TIER_STORAGE_GB = 5  # Turso free tier, as of 2026
+        image_storage_pct_of_free_tier = round((image_stats['total_bytes'] / (FREE_TIER_STORAGE_GB * 1024 * 1024 * 1024)) * 100, 2)
+
         # --- Notes processed per device (drives level distribution + leaderboard) ---
         per_device = conn.execute("""
             SELECT anon_id,
@@ -3062,6 +3076,12 @@ def admin_insights():
             'leaderboard': leaderboard,
             'retention': {'weekly_active': wau, 'monthly_active': mau},
             'gemini_load': {'recent_calls_last_60s': gemini_recent_calls, 'safe_limit_per_worker': GEMINI_TTS_SAFE_RPM_PER_WORKER},
+            'image_storage': {
+                'image_count': image_stats['image_count'],
+                'total_mb': image_storage_mb,
+                'pct_of_free_tier': image_storage_pct_of_free_tier,
+                'free_tier_gb': FREE_TIER_STORAGE_GB,
+            },
         })
     except Exception as e:
         print(f"❌ Admin insights error: {e}")

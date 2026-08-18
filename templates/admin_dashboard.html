@@ -1450,14 +1450,37 @@
                 const ce = data.coins_economy;
                 const ret = data.retention;
                 const load = data.gemini_load;
+                const img = data.image_storage;
 
-                let html = '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:24px;">';
+                // Color-codes green/orange/red as usage approaches the
+                // free-tier limit, so a real capacity problem is
+                // visually obvious at a glance, not just a number.
+                let imgColor = '#4ade80';
+                if (img.pct_of_free_tier >= 70) imgColor = '#ef4444';
+                else if (img.pct_of_free_tier >= 40) imgColor = '#fb923c';
+
+                let html = '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:12px;">';
                 html += statCard('🪙 Coins (signed-in accounts)', ce.signed_in_total);
                 html += statCard('🪙 Coins (guest devices)', ce.guest_total);
                 html += statCard('📅 Weekly Active Devices', ret.weekly_active);
                 html += statCard('📅 Monthly Active Devices', ret.monthly_active);
                 html += statCard('🎙️ Gemini TTS calls (last 60s)', `${load.recent_calls_last_60s} / ${load.safe_limit_per_worker}`);
+                html += `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center;">
+                    <div style="font-size:1.5rem; font-weight:800; color:${imgColor};">${img.total_mb} MB</div>
+                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">📷 Image Storage (${img.image_count} photos)</div>
+                </div>`;
                 html += '</div>';
+
+                html += `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:0.82rem; font-weight:700;">📷 Image Storage vs Free Tier (${img.free_tier_gb}GB)</span>
+                        <span style="font-size:0.8rem; font-weight:700; color:${imgColor};">${img.pct_of_free_tier}%</span>
+                    </div>
+                    <div style="height:8px; border-radius:4px; background:var(--surface-1, #16161f); overflow:hidden;">
+                        <div style="height:100%; width:${Math.min(100, img.pct_of_free_tier)}%; background:${imgColor}; border-radius:4px; transition:width 0.4s ease;"></div>
+                    </div>
+                    <p style="font-size:0.7rem; color:var(--text-muted); margin:8px 0 0;">Photos uploaded with notes are stored in the database (not local disk) so they survive redeploys. Watch this if it climbs past ~40%.</p>
+                </div>`;
 
                 html += '<h3 style="font-size:0.95rem; margin:0 0 10px;">🌱 Level Distribution</h3>';
                 const levelEntries = Object.entries(data.level_distribution);
