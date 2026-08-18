@@ -74,10 +74,6 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 # ========================================
 # SENTRY ERROR TRACKING (optional — only activates if SENTRY_DSN is set)
 # ========================================
-# Free Sentry account: sentry.io → create a Flask project → copy the
-# DSN → set it as SENTRY_DSN in Render's environment variables. Once
-# set, unhandled errors show up in Sentry's dashboard (with full stack
-# traces) instead of only being visible by scrolling through Render logs.
 SENTRY_DSN = os.environ.get('SENTRY_DSN')
 if SENTRY_DSN:
     try:
@@ -98,10 +94,6 @@ else:
 # ========================================
 # GOOGLE SIGN-IN (OAuth 2.0)
 # ========================================
-# Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to be set in
-# Render's environment variables (from Google Cloud Console → APIs &
-# Services → Credentials). GOOGLE_REDIRECT_URI defaults to the
-# production callback URL but can be overridden for local testing.
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
 GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'https://notewav.onrender.com/auth/google/callback')
@@ -119,24 +111,6 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notewav.db')
 # ========================================
 # TURSO (persistent hosted SQLite) — replaces the local notewav.db file
 # ========================================
-# WHY: Render's free tier filesystem is ephemeral — the local
-# notewav.db file (and everything in it: notes, users, usage_events)
-# is wiped on every redeploy/restart/spin-down. Turso is a genuinely
-# persistent, SQLite-compatible hosted database with a free tier that
-# never expires — pointing the app at it instead means data survives
-# deploys with essentially no code changes elsewhere in this file.
-#
-# HOW: a small compatibility layer below (TursoRow / TursoCursorResult
-# / TursoConnection) mimics the exact subset of sqlite3's own API this
-# file already uses (.execute(sql, params), .fetchall(), .fetchone(),
-# .commit(), .close(), and dict(row)/row['col'] access on results) —
-# so get_db() is the ONLY thing that changes; every other conn.execute
-# (...) call throughout this file keeps working completely unchanged.
-#
-# SAFETY NET: if TURSO_DATABASE_URL / TURSO_AUTH_TOKEN aren't set
-# (e.g. running locally without them configured yet), this falls back
-# to the original local sqlite3 file — nothing breaks, it just won't
-# persist across deploys until those two env vars are added.
 TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL')
 TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
 USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
@@ -191,22 +165,7 @@ class TursoConnection:
     """Mimics sqlite3.Connection's .execute()/.commit()/.close() — but
     UNLIKE the previous version of this class, creates a BRAND NEW
     libsql_client for every single get_db() call, instead of sharing
-    ONE persistent client across the entire app's lifetime.
-
-    WHY THE CHANGE: sharing one long-lived client (with its own
-    internal background thread + asyncio event loop) across every
-    request in a multi-worker gunicorn process turned out to hang
-    EVERY query in Render's environment specifically (confirmed: an
-    isolated standalone script with a FRESH client succeeded instantly
-    with the exact same URL/token, while the app's shared client hung
-    on literally every call, including the simplest possible query).
-    Creating a fresh, short-lived client per request costs a small
-    amount of extra connection-setup time per call, but completely
-    avoids whatever shared-state/threading interaction was breaking
-    things — and this is exactly how the original sqlite3.connect()
-    version of get_db() always worked anyway (a fresh connection each
-    time), so this restores that same simple, safe pattern.
-    """
+    ONE persistent client across the entire app's lifetime."""
 
     _query_executor = ThreadPoolExecutor(max_workers=4)
     _QUERY_TIMEOUT_SECONDS = 15
@@ -271,42 +230,19 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
-    # Added later: which device/browser saved this note, so the admin
-    # can see who created it. ALTER TABLE ... ADD COLUMN is wrapped in
-    # try/except since SQLite has no "IF NOT EXISTS" for columns, and
-    # this runs on every startup — the second and later times, the
-    # column already exists and the ALTER just fails harmlessly.
     for column_def in ["anon_id TEXT", "user_name TEXT"]:
         try:
             conn.execute(f"ALTER TABLE notes ADD COLUMN {column_def}")
         except Exception:
             pass  # column already exists
-    # Added later: which Google account (if any) owns this note. NULL
-    # means it's a guest-saved note — those keep behaving EXACTLY as
-    # before (visible in the shared/global Library listing to everyone,
-    # no privacy filtering). A note WITH an owner_google_id is private
-    # to that signed-in account and syncs across their devices.
     try:
         conn.execute("ALTER TABLE notes ADD COLUMN owner_google_id TEXT")
     except Exception:
         pass  # column already exists
-    # NEW: stores the ORIGINAL uploaded photo (as a compressed base64
-    # data URL) alongside a note, so a student can look back at the
-    # actual page they photographed later — not just the extracted
-    # text. Stored in the DATABASE (Turso, persistent) rather than as
-    # a file on Render's local disk, because Render's local filesystem
-    # is wiped on every redeploy/restart — a saved file would silently
-    # vanish the next time the app deploys, but a database row survives.
     try:
         conn.execute("ALTER TABLE notes ADD COLUMN source_image_data TEXT")
     except Exception:
         pass  # column already exists
-    # Lightweight, anonymous usage tracking for the admin dashboard —
-    # NOT a real login/account system. "anon_id" is a random ID the
-    # browser generates once and stores in localStorage (so the same
-    # device is recognized across visits), paired with whatever
-    # display name the person entered in the app (if any). No
-    # passwords, emails, or other personal data are collected.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS usage_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -316,28 +252,14 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
-    # Added later: a short, human-readable device/browser summary
-    # (e.g. "Samsung Internet · Android · Mobile"), derived from the
-    # request's User-Agent header at track time — lets the admin see
-    # which devices/browsers are actually being used, for spotting
-    # patterns like "reports of slowness are mostly one browser".
     try:
         conn.execute("ALTER TABLE usage_events ADD COLUMN device_info TEXT")
     except Exception:
         pass  # column already exists
-    # Added later: the signed-in Google account's email at the time of
-    # this event (NULL for guests, or for events logged before this
-    # column existed) — lets the admin see which real account a device
-    # belongs to, not just an anonymous ID.
     try:
         conn.execute("ALTER TABLE usage_events ADD COLUMN user_email TEXT")
     except Exception:
         pass  # column already exists
-    # Tracks the latest known "coins" balance the frontend reports for
-    # each device — coins themselves live in the browser's
-    # localStorage (there's no real spend/earn logic server-side yet),
-    # this table just mirrors the last-seen value so the admin can see
-    # it without needing real accounts.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS user_state (
             anon_id TEXT PRIMARY KEY,
@@ -345,10 +267,6 @@ def init_db():
             updated_at TEXT
         )
     """)
-    # Lets the admin push a short message that shows up as a
-    # notification badge for everyone using the app (checked
-    # periodically from the frontend) — a simple one-way broadcast,
-    # not per-user messaging.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS announcements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -356,19 +274,10 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
-    # Added later: if set, this announcement is PRIVATE — only the one
-    # device with this anon_id will ever see it. NULL (the default,
-    # unchanged from before) means a broadcast everyone sees, exactly
-    # as announcements worked originally.
     try:
         conn.execute("ALTER TABLE announcements ADD COLUMN target_anon_id TEXT")
     except Exception:
         pass  # column already exists
-    # Real signed-in accounts (Google Sign-In). Guests who never log in
-    # never get a row here — their coins/streak/profile stay exactly as
-    # before (device-local, localStorage only). Once someone signs in,
-    # their coins/streak/name/picture live HERE instead, so the same
-    # values follow them to any device they log into.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             google_id TEXT PRIMARY KEY,
@@ -382,18 +291,12 @@ def init_db():
             last_login TEXT
         )
     """)
-    # Logs every successful Gemini API call — lets the admin see how
-    # close usage is getting to the free-tier monthly quota, well
-    # before it actually runs out.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS gemini_calls (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL
         )
     """)
-    # NEW: lets admin ban an abusive device (by anon_id) or account (by
-    # email) — a banned identity can't process notes or generate audio
-    # anymore, but their existing saved notes aren't deleted.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS banned_identities (
             identity TEXT PRIMARY KEY,
@@ -402,10 +305,6 @@ def init_db():
             banned_at TEXT NOT NULL
         )
     """)
-    # NEW: lets a student flag a note in the (shared, guest-visible)
-    # Library as inappropriate/spam — admin reviews these in a
-    # dedicated "Reports" section instead of having to browse the
-    # entire library looking for problems.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS note_reports (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -415,9 +314,6 @@ def init_db():
             dismissed INTEGER DEFAULT 0
         )
     """)
-    # NEW: an announcement with a future scheduled_at won't show to
-    # students until that time arrives — NULL (default) means "show
-    # immediately", exactly like before.
     try:
         conn.execute("ALTER TABLE announcements ADD COLUMN scheduled_at TEXT")
     except Exception:
@@ -444,24 +340,13 @@ def validate_text_length(text):
 
 
 # ========================================
-# API RATE LIMITING (protects the free Gemini/Vision quota from being
-# exhausted by one misbehaving device — e.g. a stuck retry loop)
+# API RATE LIMITING
 # ========================================
-# Simple in-memory sliding-window limiter, keyed per signed-in account
-# (or IP address for guests). NOTE: since Render runs 2 gunicorn worker
-# PROCESSES, each has its own separate memory — a device's requests
-# could land on either worker, so the real effective limit across both
-# workers combined is up to ~2x the number configured below. That's an
-# acceptable approximation for protecting against runaway/bot usage;
-# it's not meant to be a precise per-second guarantee.
 _rate_limit_lock = threading.Lock()
 _rate_limit_buckets = defaultdict(deque)
 
 
 def _check_rate_limit(key, max_requests, window_seconds):
-    """Returns (allowed: bool, retry_after_seconds: int). retry_after
-    is how long until the oldest request in the window expires — i.e.
-    the soonest another attempt could succeed."""
     now = time.time()
     with _rate_limit_lock:
         bucket = _rate_limit_buckets[key]
@@ -475,10 +360,6 @@ def _check_rate_limit(key, max_requests, window_seconds):
 
 
 def rate_limited(max_requests, window_seconds):
-    """Decorator — apply to any route that hits a paid/quota-limited
-    API (Gemini, Google Cloud Vision) to cap how often one device can
-    call it. Shows the person exactly how many seconds until they can
-    try again, instead of a vague 'wait a bit'."""
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -539,28 +420,39 @@ SAFETY_SETTINGS = [
     types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
 ]
 
+# ========================================
+# GEMINI THINKING BUDGET (FIX — Aug 18, 2026 debugging session)
+# ========================================
+# ROOT CAUSE FOUND: isolated testing directly in Google AI Studio
+# Playground (same account/project, zero app code involved) showed
+# gemini-3.7-flash reliably failing ("An internal error has occurred")
+# specifically when its Thinking level was left at the default
+# "Medium" — a 34.1s request that errored out. The EXACT same prompt,
+# same model, with Thinking level manually lowered to "Low" (or with
+# gemini-2.5-flash using a small manual thinking budget of ~2000
+# tokens) succeeded cleanly and repeatably (9s and 20.8s respectively).
+# This isolates the failure to Google's backend struggling with
+# extended/default thinking budgets on these models right now — NOT a
+# bug in this app's code, NOT a quota/billing issue (2.5-flash worked
+# fine throughout), and NOT related to which API surface is used.
+#
+# FIX: cap the thinking budget on every Gemini call in this file to a
+# small, known-stable value instead of leaving it at the model's
+# default (which behaves like "Medium" and triggers the failure).
+# 2000 tokens is enough for the model to briefly reason about
+# structuring the podcast script / mind map JSON without tipping into
+# the failure zone observed above.
+GEMINI_THINKING_BUDGET = int(os.environ.get('GEMINI_THINKING_BUDGET', '2000'))
+
 
 def parse_device_info(user_agent):
     """Turns a raw User-Agent string into a short, readable summary like
-    'Samsung Internet · Android · Mobile' or 'Chrome · Windows · Desktop'.
-    This is a lightweight, regex-based heuristic (no external library) —
-    it won't be 100% perfect for every obscure browser/device, but it
-    covers the common cases well enough for the admin dashboard to be
-    useful for spotting patterns (e.g. "most of our slow-device reports
-    are Samsung Internet on Android").
-
-    ORDER MATTERS below: Samsung Internet's UA also contains the word
-    "Chrome" (since it's Chromium-based), and new Edge's UA also
-    contains "Chrome" and "Safari" — so the more specific/newer browser
-    checks must run BEFORE the generic ones they'd otherwise be
-    misidentified as.
-    """
+    'Samsung Internet · Android · Mobile' or 'Chrome · Windows · Desktop'."""
     if not user_agent:
         return 'Unknown'
 
     ua = user_agent
 
-    # ---- Browser name (most specific first) ----
     if 'SamsungBrowser' in ua:
         browser = 'Samsung Internet'
     elif 'EdgA' in ua or 'EdgiOS' in ua or 'Edg/' in ua:
@@ -580,7 +472,6 @@ def parse_device_info(user_agent):
     else:
         browser = 'Other'
 
-    # ---- Operating system ----
     if 'Android' in ua:
         os_name = 'Android'
     elif 'iPhone' in ua or 'iPad' in ua or 'iPod' in ua:
@@ -594,7 +485,6 @@ def parse_device_info(user_agent):
     else:
         os_name = 'Unknown'
 
-    # ---- Device type ----
     if 'iPad' in ua or ('Android' in ua and 'Mobile' not in ua):
         device_type = 'Tablet'
     elif 'Mobile' in ua or 'iPhone' in ua or 'Android' in ua:
@@ -685,24 +575,6 @@ def split_into_sentences(text):
 
 
 def split_into_clauses(sentence, max_words=14):
-    """Splits a single sentence further at commas/semicolons — these are
-    NOT separate 'sentences' for highlight-timing purposes (the frontend
-    still highlights the whole original sentence as one unit), but
-    giving each clause its own tiny breathing pause during synthesis
-    makes long sentences sound much less rushed/robotic, closer to how
-    a person naturally pauses briefly at a comma before continuing.
-
-    SAFETY NET: if a clause has no comma/semicolon at all (or the AI's
-    system-prompt instruction to add natural breathing commas didn't
-    get followed for some reason — or this is Full Text Mode, using the
-    student's own raw text as-is, which the system instruction never
-    even sees) and ends up longer than max_words, it gets force-split at
-    a word boundary anyway. Returns a list of (clause_text, is_forced)
-    tuples — 'is_forced' clauses get a shorter, more subtle pause than a
-    real punctuation-based clause break (see clause_pause_ms handling in
-    synthesize_gtts_natural), since there's no actual grammatical pause
-    there — just a practical breath before the sentence runs on too
-    long."""
     raw_parts = re.split(r'(?<=[,;])\s+', sentence)
     final_parts = []
     for part in raw_parts:
@@ -728,25 +600,6 @@ def _tts_sentence_to_segment(args):
 
 def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600,
                              clause_pause_ms=140, forced_break_pause_ms=90, max_workers=5):
-    """Returns (combined_audio, sentence_timings) where sentence_timings
-    is a list of {"text": str, "start": float, "end": float} in
-    SECONDS — the real, measured duration of each sentence's own TTS
-    segment (not a naive equal-split-across-total-duration guess).
-    This lets the frontend highlight whichever sentence is actually
-    playing at any given moment, instead of assuming every line/
-    sentence takes the same amount of time to read aloud (which was
-    very inaccurate for a mix of short and long sentences).
-
-    NEW (naturalness tuning): each sentence is further split into
-    comma/semicolon-delimited CLAUSES, synthesized individually, and
-    stitched back together with a short pause between them — a real
-    comma-based clause gets clause_pause_ms, while a clause that had to
-    be force-split purely because it ran too long with NO punctuation
-    at all gets a shorter forced_break_pause_ms (a subtle breath, not an
-    obvious comma pause, since grammatically there wasn't one there).
-    Sentence-level highlight timing is unaffected (still one timing
-    entry per original full sentence) — only the INTERNAL pacing of
-    longer sentences changes."""
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
@@ -758,17 +611,10 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     if not flat_sentences:
         flat_sentences = [(text, True)]
 
-    # Pre-split every sentence into its clauses (each tagged with
-    # whether the break was a real punctuation break or a forced
-    # word-count break), and build ONE flat task list across ALL
-    # clauses of ALL sentences — keeping the thread pool working on the
-    # smallest possible units in parallel, rather than looping
-    # sentence-by-sentence (which would serialize each sentence's own
-    # clause calls one after another).
     sentence_clause_lists = [split_into_clauses(s) or [(s, False)] for (s, _) in flat_sentences]
     tasks = []
-    task_owner = []  # parallel list: which (sentence_idx, clause_idx) each task belongs to
-    task_is_forced = []  # whether THIS clause was a forced word-count split
+    task_owner = []
+    task_is_forced = []
     for sentence_idx, clauses in enumerate(sentence_clause_lists):
         for clause_idx, (clause_text, is_forced) in enumerate(clauses):
             tasks.append((clause_text, lang))
@@ -778,9 +624,6 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         clause_segments_flat = list(executor.map(_tts_sentence_to_segment, tasks))
 
-    # Regroup the flat clause segments back under their owning sentence,
-    # in original clause order, then stitch each sentence's own clauses
-    # together with the appropriate pause (real comma vs. forced break).
     clause_silence = AudioSegment.silent(duration=clause_pause_ms, frame_rate=GTTS_FRAME_RATE)
     forced_silence = AudioSegment.silent(duration=forced_break_pause_ms, frame_rate=GTTS_FRAME_RATE)
     segments_by_sentence = [[] for _ in flat_sentences]
@@ -794,10 +637,6 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
         for i, (_, clause_seg, is_forced) in enumerate(clause_entries):
             sentence_audio += clause_seg
             if i != len(clause_entries) - 1:
-                # The pause AFTER this clause depends on whether the NEXT
-                # clause's break was forced (word-count) or a real comma —
-                # using is_forced of the clause that just ended is close
-                # enough in practice since forced breaks are symmetric.
                 sentence_audio += forced_silence if is_forced else clause_silence
         segments.append(sentence_audio)
 
@@ -824,25 +663,16 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
 
 
 GEMINI_TTS_VOICES = {
-    'si': 'Leda',   # default to female voice if none chosen
+    'si': 'Leda',
     'ta': 'Leda',
     'en': 'Leda',
 }
 
-# Simplified to just two curated choices — a clear Male and Female
-# newscaster-style voice, instead of overwhelming students with all 30
-# of Gemini's built-in options. Voice names are identical across both
-# model versions below, so no extra mapping needed there.
 GEMINI_TTS_VOICE_OPTIONS = {
     'Sadaltager': 'Male',
     'Leda': 'Female',
 }
 
-# Two selectable model generations — 3.1 is a real generational upgrade
-# (lower latency, more expressive/natural, richer style control) but
-# costs 2x as much per output token ($20/1M vs $10/1M), so it's offered
-# as a distinct, separately-priced choice rather than silently
-# replacing 2.5.
 GEMINI_TTS_MODEL_VERSIONS = {
     'v25': 'gemini-2.5-flash-preview-tts',
     'v31': 'gemini-3.1-flash-tts-preview',
@@ -850,21 +680,6 @@ GEMINI_TTS_MODEL_VERSIONS = {
 
 
 def calculate_gemini_tts_coin_cost(text_length, model_version='v25'):
-    """Tiered pricing for Gemini (Natural AI) TTS generation, based on
-    script length AND which model version was used — real Gemini API
-    cost scales with audio duration (roughly proportional to text
-    length), so a flat per-generation price wouldn't be fair: a short
-    note and a full 2000-character chapter cost very different amounts
-    to actually generate. The 3.1 model also costs exactly 2x as much
-    per output token as 2.5 ($20/1M vs $10/1M), so its coin tiers are
-    scaled up to match.
-
-    v25 tiers (character count of the SCRIPT, capped app-wide at
-    MAX_TEXT_LENGTH=2000):
-      0-500     -> 5 coins   (~50s audio, real cost ≈ $0.0125 / Rs 4)
-      501-1200  -> 12 coins  (~2min audio, real cost ≈ $0.03 / Rs 9)
-      1201+     -> 20 coins  (~3min+ audio, real cost ≈ $0.05 / Rs 15)
-    v31 tiers are exactly double, matching its 2x per-token price."""
     if text_length <= 500:
         base = 5
     elif text_length <= 1200:
@@ -874,45 +689,13 @@ def calculate_gemini_tts_coin_cost(text_length, model_version='v25'):
     return base * 2 if model_version == 'v31' else base
 
 
-# ========================================
-# GEMINI TTS CALL GATE (queue/throttle)
-# ========================================
-# WHY: Google's rate limit for the TTS models is only 10 requests per
-# minute (RPM) at our current billing tier — if several students click
-# "Generate Audio" (Natural AI) around the same time, the 11th+ request
-# in that minute gets flatly REJECTED by Google with a 429 error.
-#
-# This tracks how many Gemini TTS calls THIS worker process has made
-# in the last 60 seconds. If we're near the safety threshold, new
-# requests WAIT (sleep in short increments) for a slot to free up,
-# instead of firing immediately and risking a hard rejection. From the
-# student's perspective, the request just takes a bit longer — the
-# frontend shows friendly rotating "in progress" messages the whole
-# time (see the JS side), so it never looks like a failure.
-#
-# NOTE: this is a PER-WORKER-PROCESS gate (in-memory, not shared across
-# gunicorn's multiple worker processes). With --workers 2, the
-# practical safety margin is set conservatively (4 per worker) so the
-# worst-case combined total across both workers still stays safely
-# under Google's shared 10 RPM limit.
 _gemini_tts_call_times = deque()
 _gemini_tts_gate_lock = threading.Lock()
 GEMINI_TTS_SAFE_RPM_PER_WORKER = 4
-# FIX (502 errors — worker timeout regression): the queue wait
-# (previously up to 45s) combined with the Gemini call's own timeout
-# (90s) could total 135s on a SINGLE attempt alone — already past
-# gunicorn's 120s worker timeout, before even considering that this
-# function retries up to 4 times. Reduced to a much safer cap, and a
-# hard TOTAL TIME BUDGET (see below) now bounds the whole function
-# regardless of how queueing and retries combine.
 GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS = 10
 
 
 def _gemini_tts_call_gate():
-    """Blocks (in short sleeps) until it's safe to make another Gemini
-    TTS call, or gives up after GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS (at
-    which point the caller proceeds anyway — the existing retry logic
-    is the backstop if Google still rejects it)."""
     waited = 0
     while waited < GEMINI_TTS_MAX_QUEUE_WAIT_SECONDS:
         with _gemini_tts_gate_lock:
@@ -924,42 +707,14 @@ def _gemini_tts_call_gate():
                 return
         time.sleep(2)
         waited += 2
-    # Gave up waiting — record the attempt anyway and proceed; the
-    # per-request retry logic in synthesize_gemini_tts will catch a
-    # 429 if Google does reject it.
     with _gemini_tts_gate_lock:
         _gemini_tts_call_times.append(time.time())
 
 
 def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25'):
-    """Generates natural-sounding audio using Gemini's native TTS model
-    — a genuinely different voice engine from gTTS (LLM-driven, not a
-    classic speech synthesizer), currently in Preview.
-
-    SPEED: sends the ENTIRE script as ONE single Gemini TTS request —
-    exactly how Google AI Studio's own Playground does it, which is
-    why testing directly there feels fast. An earlier version of this
-    function split the script into paragraphs and ran multiple
-    SEPARATE calls (even in parallel, batched 2-at-a-time), but that
-    turned out to be SLOWER overall for typical multi-paragraph notes:
-    each separate API call pays its own per-request setup/network
-    overhead, and with only 2 running at once, a note with e.g. 5
-    paragraphs needed 3 sequential batches — compounding that overhead
-    instead of paying it once. One request for the whole script avoids
-    all of that.
-
-    NOTE on sentence timings: Gemini TTS doesn't return per-sentence
-    boundaries, so timings are ESTIMATED by distributing the total
-    measured audio duration proportionally across sentences by
-    character count — an approximation, not exact, but close enough
-    for karaoke-style highlighting in practice.
-    """
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
-    # NEW: person can pick Male (Sadaltager) or Female (Leda); falls
-    # back to a sensible default if they didn't (or picked an invalid
-    # value).
     if voice_name not in GEMINI_TTS_VOICE_OPTIONS:
         voice_name = GEMINI_TTS_VOICES.get(lang, 'Leda')
 
@@ -971,10 +726,6 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     if not flat_sentences:
         flat_sentences = [text]
 
-    # Director's notes: fixed Style (Empathetic) + Pace (Natural), per
-    # Gemini TTS's own prompting convention. Docs recommend keeping
-    # these instructions in English even when the transcript itself is
-    # in another language (Sinhala/Tamil), for best results.
     directed_prompt = (
         "Style: Empathetic — warm, caring, and encouraging delivery, "
         "like a supportive teacher patiently explaining something to a student. "
@@ -984,32 +735,6 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         f"{text}"
     )
 
-    # FIX (worker SIGKILL crash): a Gemini TTS call can occasionally
-    # hang waiting on a network response that never arrives. Without an
-    # explicit timeout here, that hang runs past gunicorn's own 120s
-    # worker timeout, at which point gunicorn forcibly SIGKILLs the
-    # entire worker process — the client gets an empty/broken 500
-    # response with no useful error message (this is what caused the
-    # 'JSON.parse SyntaxError' bug on the frontend). 90s here is safely
-    # under that 120s limit, so if Gemini stalls, OUR code raises a
-    # clean, catchable timeout exception well before gunicorn has to
-    # intervene.
-    #
-    # FIX (no retry resilience under concurrent load): this call used
-    # to have NO retry logic at all — unlike script generation
-    # (call_gemini_structured), a single transient hiccup OR a 429
-    # rate-limit (much more likely when several people generate audio
-    # around the same time, since the Gemini API quota is shared
-    # across the whole app, not per-device) failed the request
-    # immediately with zero attempt to recover. Now retries both
-    # transient overload errors AND rate-limit errors, same pattern as
-    # script generation.
-    # FIX (502 errors — worker timeout regression): reduced from 90s to
-    # 60s per call. A hard TOTAL TIME BUDGET below now bounds the
-    # ENTIRE function (queue waits + all call attempts + retry sleeps
-    # combined) to stay safely under gunicorn's 120s worker timeout —
-    # previously each of these had its own separate cap, but nothing
-    # stopped them from ADDING UP past 120s across multiple retries.
     max_tts_retries = 4
     response = None
     last_tts_error = None
@@ -1022,7 +747,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
             print(f"⚠️ Gemini TTS aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
             raise GeminiGenerationError("Gemini TTS timed out across retries (server-side time budget exceeded).")
 
-        _gemini_tts_call_gate()  # queue/wait for a safe slot before calling Gemini
+        _gemini_tts_call_gate()
         try:
             response = client.models.generate_content(
                 model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
@@ -1057,9 +782,6 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
 
     audio_data = response.candidates[0].content.parts[0].inline_data.data
-    # Gemini TTS returns raw 24kHz 16-bit mono PCM — wrap it as an
-    # AudioSegment the same way the rest of this file already handles
-    # audio (so export/duration/etc. all work identically to gTTS output).
     audio_segment = AudioSegment(
         data=audio_data,
         sample_width=2,
@@ -1091,16 +813,6 @@ class GeminiGenerationError(Exception):
 
 
 def build_system_instruction(output_language):
-    """Returns the full Gemini system instruction, with the podcast
-    script's language rule swapped based on the person's chosen OUTPUT
-    language — independent of whatever language the note itself was
-    written in. Previously the instruction always told Gemini to match
-    the note's own language; now the person explicitly picks Sinhala or
-    English for the narration/script output via a toggle in the UI, and
-    Gemini is told to always write in that language regardless of the
-    input note's language. The mind maps (mermaid_code_si/en) are
-    unaffected — both language versions are still always generated.
-    """
     if output_language == 'en':
         json_line = (
             '  "podcast_script": "<full podcast script, written entirely in English '
@@ -1290,24 +1002,6 @@ def _parse_json_loose(raw_text):
 
 
 def _sanitize_mermaid_labels(code):
-    """FIX (Mermaid parse errors like 'Expecting SQE ... got PS'):
-    Gemini is instructed to quote node labels containing special
-    characters, but doesn't always do it reliably. Wraps EVERY
-    square/round/circle-bracket node label in quotes unconditionally.
-
-    FIX #2 (mindmap rendering broke entirely after this ran — "Syntax
-    error in text"): the original character classes were [^()]+ /
-    [^\\[\\]]+, which can match ACROSS newlines. If any single label
-    anywhere in the code had an unquoted, unbalanced paren (e.g. Gemini
-    wrote "Glucose (C6H12O6) production" without quotes), the regex
-    would keep consuming forward hunting for a matching closing paren
-    — swallowing subsequent lines and their indentation whitespace
-    into one corrupted blob. Since mindmap syntax is 100% dependent on
-    per-line indentation to express hierarchy, that corruption broke
-    the whole diagram, not just the one bad label. Excluding \\n from
-    every character class below means a match can never cross a line
-    boundary, so one bad label now stays a contained, local problem.
-    """
     if not code:
         return code
 
@@ -1341,7 +1035,6 @@ def _sanitize_mermaid_labels(code):
     return code
 
 
-# Maps Unicode subscript/superscript digits to plain ASCII digits.
 _SUBSCRIPT_SUPERSCRIPT_MAP = str.maketrans({
     '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
     '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
@@ -1382,9 +1075,6 @@ def _is_transient_gemini_error(exc):
 
 
 def _friendly_gemini_error_message(exc):
-    """Turns a raw Gemini exception (often a big JSON error dump) into
-    a short, clean message a student can actually understand, instead
-    of showing them '503 UNAVAILABLE {...}' verbatim."""
     if _is_rate_limit_error(exc):
         return 'දැනට NoteWav AI එකේ ගොඩක් අය එකවර use කරනවා. තත්පර කිහිපයක් ඉඳලා නැවත උත්සාහ කරන්න, නැතහොත් "Full Text Mode" එකෙන් try කරන්න (AI අවශ්‍ය නැති, ක්ෂණික විකල්පයක්).'
     if _is_transient_gemini_error(exc):
@@ -1423,9 +1113,7 @@ question) ප්‍රශ්න 5ක් සමන්විත quiz එකක් 
 def call_gemini_quiz(content_text, max_retries=5):
     """Generates a 5-question multiple-choice quiz from note content,
     using the same Gemini client/retry pattern as the main script
-    generation. Kept as a separate, lightweight function/prompt rather
-    than folding into the main system instruction, since a quiz is an
-    optional add-on most notes won't need."""
+    generation."""
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -1433,21 +1121,18 @@ def call_gemini_quiz(content_text, max_retries=5):
 
     last_error = None
     quiz_start_time = time.time()
-    QUIZ_TIME_BUDGET_SECONDS = 45  # hard ceiling, safely under gunicorn's 120s worker timeout
+    # FIX (Aug 18, 2026 — see GEMINI_THINKING_BUDGET note above): bumped
+    # from 45s. With thinking capped at GEMINI_THINKING_BUDGET, calls
+    # are stable but can still legitimately take 20-30s+ (confirmed via
+    # AI Studio Playground testing) — the OLD 45s budget only really
+    # allowed for one full attempt at that length before aborting.
+    QUIZ_TIME_BUDGET_SECONDS = 75  # still safely under gunicorn's 120s worker timeout
 
-    # Same automatic model fallback as call_gemini_structured — tries
-    # the 3.x family first, falls back to the more established 2.5
-    # family if 3.x is degraded.
     QUIZ_MODELS_TO_TRY = ['gemini-3.7-flash', 'gemini-2.5-flash']
     quiz_attempt_plan = [(model, n) for model in QUIZ_MODELS_TO_TRY for n in range(1, 2 + 1)]
 
     response = None
     for plan_index, (model_name, attempt) in enumerate(quiz_attempt_plan, start=1):
-        # Same fix as call_gemini_structured — bounds each individual
-        # call (http_options timeout) AND the whole function's total
-        # time (budget check below), so a stalled network read can't
-        # silently run past gunicorn's worker timeout and trigger a
-        # SIGKILL.
         elapsed = time.time() - quiz_start_time
         if elapsed > QUIZ_TIME_BUDGET_SECONDS:
             raise GeminiGenerationError("Quiz generation timed out across retries (server-side time budget exceeded).")
@@ -1463,7 +1148,20 @@ def call_gemini_quiz(content_text, max_retries=5):
                     max_output_tokens=2000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
-                    http_options=types.HttpOptions(timeout=15_000),  # milliseconds
+                    # FIX (Aug 18, 2026): isolated Playground testing
+                    # showed Gemini 3.7/2.5-flash reliably erroring out
+                    # ("An internal error has occurred") specifically at
+                    # default/Medium thinking levels, and reliably
+                    # succeeding once the thinking budget was capped —
+                    # see GEMINI_THINKING_BUDGET comment above for the
+                    # full writeup. This was NOT an app-code bug.
+                    thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
+                    # FIX: raised from 15s — that was cutting off
+                    # legitimate in-progress responses (confirmed
+                    # successful Playground responses took 9-21s even
+                    # with the thinking budget capped) before Gemini
+                    # ever got a chance to finish.
+                    http_options=types.HttpOptions(timeout=30_000),  # milliseconds
                 )
             )
             break
@@ -1491,7 +1189,6 @@ def call_gemini_quiz(content_text, max_retries=5):
     if not questions:
         raise GeminiGenerationError("Gemini did not return any quiz questions.")
 
-    # Log this call too — it hits the same shared Gemini quota.
     try:
         log_conn = get_db()
         log_conn.execute(
@@ -1519,36 +1216,21 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
 
     last_error = None
     synth_start_time = time.time()
-    TOTAL_TIME_BUDGET_SECONDS = 45  # hard ceiling, safely under gunicorn's 120s worker timeout
+    # FIX (Aug 18, 2026 — root-caused via AI Studio Playground testing,
+    # see GEMINI_THINKING_BUDGET comment above): bumped from 45s. Now
+    # that thinking is capped (stable, no more internal-error/timeouts
+    # at the model level), calls can still legitimately run 20-30s+
+    # end-to-end — the old 45s total budget across 4 attempts left very
+    # little room. 90s stays safely under gunicorn's 120s worker
+    # timeout while giving real attempts room to actually finish.
+    TOTAL_TIME_BUDGET_SECONDS = 90
 
-    # NEW: automatic model fallback. Gemini's 3.x Flash family has been
-    # showing repeated 503s/slowness recently (confirmed via external
-    # status reports and Google's own rate-limit dashboard) — rather
-    # than failing outright when the 3.x family is degraded, this now
-    # also tries the older, more established 2.5 Flash family, which
-    # often sits on separate capacity/infrastructure and may still be
-    # healthy even when 3.x isn't. Each model gets 2 attempts; overall
-    # time is still bounded by the same 45s budget below.
     MODELS_TO_TRY = ['gemini-3.7-flash', 'gemini-2.5-flash']
     ATTEMPTS_PER_MODEL = 2
     attempt_plan = [(model, n) for model in MODELS_TO_TRY for n in range(1, ATTEMPTS_PER_MODEL + 1)]
 
     response = None
     for plan_index, (model_name, attempt) in enumerate(attempt_plan, start=1):
-        # FIX (root cause of the "very slow / SIGKILL" incident):
-        # the previous fix here only accounted for SLEEP time between
-        # retries — it never bounded how long any INDIVIDUAL API call
-        # itself could take. A single stalled network read (Gemini's
-        # side going quiet mid-response) could hang indefinitely,
-        # completely unaffected by how conservative the retry/backoff
-        # numbers were. That hang eventually ran past gunicorn's own
-        # 120s worker timeout, forcing gunicorn to SIGKILL the whole
-        # worker process — which is exactly the crash the user hit.
-        # Two fixes, matching the pattern already used for TTS:
-        # (1) an explicit per-call network timeout via http_options,
-        # and (2) a hard TOTAL time budget across the whole function
-        # (all models + all attempts + all sleeps combined), so
-        # nothing can ever add up to gunicorn's limit.
         elapsed = time.time() - synth_start_time
         if elapsed > TOTAL_TIME_BUDGET_SECONDS:
             print(f"⚠️ call_gemini_structured aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
@@ -1565,7 +1247,23 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
                     max_output_tokens=8000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
-                    http_options=types.HttpOptions(timeout=15_000),  # milliseconds
+                    # FIX (Aug 18, 2026 — ROOT CAUSE of the Smart Study
+                    # "An internal error has occurred" failures): direct
+                    # testing in Google AI Studio Playground (same
+                    # account/project, zero app code involved) isolated
+                    # this to Gemini 3.7-flash/2.5-flash reliably
+                    # erroring out at their default/"Medium" thinking
+                    # level, and reliably succeeding once the thinking
+                    # budget was capped low. Full writeup is on the
+                    # GEMINI_THINKING_BUDGET constant near the top of
+                    # this file.
+                    thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
+                    # FIX: raised from 15s — Playground confirmed
+                    # successful responses (even with thinking capped)
+                    # legitimately took up to ~21-34s; 15s was cutting
+                    # real, in-progress responses off before Gemini
+                    # finished.
+                    http_options=types.HttpOptions(timeout=40_000),  # milliseconds
                 )
             )
             print(f"✅ Gemini succeeded using {model_name} (attempt {attempt})")
@@ -1584,22 +1282,12 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
                 )
 
             if not is_last_plan_step and _is_transient_gemini_error(e):
-                # FIX: an earlier version of this bumped retries up to
-                # 8 attempts with backoff up to 12s, aiming to survive
-                # longer "high demand" spikes. But the WORST-CASE total
-                # time (sleep + actual API call time across all
-                # attempts) came dangerously close to gunicorn's 120s
-                # worker timeout. Kept short here (2s/model-switch) —
-                # trying the OTHER model matters more than waiting
-                # longer on the same struggling one.
                 wait_seconds = 2
                 print(f"⚠️ {model_name} transient error (attempt {attempt}/{ATTEMPTS_PER_MODEL}), retrying/switching in {wait_seconds}s: {e}")
                 time.sleep(wait_seconds)
                 continue
             if is_last_plan_step:
                 raise GeminiGenerationError(f"Gemini request failed after trying {MODELS_TO_TRY}: {last_error}")
-            # Non-transient error on a non-final step — still worth
-            # trying the next model/attempt rather than giving up.
             continue
 
     if response is None:
@@ -1633,9 +1321,6 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
     if not podcast_script:
         raise GeminiGenerationError("Gemini did not return a podcast script.")
 
-    # Log this successful call for the admin's monthly usage tracker.
-    # Logging failure must NEVER break the actual feature, so it's
-    # wrapped in its own try/except and silently ignored on error.
     try:
         log_conn = get_db()
         log_conn.execute(
@@ -1655,18 +1340,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
 def pdf_extract():
     """Renders each PDF page as an IMAGE and runs it through the same
     Cloud Vision OCR used for photos, instead of reading the PDF's text
-    layer directly.
-
-    WHY: many Sri Lankan PDFs are typed using legacy non-Unicode Sinhala
-    fonts (FM Abhaya, Kaputa, DL-Manel, etc.) — these fonts make Sinhala
-    glyphs LOOK correct on screen, but the underlying stored character
-    codes are actually plain Latin/ASCII, mapped to Sinhala shapes only
-    by that specific font. Reading the text layer directly (as pypdf
-    did before) returns those raw underlying codes — garbled nonsense
-    like "fjk;a lsishï m%;spdrhla". Rendering the page as an image and
-    reading it visually via OCR sidesteps this entirely, exactly like
-    photographing the page would — it doesn't matter what font or
-    encoding was used, only what the text visually looks like."""
+    layer directly."""
     if 'pdf' not in request.files:
         return jsonify({'success': False, 'error': 'No PDF uploaded'}), 400
     if not CLOUD_OCR_AVAILABLE:
@@ -1686,9 +1360,6 @@ def pdf_extract():
 
         for i in range(page_count):
             page = doc[i]
-            # matrix=2x2 renders at roughly double the PDF's native
-            # resolution (~144 DPI) — sharp enough for reliable OCR
-            # without making the image unnecessarily huge/slow.
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
             img_bytes = pix.tobytes('png')
 
@@ -1706,7 +1377,7 @@ def pdf_extract():
                 if page_text:
                     pages_text.append(f"--- Page {i + 1} ---\n{page_text}")
 
-        total_pages_in_pdf = len(doc)  # capture BEFORE closing — len(doc) after close() raises "document closed"
+        total_pages_in_pdf = len(doc)
         doc.close()
         full_text = '\n\n'.join(pages_text).strip()
 
@@ -1735,7 +1406,7 @@ def pdf_extract():
 
 
 @app.route('/ocr', methods=['POST'])
-@rate_limited(10, 60)  # 10 OCR calls per minute per device — Google Cloud Vision has its own free quota
+@rate_limited(10, 60)
 def ocr_image():
     print("=" * 50)
     print("📸 OCR Request Received")
@@ -1816,16 +1487,12 @@ def ocr_image():
 
 
 @app.route('/tts', methods=['POST'])
-@rate_limited(10, 60)  # 10 audio generations per minute per device
+@rate_limited(10, 60)
 def text_to_speech():
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
-    # NEW: block banned devices/accounts from generating audio.
     if _is_banned(anon_id=(data.get('anon_id') or '').strip()[:64], email=session.get('user_email')):
         return jsonify({'status': 'error', 'message': 'ඔබේ account/device එකට මේ feature එක restrict කර ඇත.'}), 403
-    # NEW: which voice engine to use — 'gtts' (default, free, classic
-    # robotic TTS) or 'gemini' (natural LLM-driven voice, Preview,
-    # costs Gemini API usage). Anything unrecognized falls back to gtts.
     engine = (data.get('engine') or 'gtts').strip().lower()
     if engine not in ('gtts', 'gemini'):
         engine = 'gtts'
@@ -1903,19 +1570,6 @@ def home():
 
 @app.route('/.well-known/assetlinks.json')
 def assetlinks_json():
-    """Digital Asset Links verification for the TWA (Trusted Web
-    Activity) Android package built via PWABuilder — proves this
-    website controls/authorizes that specific APK (identified by its
-    package name + SHA-256 signing certificate fingerprint). Without
-    this, Android can't verify the installed app owns this domain, so
-    it falls back to showing a browser-style URL bar inside the app
-    instead of a clean fullscreen experience.
-
-    NOTE: PWABuilder generates a NEW random signing key every time you
-    regenerate the Android package, UNLESS you explicitly download and
-    reuse the same keystore file it offers on the package page. That's
-    why the fingerprint changed between builds — going forward, reuse
-    the same keystore to avoid needing to update this list again."""
     content = [{
         "relation": ["delegate_permission/common.handle_all_urls"],
         "target": {
@@ -1933,11 +1587,6 @@ def assetlinks_json():
 
 @app.route('/ads.txt')
 def ads_txt():
-    """Required by Google AdSense to verify this site is authorized to
-    show ads from this publisher account. The 'DIRECT' relationship and
-    the fixed certification ID (f08c47fec0942fa0) are Google's own
-    standard values for AdSense — same for every publisher, only the
-    pub- ID changes."""
     content = "google.com, pub-4882546078529900, DIRECT, f08c47fec0942fa0\n"
     return app.response_class(content, mimetype='text/plain')
 
@@ -1959,10 +1608,6 @@ def terms_page():
 def google_login():
     if not GOOGLE_LOGIN_CONFIGURED:
         return "Google Sign-In is not configured on this server yet.", 500
-    # A random per-session token, checked again in the callback, so a
-    # forged/replayed callback request can't be used to log someone
-    # into an account they didn't actually authorize (CSRF protection
-    # for the OAuth flow).
     state = secrets.token_urlsafe(24)
     session['oauth_state'] = state
     params = {
@@ -2023,20 +1668,11 @@ def google_callback():
     conn = get_db()
     existing = conn.execute("SELECT * FROM users WHERE google_id = ?", (google_id,)).fetchone()
     if existing:
-        # NEW: name is NOT overwritten here anymore. If the person has
-        # customized their display name (via the edit-name feature),
-        # that choice should survive every future Google login — only
-        # email/picture/last_login refresh automatically. Name only
-        # ever gets its initial value from Google at account CREATION
-        # (the 'else' branch below), and after that, only the
-        # dedicated /user/update-profile endpoint can change it.
         conn.execute(
             "UPDATE users SET email = ?, picture = ?, last_login = ? WHERE google_id = ?",
             (email, picture, now_iso, google_id)
         )
     else:
-        # New account — starts with the same 100 free coins guests get,
-        # and a fresh streak.
         conn.execute(
             """INSERT INTO users (google_id, email, name, picture, coins, streak, last_streak_date, created_at, last_login)
                VALUES (?, ?, ?, ?, 100, 0, NULL, ?, ?)""",
@@ -2045,7 +1681,7 @@ def google_callback():
     conn.commit()
     conn.close()
 
-    session.permanent = True  # survives closing/reopening the app, not just a single browser session
+    session.permanent = True
     session['user_id'] = google_id
     session['user_name'] = name
     session['user_email'] = email
@@ -2064,10 +1700,6 @@ def auth_logout():
 
 @app.route('/auth/me')
 def auth_me():
-    """Tells the frontend whether the visitor is signed in, and if so,
-    hands back their server-side coins/streak/profile — the single
-    source of truth once someone has an account, so every device they
-    log into shows the same numbers."""
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'logged_in': False, 'google_login_available': GOOGLE_LOGIN_CONFIGURED})
@@ -2094,10 +1726,6 @@ def auth_me():
 
 @app.route('/user/update-profile', methods=['POST'])
 def user_update_profile():
-    """Lets a signed-in person set a custom display name on their
-    account — persisted server-side so it follows them to every device
-    they log into (unlike the old behavior where Google's own profile
-    name would silently overwrite it on each login)."""
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'status': 'ignored'})
@@ -2117,10 +1745,6 @@ def user_update_profile():
         return jsonify({'status': 'error'}), 200
 @app.route('/user/sync', methods=['POST'])
 def user_sync():
-    """Lets the client push updated coins/streak values back up to the
-    signed-in user's account record, so they stay in sync everywhere.
-    Guests (not logged in) get 'ignored' here — their coins/streak
-    remain device-local only, exactly as before Google Sign-In existed."""
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'status': 'ignored'})
@@ -2148,32 +1772,9 @@ def user_sync():
         return jsonify({'status': 'error'}), 200
 
 
-# ========================================
-# BUG FIX: Service Worker root-scope route
-# ========================================
-# The service worker file physically lives at static/sw.js, and it was
-# being registered from script.js as navigator.serviceWorker.register
-# ('/static/sw.js'). Registering a service worker from a URL under
-# /static/ automatically restricts its "scope" to /static/ — meaning it
-# can NEVER control the home page ("/"), only files under /static/.
-#
-# Several browsers (Samsung Internet in particular) require the
-# service worker to control start_url ("/", per manifest.json) as part
-# of their install-prompt eligibility checks. Because the scope was
-# wrongly limited to /static/, that check silently failed and the
-# "Install app" button never appeared, even though everything else
-# (manifest.json, icons, HTTPS) was correct.
-#
-# Fix: serve the exact same sw.js file content from the ROOT path
-# (/sw.js) instead. script.js's register() call is updated (see
-# script.js) to register '/sw.js' with an explicit scope of '/', which
-# gives the service worker control over the entire site as intended.
 @app.route('/sw.js')
 def service_worker():
     response = send_from_directory('static', 'sw.js')
-    # Explicitly declare the widest allowed scope in the response
-    # header too — belt-and-suspenders alongside the register({scope})
-    # call on the frontend, since some browsers check this header.
     response.headers['Service-Worker-Allowed'] = '/'
     response.headers['Content-Type'] = 'application/javascript'
     return response
@@ -2201,18 +1802,13 @@ def generate_quiz():
 
 
 @app.route('/process-note', methods=['POST'])
-@rate_limited(8, 60)  # 8 Gemini calls per minute per device — protects the shared free API quota
+@rate_limited(8, 60)
 def process_note():
     data = request.get_json(silent=True) or {}
     note_text = (data.get('text') or '').strip()
     mode = data.get('mode', 'full')
-    # NEW: block banned devices/accounts from processing notes.
     if _is_banned(anon_id=(data.get('anon_id') or '').strip()[:64], email=session.get('user_email')):
         return jsonify({'status': 'error', 'message': 'ඔබේ account/device එකට මේ feature එක restrict කර ඇත.'}), 403
-    # NEW: the person now explicitly chooses the OUTPUT language for the
-    # podcast script via a toggle in the UI ('si' or 'en') — independent
-    # of whatever language the note itself is written in. Defaults to
-    # 'si' if not provided (e.g. an older cached frontend).
     output_language = data.get('output_language', 'si')
     if output_language not in ('si', 'en'):
         output_language = 'si'
@@ -2234,15 +1830,6 @@ def process_note():
             'warning': 'NoteWav AI configure වී නොමැති බැවින් Smart Study සහ Mind Map ලබාගත නොහැක.'
         })
 
-    # FIX (emergency reliability): Full Text Mode was supposed to be
-    # the fast, no-AI-dependency option, but this call to Gemini ran
-    # UNCONDITIONALLY regardless of mode — the mode check only decided
-    # which TEXT to use afterward (line below), not whether to call
-    # Gemini at all. That meant Full Text Mode was JUST AS exposed to
-    # Gemini being slow/degraded as Smart Study mode, even though the
-    # UI (and earlier advice) implied it wasn't. Now genuinely skips
-    # Gemini for 'full' mode — instant, reliable, no mind map for this
-    # mode until Gemini's current issues settle down.
     if mode != 'smart':
         return jsonify({
             'status': 'success',
@@ -2279,10 +1866,6 @@ def process_note():
 
 @app.route('/library/save', methods=['POST'])
 def library_save():
-    # NEW: saving to the Library now requires being signed in with
-    # Google — this is a deliberate change from the earlier
-    # guest-friendly behavior. Enforced here server-side (in addition
-    # to a friendly prompt on the frontend) so this can't be bypassed.
     if not session.get('user_id'):
         return jsonify({
             'status': 'error',
@@ -2314,20 +1897,10 @@ def library_save():
     if not title:
         title = 'Untitled Note'
 
-    # If signed in via Google, tag this note as belonging to that
-    # account (private + synced across their devices). Guests (no
-    # session) leave this NULL — their notes stay in the shared/global
-    # Library exactly as before, no behavior change for them.
     owner_google_id = session.get('user_id')
 
-    # NEW: optional original photo (base64 data URL, already compressed
-    # client-side) — capped generously but firmly, so one oversized
-    # image can't bloat the database or blow past Turso's per-row size
-    # comfort zone. If it's over the cap, we just skip saving the image
-    # (the note itself still saves fine) rather than failing the whole
-    # request over an image that's too big.
     source_image = data.get('source_image') or None
-    MAX_SOURCE_IMAGE_CHARS = 700_000  # ~500KB of actual image data, base64-inflated
+    MAX_SOURCE_IMAGE_CHARS = 700_000
     if source_image and len(source_image) > MAX_SOURCE_IMAGE_CHARS:
         print(f"⚠️ source_image too large ({len(source_image)} chars) — skipping, saving note without it.")
         source_image = None
@@ -2355,16 +1928,10 @@ def library_list():
     try:
         conn = get_db()
         user_id = session.get('user_id')
-        # NEW: optional full-text search — matches title/subject AND the
-        # actual saved note content (note_text/processed_text), not just
-        # title/subject like before. Empty/missing q returns everything,
-        # unchanged from prior behavior.
         query = (request.args.get('q') or '').strip()
         like_term = f'%{query}%'
 
         if user_id:
-            # Signed in: PRIVATE list — only this account's own notes,
-            # so it's the same list on every device they log into.
             if query:
                 rows = conn.execute(
                     """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes
@@ -2379,9 +1946,6 @@ def library_list():
                     (user_id,)
                 ).fetchall()
         else:
-            # Guest: only notes with NO account owner (true guest-saved
-            # notes) — a signed-in account's private notes must NEVER
-            # be visible here.
             if query:
                 rows = conn.execute(
                     """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes
@@ -2436,9 +2000,6 @@ def library_get(note_id):
 def library_delete(note_id):
     try:
         conn = get_db()
-        # If this note is privately owned (a signed-in account's note),
-        # only THAT account may delete it. Guest notes (owner_google_id
-        # is NULL) keep the original no-restriction behavior.
         row = conn.execute('SELECT owner_google_id FROM notes WHERE id = ?', (note_id,)).fetchone()
         if row and row['owner_google_id'] and row['owner_google_id'] != session.get('user_id'):
             conn.close()
@@ -2464,9 +2025,6 @@ def health():
     })
 
 
-# ========================================
-# LIGHTWEIGHT USAGE TRACKING (for the admin dashboard)
-# ========================================
 @app.route('/track', methods=['POST'])
 def track_event():
     try:
@@ -2479,14 +2037,7 @@ def track_event():
             return jsonify({'status': 'ignored'})
 
         conn = get_db()
-        # The User-Agent header comes from the browser itself with every
-        # request — no extra permission or frontend change needed to
-        # read it. Parsed into a short summary and stored alongside the
-        # event so the admin dashboard can show which device/browser
-        # each user is on.
         device_info = parse_device_info(request.headers.get('User-Agent', ''))
-        # Read the signed-in email from the SERVER-SIDE session (not
-        # trusting anything the client might send) — NULL for guests.
         user_email = session.get('user_email')
         conn.execute(
             "INSERT INTO usage_events (anon_id, user_name, action, created_at, device_info, user_email) VALUES (?, ?, ?, ?, ?, ?)",
@@ -2503,19 +2054,9 @@ def track_event():
         return jsonify({'status': 'success'})
     except Exception as e:
         print(f"⚠️ Track event failed (non-critical): {e}")
-        return jsonify({'status': 'error'}), 200  # 200 on purpose — never surface this as a real error to the client
+        return jsonify({'status': 'error'}), 200
 
 
-# FIX (urgent performance issue): _is_banned() used to open a fresh
-# Turso connection and run a query on EVERY SINGLE /process-note and
-# /tts request — adding a real network round-trip to Turso before any
-# actual note/audio work even began, on every request, for every
-# user, even though bans are rare and change infrequently. This
-# directly contributed to the app feeling much slower after the ban
-# feature was added. Now caches the banned-identity list in memory,
-# refreshed at most once every 30 seconds, so the vast majority of
-# requests check a local Python set (near-instant) instead of hitting
-# the database at all.
 _banned_identities_cache = set()
 _banned_cache_last_refresh = 0
 _banned_cache_lock = threading.Lock()
@@ -2528,8 +2069,6 @@ def _refresh_banned_cache_if_stale():
     if now - _banned_cache_last_refresh < BANNED_CACHE_TTL_SECONDS:
         return
     with _banned_cache_lock:
-        # Re-check after acquiring the lock — another thread may have
-        # just refreshed it while we were waiting.
         if time.time() - _banned_cache_last_refresh < BANNED_CACHE_TTL_SECONDS:
             return
         try:
@@ -2540,15 +2079,9 @@ def _refresh_banned_cache_if_stale():
             _banned_cache_last_refresh = time.time()
         except Exception as e:
             print(f"⚠️ Banned-identity cache refresh failed (keeping previous cache): {e}")
-            # Don't update the timestamp — we'll try again on the next
-            # request rather than waiting the full TTL after a failure.
 
 
 def _is_banned(anon_id=None, email=None):
-    """Checks whether a device (anon_id) or account (email) has been
-    banned by an admin. Either match blocks the action. Uses an
-    in-memory cache (see above) instead of a database round-trip on
-    every call."""
     if not anon_id and not email:
         return False
     try:
@@ -2560,7 +2093,7 @@ def _is_banned(anon_id=None, email=None):
         return False
     except Exception as e:
         print(f"⚠️ Ban check failed (allowing request through): {e}")
-        return False  # fail open — never block legitimate users due to a hiccup
+        return False
 
 
 def _is_admin_logged_in():
@@ -2571,11 +2104,6 @@ def _is_admin_logged_in():
 def admin_login():
     error = None
     if request.method == 'POST':
-        # FIX (security gap): admin login had NO protection against
-        # brute-force password guessing — a bot could try unlimited
-        # passwords. Now capped at 5 login ATTEMPTS per 5 minutes per
-        # IP (just viewing the page doesn't count), with the exact
-        # wait time shown right on the login page itself.
         identifier = request.remote_addr or 'unknown'
         allowed, retry_after = _check_rate_limit(f"admin_login:{identifier}", 5, 300)
         if not allowed:
@@ -2622,14 +2150,6 @@ def _get_admin_usage_data():
             COUNT(*) AS total_events,
             SUM(CASE WHEN action = 'note_processed' THEN 1 ELSE 0 END) AS notes_processed,
             SUM(CASE WHEN action = 'audio_generated' THEN 1 ELSE 0 END) AS audio_generated,
-            -- FIX: for a signed-in account, users.coins (keyed by
-            -- email) is the REAL, authoritative, cross-device balance
-            -- — the same one the Admin's "Add Coins" feature updates.
-            -- The old query only ever read user_state.coins (a
-            -- device-level snapshot), so admin-added coins never
-            -- showed up here even though the real balance WAS correct.
-            -- Falls back to user_state.coins only for guests (who have
-            -- no users row at all).
             COALESCE(
                 (SELECT u.coins FROM users u WHERE u.email = (
                     SELECT user_email FROM usage_events ue4
@@ -2645,9 +2165,6 @@ def _get_admin_usage_data():
 
     total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
 
-    # Gemini calls so far THIS calendar month — lets the admin watch
-    # usage approach the free-tier monthly quota before it's actually
-    # exhausted, instead of finding out when requests start failing.
     month_start = datetime.now(timezone.utc).strftime('%Y-%m-01')
     gemini_calls_row = conn.execute(
         'SELECT COUNT(*) FROM gemini_calls WHERE created_at >= ?', (month_start,)
@@ -2683,11 +2200,6 @@ def _get_admin_usage_data():
         u['is_online'] = is_online(u['last_seen'])
         u['first_seen'] = to_sl_time(u['first_seen'])
         u['last_seen'] = to_sl_time(u['last_seen'])
-        # Splits the '||'-joined, most-recent-first email history into
-        # the CURRENT email (whichever account is signed in on this
-        # device right now — shown in green) and any OLDER emails this
-        # same device has logged into before (shown in red), so the
-        # admin can see when a device switched accounts.
         raw_history = u.pop('email_history', None)
         emails = [e for e in (raw_history.split('||') if raw_history else []) if e]
         u['current_email'] = emails[0] if emails else None
@@ -2699,12 +2211,6 @@ def _get_admin_usage_data():
         'total_users': len(users_list),
         'total_notes_in_library': total_notes_in_library,
         'gemini_calls_this_month': gemini_calls_this_month,
-        # Tells the admin whether data is genuinely persisting to
-        # Turso, or has silently fallen back to the ephemeral local
-        # SQLite file (e.g. if TURSO_DATABASE_URL/TURSO_AUTH_TOKEN are
-        # missing or invalid) — this is the real thing worth verifying,
-        # since once this is 'turso', EVERY user's data goes through
-        # the same persistent backend.
         'storage_backend': 'turso' if USE_TURSO else 'sqlite',
     }
 
@@ -2859,17 +2365,6 @@ def admin_top_subjects():
 
 @app.route('/admin/add-coins', methods=['POST'])
 def admin_add_coins():
-    """Adds coins to a signed-in user's REAL, server-side balance
-    (the users.coins column) — not just a local display trick. This
-    only works for accounts that have signed in with Google at least
-    once (identified by email); a device that's only ever used the app
-    as a guest has no server-side coin record to add to.
-
-    The added coins reach the person automatically the next time their
-    browser loads the app — checkGoogleAuthStatus() already pulls the
-    server's coins value down and overwrites localStorage with it on
-    every page load for signed-in users, so no extra sync code is
-    needed here."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
@@ -2915,11 +2410,6 @@ def admin_user_timeline(anon_id):
             (anon_id,)
         ).fetchall()
 
-        # NEW: also report whether this device (or its associated
-        # account email, if signed in) is CURRENTLY banned — the admin
-        # dashboard needs this to show "Ban" vs "Unban" correctly when
-        # the timeline modal is opened, instead of always assuming
-        # "not banned".
         email_row = conn.execute(
             "SELECT user_email FROM usage_events WHERE anon_id = ? AND user_email IS NOT NULL ORDER BY created_at DESC LIMIT 1",
             (anon_id,)
@@ -2994,14 +2484,12 @@ def admin_delete_note(note_id):
 
 @app.route('/admin/notes/bulk-delete', methods=['POST'])
 def admin_bulk_delete_notes():
-    """NEW: delete several library notes at once — used by the admin
-    dashboard's checkbox-select UI, instead of deleting one at a time."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
         data = request.get_json(silent=True) or {}
         note_ids = data.get('note_ids') or []
-        note_ids = [int(i) for i in note_ids if str(i).isdigit()][:200]  # sanity cap
+        note_ids = [int(i) for i in note_ids if str(i).isdigit()][:200]
         if not note_ids:
             return jsonify({'status': 'error', 'message': 'No note IDs provided.'}), 400
         conn = get_db()
@@ -3016,10 +2504,6 @@ def admin_bulk_delete_notes():
 
 @app.route('/admin/ban', methods=['POST'])
 def admin_ban_identity():
-    """NEW: bans (or unbans) a device (anon_id) or account (email) —
-    toggles based on current state. A banned identity can no longer
-    process notes or generate audio; their existing saved notes are
-    NOT deleted."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
@@ -3043,9 +2527,6 @@ def admin_ban_identity():
             action = 'banned'
         conn.commit()
         conn.close()
-        # Force the in-memory cache to refresh on the next check —
-        # otherwise a fresh ban/unban wouldn't take effect for up to
-        # BANNED_CACHE_TTL_SECONDS.
         global _banned_cache_last_refresh
         _banned_cache_last_refresh = 0
         return jsonify({'status': 'success', 'action': action})
@@ -3056,9 +2537,6 @@ def admin_ban_identity():
 @app.route('/library/report/<int:note_id>', methods=['POST'])
 @rate_limited(5, 300)
 def report_note(note_id):
-    """NEW (public): lets any student flag a Library note as
-    inappropriate/spam — reviewed by the admin in a dedicated Reports
-    section, rather than the note just silently staying up."""
     try:
         data = request.get_json(silent=True) or {}
         reason = (data.get('reason') or '').strip()[:200]
@@ -3080,9 +2558,6 @@ def report_note(note_id):
 
 @app.route('/admin/reports')
 def admin_reports():
-    """NEW: lists open (not-yet-dismissed) note reports for the admin,
-    joined with the note's own title/subject so they don't need to
-    look it up separately."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
@@ -3117,35 +2592,22 @@ def admin_dismiss_report(report_id):
 
 @app.route('/admin/insights')
 def admin_insights():
-    """NEW: one consolidated endpoint for several admin dashboard
-    additions — coins economy total, level distribution, weekly/
-    monthly active user counts, a Top-10 leaderboard by notes
-    processed, and a live snapshot of recent Gemini TTS call volume
-    (a proxy for how close the app is to Google's own rate limit)."""
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
         conn = get_db()
 
-        # --- Coins economy ---
         signed_in_coins = conn.execute("SELECT COALESCE(SUM(coins), 0) AS total FROM users").fetchone()['total']
         guest_coins = conn.execute("SELECT COALESCE(SUM(coins), 0) AS total FROM user_state").fetchone()['total']
 
-        # NEW: estimated storage used by saved photo attachments — since
-        # images are stored as base64 text directly in the (persistent,
-        # free-tier-capped) database rather than as files, this is
-        # worth watching so a real capacity issue is caught early
-        # rather than as a surprise when the database suddenly rejects
-        # writes.
         image_stats = conn.execute("""
             SELECT COUNT(*) AS image_count, COALESCE(SUM(LENGTH(source_image_data)), 0) AS total_bytes
             FROM notes WHERE source_image_data IS NOT NULL
         """).fetchone()
         image_storage_mb = round(image_stats['total_bytes'] / (1024 * 1024), 2)
-        FREE_TIER_STORAGE_GB = 5  # Turso free tier, as of 2026
+        FREE_TIER_STORAGE_GB = 5
         image_storage_pct_of_free_tier = round((image_stats['total_bytes'] / (FREE_TIER_STORAGE_GB * 1024 * 1024 * 1024)) * 100, 2)
 
-        # --- Notes processed per device (drives level distribution + leaderboard) ---
         per_device = conn.execute("""
             SELECT anon_id,
                    (SELECT user_name FROM usage_events ue2 WHERE ue2.anon_id = ue1.anon_id AND ue2.user_name IS NOT NULL ORDER BY ue2.created_at DESC LIMIT 1) AS display_name,
@@ -3155,7 +2617,6 @@ def admin_insights():
             HAVING notes_processed > 0
         """).fetchall()
 
-        # Mirrors the frontend's LEVEL_THRESHOLDS exactly.
         level_thresholds = [
             (1, 0, '🌱 Beginner'), (2, 5, '📖 Learner'), (3, 10, '✏️ Note Taker'),
             (4, 20, '🎓 Scholar'), (5, 40, '🧠 Expert'), (6, 75, '🏆 Master'), (7, 150, '👑 Legend'),
@@ -3178,7 +2639,6 @@ def admin_insights():
             key=lambda x: x['notes_processed'], reverse=True
         )[:10]
 
-        # --- Retention: distinct devices active in the last 7 / 30 days ---
         now = datetime.now(timezone.utc)
         wau_cutoff = (now - timedelta(days=7)).isoformat()
         mau_cutoff = (now - timedelta(days=30)).isoformat()
@@ -3187,7 +2647,6 @@ def admin_insights():
 
         conn.close()
 
-        # --- Gemini TTS live load (proxy for quota headroom) ---
         with _gemini_tts_gate_lock:
             gemini_recent_calls = len(_gemini_tts_call_times)
 
@@ -3229,11 +2688,6 @@ def admin_announcements_list():
                 a['created_at'] = (dt + sl_offset).strftime('%Y-%m-%d %H:%M')
             except Exception:
                 pass
-            # For private (per-device) messages, look up that device's
-            # latest known display name — lets the admin CONFIRM exactly
-            # who a private message was targeted at (useful for
-            # verifying it went to the right/currently-active device,
-            # e.g. after a cache clear regenerated someone's anon_id).
             if a.get('target_anon_id'):
                 name_row = conn.execute(
                     "SELECT user_name FROM usage_events WHERE anon_id = ? AND user_name != '' "
@@ -3292,14 +2746,7 @@ def admin_announce():
     try:
         data = request.get_json(silent=True) or {}
         message = (data.get('message') or '').strip()[:500]
-        # NEW: optional — if provided, this notification is PRIVATE to
-        # just that one device (anon_id). Left out/empty, it broadcasts
-        # to everyone exactly as announcements always have.
         target_anon_id = (data.get('target_anon_id') or '').strip()[:64] or None
-        # NEW: optional ISO datetime string — if in the future, this
-        # announcement stays hidden from students until that time
-        # arrives (checked on every /announcements/list poll, no
-        # separate scheduler/cron job needed).
         scheduled_at = (data.get('scheduled_at') or '').strip() or None
         if not message:
             return jsonify({'status': 'error', 'message': 'Message එකක් ලියන්න.'}), 400
@@ -3318,14 +2765,6 @@ def admin_announce():
 
 @app.route('/announcements/list')
 def announcements_list():
-    """Public — returns the recent LIST of announcements relevant to
-    this device (global broadcasts + any private ones targeted at this
-    anon_id), newest first, capped at 20. FIX: the older
-    /announcements/latest only ever returned the single most recent
-    message — if admin sent several announcements close together, a
-    student who hadn't checked in a while would only ever see the
-    LAST one and never know earlier ones existed. This lets the
-    notification popup show the full recent list instead."""
     try:
         anon_id = (request.args.get('anon_id') or '').strip()[:64]
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -3354,13 +2793,6 @@ def announcements_list():
 
 @app.route('/announcements/latest')
 def announcements_latest():
-    """Public — every visitor's browser polls this periodically to
-    check for a new admin message. NEW: also considers PRIVATE
-    (per-device) notifications — a device's own anon_id is passed as a
-    query param, and this returns whichever announcement is most
-    recent between the global broadcasts and that device's own private
-    messages. No anon_id provided (e.g. an older cached frontend) falls
-    back to broadcast-only, the original behavior."""
     try:
         anon_id = (request.args.get('anon_id') or '').strip()[:64]
         conn = get_db()
