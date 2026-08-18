@@ -621,8 +621,19 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
             task_owner.append((sentence_idx, clause_idx))
             task_is_forced.append(is_forced)
 
+    # TEMP DIAGNOSTIC LOGGING (Aug 18, 2026 — tracking down the 45-52s
+    # gTTS slowness report): times the parallel Google network calls
+    # specifically, so Render's logs show whether the slowness is
+    # Google's response time (many small network calls) or something
+    # else entirely. Safe to remove once the bottleneck is confirmed.
+    _gtts_network_start = time.time()
+    print(f"⏱️ gTTS: starting {len(tasks)} parallel clause calls to Google (max_workers={max_workers})...")
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         clause_segments_flat = list(executor.map(_tts_sentence_to_segment, tasks))
+
+    _gtts_network_elapsed = time.time() - _gtts_network_start
+    print(f"⏱️ gTTS: all {len(tasks)} clause calls finished in {_gtts_network_elapsed:.1f}s (avg {_gtts_network_elapsed / max(1, len(tasks)):.2f}s/call)")
 
     clause_silence = AudioSegment.silent(duration=clause_pause_ms, frame_rate=GTTS_FRAME_RATE)
     forced_silence = AudioSegment.silent(duration=forced_break_pause_ms, frame_rate=GTTS_FRAME_RATE)
@@ -735,11 +746,20 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         f"{text}"
     )
 
-    max_tts_retries = 4
+    # FIX (Aug 18, 2026 — 2-minute near-miss incident): worst-case wall
+    # time here used to be able to reach ~128s (4 retries x up to 60s
+    # per-call timeout + backoff sleeps), dangerously close to
+    # gunicorn's 120s worker timeout — this is exactly what a ~2min
+    # audio generation matches. Reduced per-call timeout AND retry
+    # count so the true worst case (3 x 40s + ~16s of backoff sleep ≈
+    # 136s) stays safely under the NOW-180s gunicorn timeout (raised in
+    # Render's Start Command alongside this fix) with real margin to
+    # spare, instead of nearly touching the ceiling.
+    max_tts_retries = 3
     response = None
     last_tts_error = None
     synth_start_time = time.time()
-    TOTAL_TIME_BUDGET_SECONDS = 95  # hard ceiling, safely under gunicorn's 120s timeout
+    TOTAL_TIME_BUDGET_SECONDS = 150  # hard ceiling, safely under gunicorn's NEW 180s timeout
 
     for attempt in range(1, max_tts_retries + 1):
         elapsed = time.time() - synth_start_time
@@ -759,7 +779,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
                             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
                         )
                     ),
-                    http_options=types.HttpOptions(timeout=60_000),  # milliseconds
+                    http_options=types.HttpOptions(timeout=40_000),  # milliseconds — see timeout/retry note above
                 )
             )
             break  # success
@@ -1543,12 +1563,13 @@ def text_to_speech():
             }), 500
 
     try:
+        _tts_route_start = time.time()
         print(f"🎙️ Requesting gTTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
         audio_segment, sentence_timings = synthesize_gtts_natural(formatted_text, lang=gtts_lang)
         unique_name = f"output_{uuid.uuid4().hex}.mp3"
         filename = os.path.join('static', unique_name)
         audio_segment.export(filename, format='mp3')
-        print("✅ TTS Success!")
+        print(f"✅ TTS Success! Total /tts route time: {time.time() - _tts_route_start:.1f}s")
         return jsonify({
             'status': 'success',
             'audio_url': '/' + filename.replace('\\', '/'),
