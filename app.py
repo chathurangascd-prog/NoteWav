@@ -1433,9 +1433,16 @@ def call_gemini_quiz(content_text, max_retries=5):
 
     last_error = None
     quiz_start_time = time.time()
-    QUIZ_TIME_BUDGET_SECONDS = 100  # hard ceiling, safely under gunicorn's 120s worker timeout
+    QUIZ_TIME_BUDGET_SECONDS = 45  # hard ceiling, safely under gunicorn's 120s worker timeout
 
-    for attempt in range(1, max_retries + 1):
+    # Same automatic model fallback as call_gemini_structured — tries
+    # the 3.x family first, falls back to the more established 2.5
+    # family if 3.x is degraded.
+    QUIZ_MODELS_TO_TRY = ['gemini-3.7-flash', 'gemini-2.5-flash']
+    quiz_attempt_plan = [(model, n) for model in QUIZ_MODELS_TO_TRY for n in range(1, 2 + 1)]
+
+    response = None
+    for plan_index, (model_name, attempt) in enumerate(quiz_attempt_plan, start=1):
         # Same fix as call_gemini_structured — bounds each individual
         # call (http_options timeout) AND the whole function's total
         # time (budget check below), so a stalled network read can't
@@ -1445,9 +1452,10 @@ def call_gemini_quiz(content_text, max_retries=5):
         if elapsed > QUIZ_TIME_BUDGET_SECONDS:
             raise GeminiGenerationError("Quiz generation timed out across retries (server-side time budget exceeded).")
 
+        is_last_plan_step = (plan_index == len(quiz_attempt_plan))
         try:
             response = client.models.generate_content(
-                model='gemini-3.7-flash',  # FIX (switched from 3.6-flash): 3.6-flash was showing repeated 503s/slowness — Google's own changelog now lists 3.7-flash as GENERALLY AVAILABLE, meaning it's had time to scale up capacity since its initial release (which is why we originally avoided it). Infrastructure priority/capacity often shifts toward the newer GA model as it matures, potentially away from the older one — worth monitoring; revert to 3.6-flash or pin elsewhere if 3.7 turns out equally unstable.
+                model=model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=QUIZ_SYSTEM_INSTRUCTION,
@@ -1455,19 +1463,21 @@ def call_gemini_quiz(content_text, max_retries=5):
                     max_output_tokens=2000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
-                    http_options=types.HttpOptions(timeout=20_000),  # milliseconds
+                    http_options=types.HttpOptions(timeout=15_000),  # milliseconds
                 )
             )
             break
         except Exception as e:
             last_error = e
-            if attempt < max_retries and _is_transient_gemini_error(e):
-                wait_seconds = min(attempt * 2, 10)
-                time.sleep(wait_seconds)
+            if not is_last_plan_step and _is_transient_gemini_error(e):
+                time.sleep(2)
                 continue
-            raise GeminiGenerationError(f"Quiz generation failed: {e}")
-    else:
-        raise GeminiGenerationError(f"Quiz generation failed after {max_retries} attempts: {last_error}")
+            if is_last_plan_step:
+                raise GeminiGenerationError(f"Quiz generation failed after trying {QUIZ_MODELS_TO_TRY}: {last_error}")
+            continue
+
+    if response is None:
+        raise GeminiGenerationError(f"Quiz generation failed after trying {QUIZ_MODELS_TO_TRY}: {last_error}")
 
     if not getattr(response, 'candidates', None):
         raise GeminiGenerationError("Quiz content was blocked by Gemini's safety filters.")
@@ -1509,9 +1519,22 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
 
     last_error = None
     synth_start_time = time.time()
-    TOTAL_TIME_BUDGET_SECONDS = 45  # FIX: reduced from 100s — when Gemini itself is genuinely degraded (not just a one-off blip), waiting up to 100s before telling the person just wastes their time; failing faster lets them switch to Full Text Mode sooner
+    TOTAL_TIME_BUDGET_SECONDS = 45  # hard ceiling, safely under gunicorn's 120s worker timeout
 
-    for attempt in range(1, max_retries + 1):
+    # NEW: automatic model fallback. Gemini's 3.x Flash family has been
+    # showing repeated 503s/slowness recently (confirmed via external
+    # status reports and Google's own rate-limit dashboard) — rather
+    # than failing outright when the 3.x family is degraded, this now
+    # also tries the older, more established 2.5 Flash family, which
+    # often sits on separate capacity/infrastructure and may still be
+    # healthy even when 3.x isn't. Each model gets 2 attempts; overall
+    # time is still bounded by the same 45s budget below.
+    MODELS_TO_TRY = ['gemini-3.7-flash', 'gemini-2.5-flash']
+    ATTEMPTS_PER_MODEL = 2
+    attempt_plan = [(model, n) for model in MODELS_TO_TRY for n in range(1, ATTEMPTS_PER_MODEL + 1)]
+
+    response = None
+    for plan_index, (model_name, attempt) in enumerate(attempt_plan, start=1):
         # FIX (root cause of the "very slow / SIGKILL" incident):
         # the previous fix here only accounted for SLEEP time between
         # retries — it never bounded how long any INDIVIDUAL API call
@@ -1521,20 +1544,20 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
         # numbers were. That hang eventually ran past gunicorn's own
         # 120s worker timeout, forcing gunicorn to SIGKILL the whole
         # worker process — which is exactly the crash the user hit.
-        # Two fixes now, matching the pattern already used for TTS:
+        # Two fixes, matching the pattern already used for TTS:
         # (1) an explicit per-call network timeout via http_options,
         # and (2) a hard TOTAL time budget across the whole function
-        # (all attempts + all sleeps combined), so nothing can ever
-        # add up to gunicorn's limit regardless of how retries and
-        # individual call durations interact.
+        # (all models + all attempts + all sleeps combined), so
+        # nothing can ever add up to gunicorn's limit.
         elapsed = time.time() - synth_start_time
         if elapsed > TOTAL_TIME_BUDGET_SECONDS:
             print(f"⚠️ call_gemini_structured aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
             raise GeminiGenerationError("Gemini request timed out across retries (server-side time budget exceeded). නැවත උත්සාහ කරන්න.")
 
+        is_last_plan_step = (plan_index == len(attempt_plan))
         try:
             response = client.models.generate_content(
-                model='gemini-3.7-flash',  # FIX (switched from 3.6-flash): 3.6-flash was showing repeated 503s/slowness — Google's own changelog now lists 3.7-flash as GENERALLY AVAILABLE, meaning it's had time to scale up capacity since its initial release (which is why we originally avoided it). Infrastructure priority/capacity often shifts toward the newer GA model as it matures, potentially away from the older one — worth monitoring; revert to 3.6-flash or pin elsewhere if 3.7 turns out equally unstable.
+                model=model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -1542,17 +1565,17 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
                     max_output_tokens=8000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
-                    http_options=types.HttpOptions(timeout=15_000),  # milliseconds — reduced to fit 3 attempts within the tighter 45s total budget
+                    http_options=types.HttpOptions(timeout=15_000),  # milliseconds
                 )
             )
+            print(f"✅ Gemini succeeded using {model_name} (attempt {attempt})")
             break  # success — exit the retry loop
         except Exception as e:
             last_error = e
 
             if _is_rate_limit_error(e):
-                if attempt < 2:
-                    print(f"⚠️ Gemini rate-limited (attempt {attempt}), short retry in 4s: {e}")
-                    time.sleep(4)
+                if not is_last_plan_step:
+                    print(f"⚠️ {model_name} rate-limited, moving to next attempt/model: {e}")
                     continue
                 raise GeminiGenerationError(
                     "Gemini API එකේ දෛනික/විනාඩි quota එක ඉවර වී ඇත (free tier limit). "
@@ -1560,27 +1583,27 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
                     "Gemini API එකේ paid billing plan එකකට upgrade කරන්න."
                 )
 
-            if attempt < max_retries and _is_transient_gemini_error(e):
+            if not is_last_plan_step and _is_transient_gemini_error(e):
                 # FIX: an earlier version of this bumped retries up to
                 # 8 attempts with backoff up to 12s, aiming to survive
                 # longer "high demand" spikes. But the WORST-CASE total
                 # time (sleep + actual API call time across all
                 # attempts) came dangerously close to gunicorn's 120s
-                # worker timeout — when that timeout hit mid-retry,
-                # gunicorn killed the worker and the client received a
-                # truncated/non-JSON response, causing a confusing
-                # 'JSON.parse SyntaxError' in the browser console
-                # instead of a clean error message. Pulled back to 5
-                # attempts / 8s backoff cap (worst case ≈ 2+4+6+8+8 =
-                # 28s of sleep, safely leaving well over half the 120s
-                # budget for the actual API calls themselves).
-                wait_seconds = min(attempt * 2, 8)
-                print(f"⚠️ Gemini transient error (attempt {attempt}/{max_retries}), retrying in {wait_seconds}s: {e}")
+                # worker timeout. Kept short here (2s/model-switch) —
+                # trying the OTHER model matters more than waiting
+                # longer on the same struggling one.
+                wait_seconds = 2
+                print(f"⚠️ {model_name} transient error (attempt {attempt}/{ATTEMPTS_PER_MODEL}), retrying/switching in {wait_seconds}s: {e}")
                 time.sleep(wait_seconds)
                 continue
-            raise GeminiGenerationError(f"Gemini request failed: {e}")
-    else:
-        raise GeminiGenerationError(f"Gemini request failed after {max_retries} attempts: {last_error}")
+            if is_last_plan_step:
+                raise GeminiGenerationError(f"Gemini request failed after trying {MODELS_TO_TRY}: {last_error}")
+            # Non-transient error on a non-final step — still worth
+            # trying the next model/attempt rather than giving up.
+            continue
+
+    if response is None:
+        raise GeminiGenerationError(f"Gemini request failed after trying {MODELS_TO_TRY}: {last_error}")
 
     if not getattr(response, 'candidates', None):
         block_reason = getattr(getattr(response, 'prompt_feedback', None), 'block_reason', 'unknown')
