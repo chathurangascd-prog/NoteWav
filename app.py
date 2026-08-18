@@ -1432,7 +1432,19 @@ def call_gemini_quiz(content_text, max_retries=5):
     prompt = f"පහත content එකෙන් quiz එකක් හදන්න:\n\n{content_text}"
 
     last_error = None
+    quiz_start_time = time.time()
+    QUIZ_TIME_BUDGET_SECONDS = 100  # hard ceiling, safely under gunicorn's 120s worker timeout
+
     for attempt in range(1, max_retries + 1):
+        # Same fix as call_gemini_structured — bounds each individual
+        # call (http_options timeout) AND the whole function's total
+        # time (budget check below), so a stalled network read can't
+        # silently run past gunicorn's worker timeout and trigger a
+        # SIGKILL.
+        elapsed = time.time() - quiz_start_time
+        if elapsed > QUIZ_TIME_BUDGET_SECONDS:
+            raise GeminiGenerationError("Quiz generation timed out across retries (server-side time budget exceeded).")
+
         try:
             response = client.models.generate_content(
                 model='gemini-3.6-flash',  # FIX: pinned to this SPECIFIC stable GA model ID (not the '-latest' alias, which moves automatically to whatever's newest — currently gemini-3.7-flash, released just days ago with barely any provisioned capacity yet). gemini-3.6-flash has been GA for about a month now, giving it time to scale, while still getting the Gemini 3 family's better accuracy/lower hallucination rate over 2.5 Flash.
@@ -1443,6 +1455,7 @@ def call_gemini_quiz(content_text, max_retries=5):
                     max_output_tokens=2000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
+                    http_options=types.HttpOptions(timeout=20_000),  # milliseconds
                 )
             )
             break
@@ -1495,7 +1508,30 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
     system_instruction = build_system_instruction(output_language)
 
     last_error = None
+    synth_start_time = time.time()
+    TOTAL_TIME_BUDGET_SECONDS = 100  # hard ceiling, safely under gunicorn's 120s worker timeout
+
     for attempt in range(1, max_retries + 1):
+        # FIX (root cause of the "very slow / SIGKILL" incident):
+        # the previous fix here only accounted for SLEEP time between
+        # retries — it never bounded how long any INDIVIDUAL API call
+        # itself could take. A single stalled network read (Gemini's
+        # side going quiet mid-response) could hang indefinitely,
+        # completely unaffected by how conservative the retry/backoff
+        # numbers were. That hang eventually ran past gunicorn's own
+        # 120s worker timeout, forcing gunicorn to SIGKILL the whole
+        # worker process — which is exactly the crash the user hit.
+        # Two fixes now, matching the pattern already used for TTS:
+        # (1) an explicit per-call network timeout via http_options,
+        # and (2) a hard TOTAL time budget across the whole function
+        # (all attempts + all sleeps combined), so nothing can ever
+        # add up to gunicorn's limit regardless of how retries and
+        # individual call durations interact.
+        elapsed = time.time() - synth_start_time
+        if elapsed > TOTAL_TIME_BUDGET_SECONDS:
+            print(f"⚠️ call_gemini_structured aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
+            raise GeminiGenerationError("Gemini request timed out across retries (server-side time budget exceeded). නැවත උත්සාහ කරන්න.")
+
         try:
             response = client.models.generate_content(
                 model='gemini-3.6-flash',  # FIX: pinned to this SPECIFIC stable GA model ID (not the '-latest' alias, which moves automatically to whatever's newest — currently gemini-3.7-flash, released just days ago with barely any provisioned capacity yet). gemini-3.6-flash has been GA for about a month now, giving it time to scale, while still getting the Gemini 3 family's better accuracy/lower hallucination rate over 2.5 Flash.
@@ -1506,6 +1542,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
                     max_output_tokens=8000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
+                    http_options=types.HttpOptions(timeout=20_000),  # milliseconds — script generation is text-only and normally finishes in a few seconds, so this is generous, not tight
                 )
             )
             break  # success — exit the retry loop
@@ -2427,23 +2464,61 @@ def track_event():
         return jsonify({'status': 'error'}), 200  # 200 on purpose — never surface this as a real error to the client
 
 
+# FIX (urgent performance issue): _is_banned() used to open a fresh
+# Turso connection and run a query on EVERY SINGLE /process-note and
+# /tts request — adding a real network round-trip to Turso before any
+# actual note/audio work even began, on every request, for every
+# user, even though bans are rare and change infrequently. This
+# directly contributed to the app feeling much slower after the ban
+# feature was added. Now caches the banned-identity list in memory,
+# refreshed at most once every 30 seconds, so the vast majority of
+# requests check a local Python set (near-instant) instead of hitting
+# the database at all.
+_banned_identities_cache = set()
+_banned_cache_last_refresh = 0
+_banned_cache_lock = threading.Lock()
+BANNED_CACHE_TTL_SECONDS = 30
+
+
+def _refresh_banned_cache_if_stale():
+    global _banned_identities_cache, _banned_cache_last_refresh
+    now = time.time()
+    if now - _banned_cache_last_refresh < BANNED_CACHE_TTL_SECONDS:
+        return
+    with _banned_cache_lock:
+        # Re-check after acquiring the lock — another thread may have
+        # just refreshed it while we were waiting.
+        if time.time() - _banned_cache_last_refresh < BANNED_CACHE_TTL_SECONDS:
+            return
+        try:
+            conn = get_db()
+            rows = conn.execute("SELECT identity FROM banned_identities").fetchall()
+            conn.close()
+            _banned_identities_cache = {row['identity'] for row in rows}
+            _banned_cache_last_refresh = time.time()
+        except Exception as e:
+            print(f"⚠️ Banned-identity cache refresh failed (keeping previous cache): {e}")
+            # Don't update the timestamp — we'll try again on the next
+            # request rather than waiting the full TTL after a failure.
+
+
 def _is_banned(anon_id=None, email=None):
     """Checks whether a device (anon_id) or account (email) has been
-    banned by an admin. Either match blocks the action."""
+    banned by an admin. Either match blocks the action. Uses an
+    in-memory cache (see above) instead of a database round-trip on
+    every call."""
     if not anon_id and not email:
         return False
     try:
-        conn = get_db()
-        row = None
-        if anon_id:
-            row = conn.execute("SELECT 1 FROM banned_identities WHERE identity = ?", (anon_id,)).fetchone()
-        if not row and email:
-            row = conn.execute("SELECT 1 FROM banned_identities WHERE identity = ?", (email,)).fetchone()
-        conn.close()
-        return row is not None
+        _refresh_banned_cache_if_stale()
+        if anon_id and anon_id in _banned_identities_cache:
+            return True
+        if email and email in _banned_identities_cache:
+            return True
+        return False
     except Exception as e:
         print(f"⚠️ Ban check failed (allowing request through): {e}")
-        return False  # fail open — never block legitimate users due to a DB hiccup
+        return False  # fail open — never block legitimate users due to a hiccup
 
 
 def _is_admin_logged_in():
@@ -2926,6 +3001,11 @@ def admin_ban_identity():
             action = 'banned'
         conn.commit()
         conn.close()
+        # Force the in-memory cache to refresh on the next check —
+        # otherwise a fresh ban/unban wouldn't take effect for up to
+        # BANNED_CACHE_TTL_SECONDS.
+        global _banned_cache_last_refresh
+        _banned_cache_last_refresh = 0
         return jsonify({'status': 'success', 'action': action})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
