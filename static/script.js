@@ -3174,7 +3174,7 @@ function showDailyQuoteCard(markAsShown) {
     const authorEl = document.getElementById('daily-quote-author');
     const startLabelEl = document.getElementById('daily-quote-start-label');
 
-    if (dateLabelEl) dateLabelEl.textContent = lang === 'en' ? 'Quote of the Day' : 'අද දවසේ වදන';
+    if (dateLabelEl) dateLabelEl.textContent = lang === 'en' ? 'NoteWav AI - Quote of the Day' : 'NoteWav AI - අද දවසේ වදන';
     if (textEl) textEl.textContent = quote.text;
     if (authorEl) authorEl.textContent = quote.author;
     if (startLabelEl) startLabelEl.textContent = lang === 'en' ? "Let's Start" : 'ආරම්භ කරමු';
