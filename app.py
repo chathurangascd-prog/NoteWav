@@ -1386,10 +1386,10 @@ def _friendly_gemini_error_message(exc):
     a short, clean message a student can actually understand, instead
     of showing them '503 UNAVAILABLE {...}' verbatim."""
     if _is_rate_limit_error(exc):
-        return 'දැනට NoteWav AI එකේ ගොඩක් අය එකවර use කරනවා. තත්පර කිහිපයක් ඉඳලා නැවත උත්සාහ කරන්න.'
+        return 'දැනට NoteWav AI එකේ ගොඩක් අය එකවර use කරනවා. තත්පර කිහිපයක් ඉඳලා නැවත උත්සාහ කරන්න, නැතහොත් "Full Text Mode" එකෙන් try කරන්න (AI අවශ්‍ය නැති, ක්ෂණික විකල්පයක්).'
     if _is_transient_gemini_error(exc):
-        return 'NoteWav AI servers දැනට busy වී ඇත (high demand). මිනිත්තුවක් විතර ඉඳලා නැවත උත්සාහ කරන්න.'
-    return 'AI processing එකේදී මොකක් හරි ගැටලුවක් ආවා. නැවත උත්සාහ කරන්න.'
+        return 'NoteWav AI (Smart Study) servers දැනට busy වී ඇත (high demand). මිනිත්තුවක් විතර ඉඳලා නැවත උත්සාහ කරන්න, නැතහොත් "Full Text Mode" එකෙන් try කරන්න (AI අවශ්‍ය නැති, ක්ෂණික විකල්පයක්).'
+    return 'AI processing එකේදී මොකක් හරි ගැටලුවක් ආවා. නැවත උත්සාහ කරන්න, නැතහොත් "Full Text Mode" එකෙන් try කරන්න.'
 
 
 def _is_rate_limit_error(exc):
@@ -1447,7 +1447,7 @@ def call_gemini_quiz(content_text, max_retries=5):
 
         try:
             response = client.models.generate_content(
-                model='gemini-3.6-flash',  # FIX: pinned to this SPECIFIC stable GA model ID (not the '-latest' alias, which moves automatically to whatever's newest — currently gemini-3.7-flash, released just days ago with barely any provisioned capacity yet). gemini-3.6-flash has been GA for about a month now, giving it time to scale, while still getting the Gemini 3 family's better accuracy/lower hallucination rate over 2.5 Flash.
+                model='gemini-3.7-flash',  # FIX (switched from 3.6-flash): 3.6-flash was showing repeated 503s/slowness — Google's own changelog now lists 3.7-flash as GENERALLY AVAILABLE, meaning it's had time to scale up capacity since its initial release (which is why we originally avoided it). Infrastructure priority/capacity often shifts toward the newer GA model as it matures, potentially away from the older one — worth monitoring; revert to 3.6-flash or pin elsewhere if 3.7 turns out equally unstable.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=QUIZ_SYSTEM_INSTRUCTION,
@@ -1496,7 +1496,7 @@ def call_gemini_quiz(content_text, max_retries=5):
     return questions
 
 
-def call_gemini_structured(note_text, output_language='si', max_retries=5):
+def call_gemini_structured(note_text, output_language='si', max_retries=3):
     if not client:
         raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
 
@@ -1509,7 +1509,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
 
     last_error = None
     synth_start_time = time.time()
-    TOTAL_TIME_BUDGET_SECONDS = 100  # hard ceiling, safely under gunicorn's 120s worker timeout
+    TOTAL_TIME_BUDGET_SECONDS = 45  # FIX: reduced from 100s — when Gemini itself is genuinely degraded (not just a one-off blip), waiting up to 100s before telling the person just wastes their time; failing faster lets them switch to Full Text Mode sooner
 
     for attempt in range(1, max_retries + 1):
         # FIX (root cause of the "very slow / SIGKILL" incident):
@@ -1534,7 +1534,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
 
         try:
             response = client.models.generate_content(
-                model='gemini-3.6-flash',  # FIX: pinned to this SPECIFIC stable GA model ID (not the '-latest' alias, which moves automatically to whatever's newest — currently gemini-3.7-flash, released just days ago with barely any provisioned capacity yet). gemini-3.6-flash has been GA for about a month now, giving it time to scale, while still getting the Gemini 3 family's better accuracy/lower hallucination rate over 2.5 Flash.
+                model='gemini-3.7-flash',  # FIX (switched from 3.6-flash): 3.6-flash was showing repeated 503s/slowness — Google's own changelog now lists 3.7-flash as GENERALLY AVAILABLE, meaning it's had time to scale up capacity since its initial release (which is why we originally avoided it). Infrastructure priority/capacity often shifts toward the newer GA model as it matures, potentially away from the older one — worth monitoring; revert to 3.6-flash or pin elsewhere if 3.7 turns out equally unstable.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -1542,7 +1542,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=5):
                     max_output_tokens=8000,
                     response_mime_type='application/json',
                     safety_settings=SAFETY_SETTINGS,
-                    http_options=types.HttpOptions(timeout=20_000),  # milliseconds — script generation is text-only and normally finishes in a few seconds, so this is generous, not tight
+                    http_options=types.HttpOptions(timeout=15_000),  # milliseconds — reduced to fit 3 attempts within the tighter 45s total budget
                 )
             )
             break  # success — exit the retry loop
