@@ -290,6 +290,17 @@ def init_db():
         conn.execute("ALTER TABLE notes ADD COLUMN owner_google_id TEXT")
     except Exception:
         pass  # column already exists
+    # NEW: stores the ORIGINAL uploaded photo (as a compressed base64
+    # data URL) alongside a note, so a student can look back at the
+    # actual page they photographed later — not just the extracted
+    # text. Stored in the DATABASE (Turso, persistent) rather than as
+    # a file on Render's local disk, because Render's local filesystem
+    # is wiped on every redeploy/restart — a saved file would silently
+    # vanish the next time the app deploys, but a database row survives.
+    try:
+        conn.execute("ALTER TABLE notes ADD COLUMN source_image_data TEXT")
+    except Exception:
+        pass  # column already exists
     # Lightweight, anonymous usage tracking for the admin dashboard —
     # NOT a real login/account system. "anon_id" is a random ID the
     # browser generates once and stores in localStorage (so the same
@@ -2230,14 +2241,26 @@ def library_save():
     # Library exactly as before, no behavior change for them.
     owner_google_id = session.get('user_id')
 
+    # NEW: optional original photo (base64 data URL, already compressed
+    # client-side) — capped generously but firmly, so one oversized
+    # image can't bloat the database or blow past Turso's per-row size
+    # comfort zone. If it's over the cap, we just skip saving the image
+    # (the note itself still saves fine) rather than failing the whole
+    # request over an image that's too big.
+    source_image = data.get('source_image') or None
+    MAX_SOURCE_IMAGE_CHARS = 700_000  # ~500KB of actual image data, base64-inflated
+    if source_image and len(source_image) > MAX_SOURCE_IMAGE_CHARS:
+        print(f"⚠️ source_image too large ({len(source_image)} chars) — skipping, saving note without it.")
+        source_image = None
+
     try:
         conn = get_db()
         conn.execute(
             """INSERT INTO notes
-               (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode, created_at, anon_id, user_name, owner_google_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode, created_at, anon_id, user_name, owner_google_id, source_image_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (subject, title, note_text, processed_text, mermaid_code_si, mermaid_code_en, mode,
-             datetime.now(timezone.utc).isoformat(), anon_id, user_name, owner_google_id)
+             datetime.now(timezone.utc).isoformat(), anon_id, user_name, owner_google_id, source_image)
         )
         conn.commit()
         new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -2265,7 +2288,7 @@ def library_list():
             # so it's the same list on every device they log into.
             if query:
                 rows = conn.execute(
-                    """SELECT id, subject, title, mode, created_at FROM notes
+                    """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes
                        WHERE owner_google_id = ?
                        AND (title LIKE ? OR subject LIKE ? OR note_text LIKE ? OR processed_text LIKE ?)
                        ORDER BY created_at DESC""",
@@ -2273,7 +2296,7 @@ def library_list():
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
+                    'SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
                     (user_id,)
                 ).fetchall()
         else:
@@ -2282,7 +2305,7 @@ def library_list():
             # be visible here.
             if query:
                 rows = conn.execute(
-                    """SELECT id, subject, title, mode, created_at FROM notes
+                    """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes
                        WHERE owner_google_id IS NULL
                        AND (title LIKE ? OR subject LIKE ? OR note_text LIKE ? OR processed_text LIKE ?)
                        ORDER BY created_at DESC""",
@@ -2290,7 +2313,7 @@ def library_list():
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    'SELECT id, subject, title, mode, created_at FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
+                    'SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
                 ).fetchall()
         conn.close()
         notes = [dict(row) for row in rows]

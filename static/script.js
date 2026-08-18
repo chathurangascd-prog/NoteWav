@@ -379,6 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== State =====
     let audio = null;
     let currentAudioEngine = 'gtts'; // tracks which engine generated the current `audio`, so the speed slider knows whether to apply
+    let currentSourceImageDataUrl = null; // the most recently OCR'd photo (compressed), attached when saving to Library
     let isPlaying = false;
     let isOCRRunning = false;
     let highlightUnits = [];
@@ -579,6 +580,7 @@ document.addEventListener('DOMContentLoaded', function() {
             noteInput.dispatchEvent(new Event('input'));
             noteInput.style.height = 'auto';
             noteInput.focus();
+            currentSourceImageDataUrl = null;
         });
     }
 
@@ -695,6 +697,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="library-note-actions">
                             <button class="library-load-btn" data-id="${note.id}" aria-label="Load"><i class="fas fa-folder-open"></i></button>
+                            ${note.has_image ? `<button class="library-image-btn" data-id="${note.id}" aria-label="View original image" title="View original photo"><i class="fas fa-image"></i></button>` : ''}
                             <button class="library-report-btn" data-id="${note.id}" aria-label="Report" title="Report inappropriate content"><i class="fas fa-flag"></i></button>
                             <button class="library-delete-btn" data-id="${note.id}" aria-label="Delete"><i class="fas fa-trash"></i></button>
                         </div>
@@ -707,6 +710,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         libraryModalBody.querySelectorAll('.library-load-btn').forEach(btn => {
             btn.addEventListener('click', () => loadLibraryNote(btn.dataset.id));
+        });
+        libraryModalBody.querySelectorAll('.library-image-btn').forEach(btn => {
+            btn.addEventListener('click', () => viewLibraryNoteImage(btn.dataset.id));
         });
         libraryModalBody.querySelectorAll('.library-report-btn').forEach(btn => {
             btn.addEventListener('click', () => reportLibraryNote(btn.dataset.id));
@@ -726,6 +732,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // NEW: lets a student flag a Library note as inappropriate/spam —
     // admin reviews it in the dashboard's "Reports" section instead of
     // the note just silently staying up with no way to raise it.
+    // NEW: shows the original uploaded photo for a note (fetched
+    // fresh, since the list view deliberately doesn't include the
+    // full image data to keep that response light) — a simple
+    // lightbox overlay, without disturbing the main editor state the
+    // way "Load" does.
+    async function viewLibraryNoteImage(noteId) {
+        try {
+            const res = await fetch(`/library/notes/${noteId}`);
+            const data = await res.json();
+            if (data.status !== 'success' || !data.note.source_image_data) {
+                showErrorBanner('Image එක load කරගැනීම අසාර්ථක විය.');
+                return;
+            }
+            let lightbox = document.getElementById('library-image-lightbox');
+            if (!lightbox) {
+                lightbox = document.createElement('div');
+                lightbox.id = 'library-image-lightbox';
+                lightbox.style.cssText = 'position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.88); display:flex; align-items:center; justify-content:center; padding:24px; cursor:zoom-out;';
+                lightbox.innerHTML = '<img id="library-image-lightbox-img" style="max-width:100%; max-height:100%; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.5);">';
+                lightbox.addEventListener('click', () => lightbox.classList.add('hidden'));
+                document.body.appendChild(lightbox);
+            }
+            document.getElementById('library-image-lightbox-img').src = data.note.source_image_data;
+            lightbox.classList.remove('hidden');
+        } catch (e) {
+            showErrorBanner('Image එක load කරගැනීම අසාර්ථක විය.');
+        }
+    }
+
     async function reportLibraryNote(noteId) {
         const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
         const promptText = lang === 'en'
@@ -947,6 +982,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         mode,
                         anon_id: (typeof getOrCreateAnonId === 'function') ? getOrCreateAnonId() : '',
                         user_name: profileName,
+                        source_image: currentSourceImageDataUrl || undefined,
                     }),
                 });
                 const data = await response.json();
@@ -2050,6 +2086,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
+                // NEW: hold onto a compressed copy of THIS uploaded
+                // photo — if the resulting note later gets saved to
+                // the Library, it's included so the student can look
+                // back at the original page image, not just the text.
+                compressImageDataUrl(imageUrl, 1000, 0.72).then(compressed => {
+                    if (compressed) currentSourceImageDataUrl = compressed;
+                });
+
                 let langMsg = data.detected_language ? ` (${data.detected_language})` : '';
 
                 if (noteInput.value.trim()) {
@@ -2104,6 +2148,39 @@ document.addEventListener('DOMContentLoaded', function() {
             reader.onload = (e) => resolve(e.target.result);
             reader.onerror = reject;
             reader.readAsDataURL(file);
+        });
+    }
+
+    // NEW: compresses/downscales an image data URL via canvas before
+    // it gets saved with a note — phone camera photos can be several
+    // MB, far too large to store as a base64 blob in the database.
+    // Caps the longest side at maxDimension and re-encodes as JPEG at
+    // the given quality, typically landing well under 300KB.
+    function compressImageDataUrl(dataUrl, maxDimension, quality) {
+        return new Promise((resolve) => {
+            try {
+                const img = new Image();
+                img.onload = function() {
+                    let { width, height } = img;
+                    if (width > height && width > maxDimension) {
+                        height = Math.round(height * (maxDimension / width));
+                        width = maxDimension;
+                    } else if (height > maxDimension) {
+                        width = Math.round(width * (maxDimension / height));
+                        height = maxDimension;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.onerror = () => resolve(null);
+                img.src = dataUrl;
+            } catch (e) {
+                resolve(null);
+            }
         });
     }
 
