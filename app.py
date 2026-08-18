@@ -2211,6 +2211,25 @@ def process_note():
             'warning': 'NoteWav AI configure වී නොමැති බැවින් Smart Study සහ Mind Map ලබාගත නොහැක.'
         })
 
+    # FIX (emergency reliability): Full Text Mode was supposed to be
+    # the fast, no-AI-dependency option, but this call to Gemini ran
+    # UNCONDITIONALLY regardless of mode — the mode check only decided
+    # which TEXT to use afterward (line below), not whether to call
+    # Gemini at all. That meant Full Text Mode was JUST AS exposed to
+    # Gemini being slow/degraded as Smart Study mode, even though the
+    # UI (and earlier advice) implied it wasn't. Now genuinely skips
+    # Gemini for 'full' mode — instant, reliable, no mind map for this
+    # mode until Gemini's current issues settle down.
+    if mode != 'smart':
+        return jsonify({
+            'status': 'success',
+            'processed_text': note_text,
+            'mermaid_code_si': '',
+            'mermaid_code_en': '',
+            'ai_processed': False,
+            'warning': ''
+        })
+
     try:
         podcast_script, mermaid_code_si, mermaid_code_en = call_gemini_structured(note_text, output_language)
     except GeminiGenerationError as e:
