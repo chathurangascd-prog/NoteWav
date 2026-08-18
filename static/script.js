@@ -3152,28 +3152,19 @@ function getDayOfYear(date) {
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+const QUOTE_SEEN_DATE_KEY = 'notewav_last_quote_date';
+
+// NEW: extracted into a standalone, reusable function — called from
+// three places: (1) auto-trigger on page load, (2) right after a
+// first-time visitor finishes/skips onboarding (so they still get
+// the quote today, just after the tutorial instead of colliding with
+// it), and (3) the "📜 Quote of the Day" menu button, so anyone can
+// re-view today's quote on demand at any time.
+function showDailyQuoteCard(markAsShown) {
     const modal = document.getElementById('daily-quote-modal-backdrop');
     if (!modal) return;
 
-    const QUOTE_SEEN_DATE_KEY = 'notewav_last_quote_date';
     const todayStr = new Date().toISOString().slice(0, 10);
-    let lastShownDate = null;
-    try { lastShownDate = localStorage.getItem(QUOTE_SEEN_DATE_KEY); } catch (e) { /* ignore */ }
-
-    if (lastShownDate === todayStr) return; // already shown today
-
-    // Avoid colliding with the onboarding tutorial (also shown once,
-    // shortly after the splash screen) — a genuinely brand-new visitor
-    // sees onboarding first; the daily quote card simply starts from
-    // their next calendar-day visit instead of stacking on the same screen.
-    let onboardingAlreadySeen = true;
-    try { onboardingAlreadySeen = localStorage.getItem('notewav_onboarding_seen') === '1'; } catch (e) { /* ignore */ }
-    if (!onboardingAlreadySeen) {
-        try { localStorage.setItem(QUOTE_SEEN_DATE_KEY, todayStr); } catch (e) { /* ignore */ }
-        return;
-    }
-
     const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
     const dayIndex = getDayOfYear(new Date()) % DAILY_QUOTES.length;
     const quote = DAILY_QUOTES[dayIndex][lang];
@@ -3183,23 +3174,62 @@ document.addEventListener('DOMContentLoaded', function() {
     const authorEl = document.getElementById('daily-quote-author');
     const startLabelEl = document.getElementById('daily-quote-start-label');
 
-    if (dateLabelEl) {
-        dateLabelEl.textContent = lang === 'en' ? 'Quote of the Day' : 'අද දවසේ වදන';
-    }
+    if (dateLabelEl) dateLabelEl.textContent = lang === 'en' ? 'Quote of the Day' : 'අද දවසේ වදන';
     if (textEl) textEl.textContent = quote.text;
     if (authorEl) authorEl.textContent = quote.author;
     if (startLabelEl) startLabelEl.textContent = lang === 'en' ? "Let's Start" : 'ආරම්භ කරමු';
 
-    // Small delay so it doesn't compete with the splash screen animation.
-    setTimeout(() => {
-        modal.classList.remove('hidden');
-    }, 3600);
+    modal.classList.remove('hidden');
+    if (markAsShown) {
+        try { localStorage.setItem(QUOTE_SEEN_DATE_KEY, todayStr); } catch (e) { /* ignore */ }
+    }
 
     const startBtn = document.getElementById('daily-quote-start-btn');
     if (startBtn) {
-        startBtn.addEventListener('click', function() {
+        // Clone-replace to avoid stacking duplicate listeners across
+        // repeated manual opens from the menu button.
+        const freshBtn = startBtn.cloneNode(true);
+        startBtn.parentNode.replaceChild(freshBtn, startBtn);
+        freshBtn.addEventListener('click', function() {
             modal.classList.add('hidden');
             try { localStorage.setItem(QUOTE_SEEN_DATE_KEY, todayStr); } catch (e) { /* ignore */ }
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('daily-quote-modal-backdrop');
+    if (!modal) return;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let lastShownDate = null;
+    try { lastShownDate = localStorage.getItem(QUOTE_SEEN_DATE_KEY); } catch (e) { /* ignore */ }
+    if (lastShownDate === todayStr) return; // already shown today
+
+    // Avoid colliding with the onboarding tutorial (also shown once,
+    // shortly after the splash screen) — a brand-new visitor sees
+    // onboarding FIRST; the daily quote card is shown right after
+    // onboarding closes instead (see closeOnboarding below), rather
+    // than stacking on the same screen at the same moment.
+    let onboardingAlreadySeen = true;
+    try { onboardingAlreadySeen = localStorage.getItem('notewav_onboarding_seen') === '1'; } catch (e) { /* ignore */ }
+    if (!onboardingAlreadySeen) return;
+
+    // Small delay so it doesn't compete with the splash screen animation.
+    setTimeout(() => {
+        showDailyQuoteCard(true);
+    }, 3600);
+});
+
+// NEW: "📜 Quote of the Day" menu button — lets anyone re-view today's
+// quote on demand, any time, not just the one automatic popup.
+document.addEventListener('DOMContentLoaded', function() {
+    const menuQuoteBtn = document.getElementById('open-daily-quote-btn');
+    if (menuQuoteBtn) {
+        menuQuoteBtn.addEventListener('click', function() {
+            const menuDrawer = document.getElementById('menu-drawer-backdrop');
+            if (menuDrawer) menuDrawer.classList.remove('open');
+            showDailyQuoteCard(false);
         });
     }
 });
@@ -3245,6 +3275,19 @@ document.addEventListener('DOMContentLoaded', function() {
     function closeOnboarding() {
         onboardingModal.classList.add('hidden');
         try { localStorage.setItem(ONBOARDING_SEEN_KEY, '1'); } catch (e) { /* ignore */ }
+
+        // NEW: a brand-new visitor's daily quote was deliberately held
+        // back (to avoid stacking two modals at once) — show it now
+        // that onboarding is done, unless it's somehow already been
+        // shown today via another path.
+        let alreadyShownToday = false;
+        try {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            alreadyShownToday = localStorage.getItem(QUOTE_SEEN_DATE_KEY) === todayStr;
+        } catch (e) { /* ignore */ }
+        if (!alreadyShownToday && typeof showDailyQuoteCard === 'function') {
+            setTimeout(() => showDailyQuoteCard(true), 500);
+        }
     }
 
     let alreadySeen = false;
