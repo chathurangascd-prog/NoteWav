@@ -1145,8 +1145,21 @@ def _clean_podcast_script(text):
 
 
 def _is_transient_gemini_error(exc):
+    # FIX (Aug 19, 2026 — confirmed by production logs): "TIMEOUT" (one
+    # word) never matches Python/httpx's actual client-side timeout
+    # message, which reads "The read operation timed out" (two words,
+    # past tense) — so genuine network timeouts were silently treated
+    # as NON-retryable and immediately failed the whole request,
+    # skipping the retry logic entirely. This was invisible until now
+    # because Google's own server-side errors (504 DEADLINE_EXCEEDED,
+    # 503 UNAVAILABLE) DID match and retried fine — only the client-side
+    # "gave up waiting for a response" case fell through the gap.
     msg = str(exc).upper()
-    transient_markers = ['500', '502', '503', '504', 'INTERNAL', 'UNAVAILABLE', 'TIMEOUT', 'DEADLINE_EXCEEDED']
+    transient_markers = [
+        '500', '502', '503', '504', 'INTERNAL', 'UNAVAILABLE',
+        'TIMEOUT', 'TIMED OUT', 'DEADLINE_EXCEEDED',
+        'CONNECTION RESET', 'CONNECTION ABORTED', 'READ OPERATION',
+    ]
     return any(marker in msg for marker in transient_markers)
 
 
