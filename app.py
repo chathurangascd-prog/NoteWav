@@ -611,17 +611,27 @@ def _tts_sentence_to_segment(args):
 
 def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600,
                              clause_pause_ms=140, forced_break_pause_ms=90, max_workers=15):
-    # FIX (Aug 18, 2026 — see split_into_clauses comment for the full
-    # root-cause writeup): raised from 5. With ~29 clauses and only 5
-    # running at once, calls went out in ~6 sequential batches — each
-    # batch itself slow (Render->Google network latency), so the
-    # batches stacked up to the reported 45-52s. Firing more calls at
-    # once means fewer batches (ideally 2 instead of 6 for a
-    # similar-length note), directly cutting total wall time roughly
-    # proportionally. 15 is a safe middle ground — high enough to
-    # collapse most notes into 1-2 batches, not so high it risks
-    # Render's own connection limits or looking like a burst/abuse
-    # pattern to Google.
+    # FIX (Aug 19, 2026 — REAL root cause, confirmed via production
+    # logs): the Aug 18 fix (raising max_workers 5->15) was based on
+    # the wrong theory. Logs from a real request showed 27 clause-level
+    # calls taking 48.0s at a consistent ~1.78s/call — virtually
+    # IDENTICAL to the 48.3s/1.67s-per-call seen BEFORE that fix. That
+    # proves the calls were never actually bottlenecked by client-side
+    # concurrency (5 vs 15 workers) — Google (or the network path
+    # between Render and Google) appears to rate-limit/serialize
+    # responses to this endpoint per-source-IP regardless of how many
+    # requests fire in parallel. Raising max_workers changed nothing
+    # because the calls weren't queueing on OUR side to begin with.
+    #
+    # The only lever left that actually reduces wall time is reducing
+    # the NUMBER of calls. This function now makes ONE Google TTS call
+    # per SENTENCE (not per clause) — cutting a typical note from ~27
+    # calls down to roughly 8-10. Google's own TTS engine already
+    # pauses naturally at commas/punctuation within a single spoken
+    # request, so sentences still sound reasonably paced even without
+    # our own explicit per-clause silence insertion — the trade-off is
+    # slightly less fine-tuned breathing pauses in exchange for
+    # roughly a 3x cut in total generation time.
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
@@ -633,45 +643,19 @@ def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=60
     if not flat_sentences:
         flat_sentences = [(text, True)]
 
-    sentence_clause_lists = [split_into_clauses(s) or [(s, False)] for (s, _) in flat_sentences]
-    tasks = []
-    task_owner = []
-    task_is_forced = []
-    for sentence_idx, clauses in enumerate(sentence_clause_lists):
-        for clause_idx, (clause_text, is_forced) in enumerate(clauses):
-            tasks.append((clause_text, lang))
-            task_owner.append((sentence_idx, clause_idx))
-            task_is_forced.append(is_forced)
+    tasks = [(sentence_text, lang) for (sentence_text, _) in flat_sentences]
 
-    # TEMP DIAGNOSTIC LOGGING (Aug 18, 2026 — tracking down the 45-52s
-    # gTTS slowness report): times the parallel Google network calls
-    # specifically, so Render's logs show whether the slowness is
-    # Google's response time (many small network calls) or something
-    # else entirely. Safe to remove once the bottleneck is confirmed.
+    # TEMP DIAGNOSTIC LOGGING (kept from Aug 18 — confirms the fix):
+    # now counts SENTENCE calls, not clause calls. Compare this run's
+    # total time against the ~48s baseline to confirm the improvement.
     _gtts_network_start = time.time()
-    print(f"⏱️ gTTS: starting {len(tasks)} parallel clause calls to Google (max_workers={max_workers})...")
+    print(f"⏱️ gTTS: starting {len(tasks)} parallel SENTENCE calls to Google (max_workers={max_workers})...")
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        clause_segments_flat = list(executor.map(_tts_sentence_to_segment, tasks))
+        segments = list(executor.map(_tts_sentence_to_segment, tasks))
 
     _gtts_network_elapsed = time.time() - _gtts_network_start
-    print(f"⏱️ gTTS: all {len(tasks)} clause calls finished in {_gtts_network_elapsed:.1f}s (avg {_gtts_network_elapsed / max(1, len(tasks)):.2f}s/call)")
-
-    clause_silence = AudioSegment.silent(duration=clause_pause_ms, frame_rate=GTTS_FRAME_RATE)
-    forced_silence = AudioSegment.silent(duration=forced_break_pause_ms, frame_rate=GTTS_FRAME_RATE)
-    segments_by_sentence = [[] for _ in flat_sentences]
-    for (sentence_idx, clause_idx), seg, is_forced in zip(task_owner, clause_segments_flat, task_is_forced):
-        segments_by_sentence[sentence_idx].append((clause_idx, seg, is_forced))
-
-    segments = []
-    for sentence_idx in range(len(flat_sentences)):
-        clause_entries = sorted(segments_by_sentence[sentence_idx], key=lambda x: x[0])
-        sentence_audio = AudioSegment.silent(duration=0, frame_rate=GTTS_FRAME_RATE)
-        for i, (_, clause_seg, is_forced) in enumerate(clause_entries):
-            sentence_audio += clause_seg
-            if i != len(clause_entries) - 1:
-                sentence_audio += forced_silence if is_forced else clause_silence
-        segments.append(sentence_audio)
+    print(f"⏱️ gTTS: all {len(tasks)} sentence calls finished in {_gtts_network_elapsed:.1f}s (avg {_gtts_network_elapsed / max(1, len(tasks)):.2f}s/call)")
 
     sentence_silence = AudioSegment.silent(duration=pause_ms, frame_rate=GTTS_FRAME_RATE)
     paragraph_silence = AudioSegment.silent(duration=paragraph_pause_ms, frame_rate=GTTS_FRAME_RATE)
