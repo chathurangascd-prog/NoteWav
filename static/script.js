@@ -1722,8 +1722,20 @@ document.addEventListener('DOMContentLoaded', function() {
             // upscaling of a low-res image, hence blur. Now the browser
             // decodes the vector natively AT the final resolution, so
             // text stays crisp no matter how large the export is.
-            const SAFE_MAX_CANVAS_DIMENSION = 6000;
-            const desiredScale = 3.5;
+            // FIX (Aug 20, 2026 — quality still bad specifically on
+            // mobile, even after fixing the SVG-native-resolution bug
+            // above): mobile browsers (iOS Safari in particular, also
+            // some Android WebViews) enforce a much lower MAXIMUM
+            // canvas dimension than desktop browsers do — commonly
+            // around 4096px per side. Requesting a canvas bigger than
+            // that doesn't throw a clear error; the browser silently
+            // clips, blanks, or downscales it, which looks exactly like
+            // "still blurry" even though the SVG itself decoded fine.
+            // Capping lower specifically on mobile keeps us safely
+            // under that ceiling instead of quietly hitting it.
+            const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            const SAFE_MAX_CANVAS_DIMENSION = isMobileDevice ? 4000 : 6000;
+            const desiredScale = isMobileDevice ? 3 : 3.5;
             const largestSide = Math.max(finalWidth, finalHeight);
             const adaptiveScale = Math.min(desiredScale, SAFE_MAX_CANVAS_DIMENSION / largestSide);
             const targetWidth = Math.round(finalWidth * adaptiveScale);
