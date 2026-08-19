@@ -1434,25 +1434,28 @@ document.addEventListener('DOMContentLoaded', function() {
         mindmapZoomWrapper.style.transform = '';
         mindmapModalBackdrop.classList.remove('hidden');
 
+        // FIX (Aug 20, 2026 — default zoom too small/cramped): this
+        // used to shrink the diagram down to FIT the visible container
+        // — meaning bigger mind maps (with lots of nodes) opened at a
+        // tiny, hard-to-read size by default. Now defaults to a fixed
+        // ~1000px-wide view instead — comfortably readable text size
+        // regardless of diagram complexity. The container scrolls (and
+        // now supports pinch-zoom/finger-drag on mobile, see below) so
+        // people can still see the whole thing by zooming out or
+        // panning around, but the FIRST thing they see is legible.
+        const DEFAULT_ZOOM_TARGET_WIDTH = 1000;
         requestAnimationFrame(() => {
             const svgEl = mindmapZoomWrapper.querySelector('svg');
-            if (svgEl && mindmapModalBody) {
+            if (svgEl) {
                 const widthAttr = parseFloat(svgEl.getAttribute('width'));
                 const heightAttr = parseFloat(svgEl.getAttribute('height'));
                 const svgRect = svgEl.getBoundingClientRect();
                 mindmapNaturalWidth = widthAttr || svgRect.width;
                 mindmapNaturalHeight = heightAttr || svgRect.height;
 
-                const margin = 70;
-                const availableWidth = mindmapModalBody.clientWidth - margin;
-                const availableHeight = mindmapModalBody.clientHeight - margin;
-                if (mindmapNaturalWidth > 0 && mindmapNaturalHeight > 0) {
-                    const fitScale = Math.min(
-                        availableWidth / mindmapNaturalWidth,
-                        availableHeight / mindmapNaturalHeight,
-                        2.5
-                    );
-                    setMindMapZoom(fitScale);
+                if (mindmapNaturalWidth > 0) {
+                    const targetScale = DEFAULT_ZOOM_TARGET_WIDTH / mindmapNaturalWidth;
+                    setMindMapZoom(targetScale);
                     return;
                 }
             }
@@ -1531,6 +1534,69 @@ document.addEventListener('DOMContentLoaded', function() {
             isDraggingMindMap = false;
             mindmapModalBody.classList.remove('grabbing');
         });
+
+        // NEW (Aug 20, 2026): touch support — pinch with two fingers to
+        // zoom, drag with one finger to pan. Mouse wheel zoom and
+        // mouse-drag pan (above) already worked on desktop; this adds
+        // the equivalent gestures for phones/tablets, since the mind
+        // map viewer is used heavily on mobile.
+        let mindmapTouchMode = null; // 'pan' | 'pinch' | null
+        let mindmapPinchStartDistance = 0;
+        let mindmapPinchStartZoom = 1;
+        let mindmapPanStartX = 0;
+        let mindmapPanStartY = 0;
+        let mindmapPanScrollStartLeft = 0;
+        let mindmapPanScrollStartTop = 0;
+
+        function getTouchDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        mindmapModalBody.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 2) {
+                mindmapTouchMode = 'pinch';
+                mindmapPinchStartDistance = getTouchDistance(e.touches);
+                mindmapPinchStartZoom = mindmapZoom;
+            } else if (e.touches.length === 1) {
+                mindmapTouchMode = 'pan';
+                mindmapPanStartX = e.touches[0].pageX;
+                mindmapPanStartY = e.touches[0].pageY;
+                mindmapPanScrollStartLeft = mindmapModalBody.scrollLeft;
+                mindmapPanScrollStartTop = mindmapModalBody.scrollTop;
+            }
+        }, { passive: true });
+
+        mindmapModalBody.addEventListener('touchmove', function(e) {
+            if (mindmapTouchMode === 'pinch' && e.touches.length === 2) {
+                e.preventDefault();
+                const currentDistance = getTouchDistance(e.touches);
+                if (mindmapPinchStartDistance > 0) {
+                    const scaleFactor = currentDistance / mindmapPinchStartDistance;
+                    setMindMapZoom(mindmapPinchStartZoom * scaleFactor);
+                }
+            } else if (mindmapTouchMode === 'pan' && e.touches.length === 1) {
+                e.preventDefault();
+                const dx = e.touches[0].pageX - mindmapPanStartX;
+                const dy = e.touches[0].pageY - mindmapPanStartY;
+                mindmapModalBody.scrollLeft = mindmapPanScrollStartLeft - dx;
+                mindmapModalBody.scrollTop = mindmapPanScrollStartTop - dy;
+            }
+        }, { passive: false });
+
+        mindmapModalBody.addEventListener('touchend', function(e) {
+            if (e.touches.length === 0) {
+                mindmapTouchMode = null;
+            } else if (e.touches.length === 1) {
+                // went from pinch (2 fingers) to pan (1 finger) — restart pan tracking cleanly
+                mindmapTouchMode = 'pan';
+                mindmapPanStartX = e.touches[0].pageX;
+                mindmapPanStartY = e.touches[0].pageY;
+                mindmapPanScrollStartLeft = mindmapModalBody.scrollLeft;
+                mindmapPanScrollStartTop = mindmapModalBody.scrollTop;
+            }
+        }, { passive: true });
     }
 
     function prepareSvgForExport(svgString) {
