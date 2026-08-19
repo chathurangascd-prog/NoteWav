@@ -2862,7 +2862,12 @@ const NOTEWAV_TRANSLATIONS = {
     voice_engine_title: { si: 'Voice Engine (Audio):', en: 'Voice Engine (Audio):' },
     ai_model_version_label: { si: '⚙️ AI Model Version:', en: '⚙️ AI Model Version:' },
     tts_model_v25_hint: { si: '💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.', en: '💡 Standard quality — dependable, processes easily.' },
-    tts_model_v31_hint: { si: '💡 Premium quality — වේගවත්, ගොඩක් expressive/natural.', en: '💡 Premium quality — faster, much more expressive/natural.' },
+    // FIX (Aug 19, 2026): removed the "faster" claim — production logs
+    // confirmed a v3.1 generation took ~43s (not faster than v2.5).
+    // The model is genuinely richer/more expressive per Google's own
+    // docs, but speed was never actually validated and the claim was
+    // misleading users about wait times.
+    tts_model_v31_hint: { si: '💡 Premium quality — ගොඩක් expressive/natural, ඒත් ටිකක් වැඩි වෙලාවක් ගන්නවා.', en: '💡 Premium quality — much more expressive/natural, but takes a bit longer to generate.' },
     voice_label: { si: '🗣️ Voice:', en: '🗣️ Voice:' },
     notification_title: { si: 'Notification', en: 'Notification' },
     clear_all_btn: { si: 'Clear All', en: 'Clear All' },
