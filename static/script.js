@@ -241,8 +241,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const ttsVoicePickerWrap = document.getElementById('tts-voice-picker-wrap');
     const ttsVoiceSelect = document.getElementById('tts-voice-select');
     const ttsModelPickerWrap = document.getElementById('tts-model-picker-wrap');
+    const ttsModelV21Btn = document.getElementById('tts-model-v21-btn');
     const ttsModelV25Btn = document.getElementById('tts-model-v25-btn');
     const ttsModelV31Btn = document.getElementById('tts-model-v31-btn');
+    const ttsModelV21Hint = document.getElementById('tts-model-v21-hint');
     const ttsModelV25Hint = document.getElementById('tts-model-v25-hint');
     const ttsModelV31Hint = document.getElementById('tts-model-v31-hint');
 
@@ -260,10 +262,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // NEW (Aug 19, 2026): "NoteWav 2.1" is OpenAI's gpt-4o-mini-tts —
+    // a GA/stable model, positioned BEFORE "NoteWav 2.5" since it's
+    // the new recommended-first option. All three (2.1, 2.5, 3.1) live
+    // under the same "Natural (AI)" engine, sent to the backend as
+    // model_version — the backend decides which actual provider
+    // (OpenAI vs Gemini) to call based on that value.
     function setTtsModelVersionUI(version) {
         ttsModelVersion = version;
+        if (ttsModelV21Btn) ttsModelV21Btn.classList.toggle('active', version === 'v21');
         if (ttsModelV25Btn) ttsModelV25Btn.classList.toggle('active', version === 'v25');
         if (ttsModelV31Btn) ttsModelV31Btn.classList.toggle('active', version === 'v31');
+        if (ttsModelV21Hint) ttsModelV21Hint.classList.toggle('hidden', version !== 'v21');
         if (ttsModelV25Hint) ttsModelV25Hint.classList.toggle('hidden', version !== 'v25');
         if (ttsModelV31Hint) ttsModelV31Hint.classList.toggle('hidden', version !== 'v31');
         try {
@@ -302,7 +312,7 @@ document.addEventListener('DOMContentLoaded', function() {
             ttsVoiceSelect.value = savedTtsVoice;
         }
         const savedTtsModelVersion = localStorage.getItem('notewav_tts_model_version');
-        if (savedTtsModelVersion === 'v25' || savedTtsModelVersion === 'v31') {
+        if (savedTtsModelVersion === 'v21' || savedTtsModelVersion === 'v25' || savedTtsModelVersion === 'v31') {
             setTtsModelVersionUI(savedTtsModelVersion);
         }
     } catch (e) {
@@ -311,6 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (ttsEngineGttsBtn) ttsEngineGttsBtn.addEventListener('click', () => setTtsEngineUI('gtts'));
     if (ttsEngineGeminiBtn) ttsEngineGeminiBtn.addEventListener('click', () => setTtsEngineUI('gemini'));
+    if (ttsModelV21Btn) ttsModelV21Btn.addEventListener('click', () => setTtsModelVersionUI('v21'));
     if (ttsModelV25Btn) ttsModelV25Btn.addEventListener('click', () => setTtsModelVersionUI('v25'));
     if (ttsModelV31Btn) ttsModelV31Btn.addEventListener('click', () => setTtsModelVersionUI('v31'));
     if (ttsVoiceSelect) {

@@ -426,6 +426,31 @@ else:
     client = None
     print("⚠️ GEMINI_API_KEY not found")
 
+# ========================================
+# OPENAI API (Text-to-Speech — GA/stable alternative to Gemini TTS)
+# ========================================
+# NEW (Aug 19, 2026): added as a more reliable Natural Voice option.
+# Unlike Gemini's TTS models (all still "preview" status with no SLA —
+# see the GEMINI_THINKING_BUDGET notes above for the full history of
+# instability this caused), OpenAI's TTS models (gpt-4o-mini-tts,
+# tts-1, tts-1-hd) are GA/production models with normal rate limits
+# and no preview-status caveats. Sinhala isn't on OpenAI's officially
+# listed language table, but manual testing in the OpenAI Playground
+# confirmed usable Sinhala output — good enough to offer as a second,
+# independent Natural Voice engine alongside Gemini, not a replacement.
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if OPENAI_API_KEY:
+    try:
+        from openai import OpenAI
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        print("✅ OpenAI API is ready!")
+    except Exception as e:
+        openai_client = None
+        print(f"⚠️ OpenAI client setup failed: {e}")
+else:
+    openai_client = None
+    print("⚠️ OPENAI_API_KEY not found — OpenAI Voice option will be unavailable")
+
 SAFETY_SETTINGS = [
     types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
     types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_MEDIUM_AND_ABOVE'),
@@ -876,6 +901,114 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         cursor_ms = end_ms
 
     return audio_segment, sentence_timings, actual_model_used
+
+
+class OpenAIGenerationError(Exception):
+    pass
+
+
+# Two voices offered — a clear Male and Female choice, matching the
+# same simplified pattern used for Gemini's voice picker (2 options,
+# not OpenAI's full list of 9+) so students aren't overwhelmed.
+OPENAI_TTS_VOICE_OPTIONS = {
+    'fable': 'Male',
+    'nova': 'Female',
+}
+OPENAI_TTS_MODEL = 'gpt-4o-mini-tts'  # OpenAI's newest, most reliable TTS model (GA, not preview) — confirmed working with Sinhala in the OpenAI Playground
+
+
+def calculate_openai_tts_coin_cost(text_length):
+    """Same tiered-pricing shape as the Gemini v25 tiers — OpenAI's
+    real per-character cost for gpt-4o-mini-tts sits in a broadly
+    similar range, so reusing the same tier boundaries keeps pricing
+    predictable and easy to explain to students, rather than
+    introducing a third, different-looking price table."""
+    if text_length <= 500:
+        return 5
+    elif text_length <= 1200:
+        return 12
+    else:
+        return 20
+
+
+def _openai_tts_sentence_to_segment(args):
+    sentence, voice_name = args
+    response = openai_client.audio.speech.create(
+        model=OPENAI_TTS_MODEL,
+        voice=voice_name,
+        input=sentence,
+        response_format='mp3',
+    )
+    audio_bytes = response.content
+    segment = AudioSegment.from_file(io.BytesIO(audio_bytes), format='mp3')
+    return segment.set_frame_rate(GTTS_FRAME_RATE).set_channels(1)
+
+
+def synthesize_openai_tts(text, voice_name='nova', max_workers=8):
+    """Generates natural-sounding audio using OpenAI's TTS API — a GA
+    (production-stable, not preview) alternative Natural Voice engine
+    to Gemini TTS. Sentence-level parallel calls, same pattern proven
+    to work well for gTTS (see synthesize_gtts_natural above) — OpenAI
+    doesn't return per-sentence timing either, so timings are measured
+    the same way, from each sentence's own actual audio duration."""
+    if not openai_client:
+        raise OpenAIGenerationError("OpenAI API is not configured (missing OPENAI_API_KEY).")
+
+    if voice_name not in OPENAI_TTS_VOICE_OPTIONS:
+        voice_name = 'nova'
+
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
+    flat_sentences = []
+    for paragraph in paragraphs:
+        sentences = split_into_sentences(paragraph) or [paragraph]
+        flat_sentences.extend(sentences)
+    if not flat_sentences:
+        flat_sentences = [text]
+
+    tasks = [(sentence_text, voice_name) for sentence_text in flat_sentences]
+
+    print(f"⏱️ OpenAI TTS: starting {len(tasks)} parallel sentence calls (voice={voice_name})...")
+    _start = time.time()
+
+    max_retries = 2
+    last_error = None
+    segments = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                segments = list(executor.map(_openai_tts_sentence_to_segment, tasks))
+            break
+        except Exception as e:
+            last_error = e
+            print(f"⚠️ OpenAI TTS attempt {attempt} failed: {e}")
+            if attempt < max_retries:
+                time.sleep(3)
+                continue
+            raise OpenAIGenerationError(f"OpenAI TTS failed after {max_retries} attempts: {e}")
+
+    print(f"⏱️ OpenAI TTS: all {len(tasks)} calls finished in {time.time() - _start:.1f}s")
+
+    pause_ms = 350
+    paragraph_pause_ms = 600
+    sentence_silence = AudioSegment.silent(duration=pause_ms, frame_rate=GTTS_FRAME_RATE)
+    combined = AudioSegment.silent(duration=0, frame_rate=GTTS_FRAME_RATE)
+
+    sentence_timings = []
+    total = len(flat_sentences)
+    for i, (sentence_text, segment) in enumerate(zip(flat_sentences, segments)):
+        start_ms = len(combined)
+        combined += segment
+        end_ms = len(combined)
+        sentence_timings.append({
+            'text': sentence_text,
+            'start': round(start_ms / 1000, 3),
+            'end': round(end_ms / 1000, 3),
+        })
+        if i == total - 1:
+            break
+        combined += sentence_silence
+
+    return combined, sentence_timings
 
 
 class GeminiGenerationError(Exception):
@@ -1580,8 +1713,13 @@ def text_to_speech():
     if engine not in ('gtts', 'gemini'):
         engine = 'gtts'
     voice_name = (data.get('voice_name') or '').strip()
+    # NEW: model_version now spans BOTH providers — 'v21' means OpenAI
+    # (gpt-4o-mini-tts, positioned/labeled "NoteWav 2.1" in the UI,
+    # before "NoteWav 2.5"), 'v25'/'v31' mean Gemini as before. This
+    # keeps a single "AI Model Version" picker in the UI covering all
+    # three options, rather than a separate top-level engine choice.
     model_version = (data.get('model_version') or 'v25').strip()
-    if model_version not in GEMINI_TTS_MODEL_VERSIONS:
+    if model_version not in ('v21', 'v25', 'v31'):
         model_version = 'v25'
 
     if not text:
@@ -1602,7 +1740,47 @@ def text_to_speech():
     detected_lang = detect_language(formatted_text)
     gtts_lang = {'Sinhala': 'si', 'Tamil': 'ta', 'English': 'en'}.get(detected_lang, 'si')
 
+    # Maps the Male/Female choice consistently across providers — the
+    # frontend's voice picker sends Gemini-style names (Sadaltager =
+    # Male, Leda = Female) regardless of which model_version is
+    # selected, since it's the same conceptual choice either way.
+    GEMINI_TO_OPENAI_VOICE = {'Sadaltager': 'fable', 'Leda': 'nova'}
+
     if engine == 'gemini':
+        # NEW (Aug 19, 2026): "NoteWav 2.1" — OpenAI's gpt-4o-mini-tts,
+        # a GA/stable alternative positioned before "NoteWav 2.5" in the
+        # UI. Routed here (not a separate top-level engine) so it lives
+        # in the same "AI Model Version" picker as the two Gemini
+        # options, giving the person 3 models to choose from under one
+        # "Natural (AI)" umbrella.
+        if model_version == 'v21':
+            try:
+                openai_voice = GEMINI_TO_OPENAI_VOICE.get(voice_name, voice_name)
+                if openai_voice not in OPENAI_TTS_VOICE_OPTIONS:
+                    openai_voice = 'nova'
+                print(f"🎙️ Requesting OpenAI TTS ({len(formatted_text)} chars, voice: {openai_voice})...")
+                _openai_start = time.time()
+                audio_segment, sentence_timings = synthesize_openai_tts(formatted_text, voice_name=openai_voice)
+                unique_name = f"output_{uuid.uuid4().hex}.mp3"
+                filename = os.path.join('static', unique_name)
+                audio_segment.export(filename, format='mp3')
+                print(f"✅ OpenAI TTS Success! Total time: {time.time() - _openai_start:.1f}s")
+                return jsonify({
+                    'status': 'success',
+                    'audio_url': '/' + filename.replace('\\', '/'),
+                    'sentence_timings': sentence_timings,
+                    'engine': 'openai',
+                    'coin_cost': calculate_openai_tts_coin_cost(len(formatted_text)),
+                    'model_version': 'v21',
+                    'fallback_used': False,
+                })
+            except Exception as e:
+                print(f"❌ OpenAI TTS Error: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'NoteWav 2.1 එකෙන් audio එක generate කරගැනීම අසාර්ථක විය — වෙනත් AI Model එකකින් try කරන්න.'
+                }), 500
+
         try:
             print(f"🎙️ Requesting Gemini TTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
             audio_segment, sentence_timings, actual_model_used = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name, model_version=model_version)
