@@ -6,20 +6,8 @@
     <title>NoteWav AI - Listen to Your Notes</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#6b30ff">
-    <!-- NEW FIX: tells Firefox/Samsung Internet's "force dark" page-
-         darkening feature (which was turning our gold gradient logo
-         into a dark red/brown blob) that this page is ALREADY
-         properly dark-themed, so it shouldn't auto-override colors.
-         Works together with the `color-scheme: dark;` rule in
-         styles.css :root — this is the HTML-level version of the
-         same signal. -->
     <meta name="color-scheme" content="dark">
-    <!-- Google AdSense site verification / ad-serving script -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4882546078529900" crossorigin="anonymous"></script>
-    <!-- NEW: Open Graph / Twitter Card tags — makes links to NoteWav
-         shared on WhatsApp/Facebook/Telegram show a proper preview
-         card (title + description + icon) instead of a bare URL,
-         complementing the mind-map watermark's word-of-mouth growth. -->
     <meta property="og:title" content="NoteWav AI — Smart විදිහට පාඩම් අහන්න">
     <meta property="og:description" content="ඔබේ study notes podcast audio + mind map බවට හරවන්න — Sinhala, Tamil, English. Free AI study tool for Sri Lankan students.">
     <meta property="og:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) }}">
@@ -151,7 +139,6 @@
         }
         #level-up-overlay.show .level-up-card { transform: scale(1); }
 
-        /* ===== DAILY QUOTE CARD ===== */
         .daily-quote-card {
             width: 480px; max-width: 92vw; height: auto; max-height: 90vh;
             background: linear-gradient(165deg, #1d1530 0%, #14101f 55%, #0e0c17 100%);
@@ -673,11 +660,13 @@
                     <div id="tts-model-picker-wrap" class="hidden" style="margin-top: 10px;">
                         <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;" data-i18n="ai_model_version_label">⚙️ AI Model Version:</label>
                         <div class="mindmap-lang-toggle" id="tts-model-toggle">
-                            <button type="button" class="lang-toggle-btn active" data-ttsmodel="v25" id="tts-model-v25-btn">NoteWav 2.5</button>
+                            <button type="button" class="lang-toggle-btn active" data-ttsmodel="v21" id="tts-model-v21-btn">NoteWav 2.1</button>
+                            <button type="button" class="lang-toggle-btn" data-ttsmodel="v25" id="tts-model-v25-btn">NoteWav 2.5</button>
                             <button type="button" class="lang-toggle-btn" data-ttsmodel="v31" id="tts-model-v31-btn">NoteWav 3.1</button>
                         </div>
-                        <p id="tts-model-v25-hint" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;" data-i18n="tts_model_v25_hint">💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.</p>
-                        <p id="tts-model-v31-hint" class="hidden" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;" data-i18n="tts_model_v31_hint">💡 Premium quality — වේගවත්, ගොඩක් expressive/natural.</p>
+                        <p id="tts-model-v21-hint" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;">💡 Stable & reliable — recommended.</p>
+                        <p id="tts-model-v25-hint" class="hidden" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;" data-i18n="tts_model_v25_hint">💡 Standard quality — dependable, ලේසියෙන් process වෙනවා.</p>
+                        <p id="tts-model-v31-hint" class="hidden" style="font-size: 0.68rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4;" data-i18n="tts_model_v31_hint">💡 Premium quality — ගොඩක් expressive/natural, ඒත් ටිකක් වැඩි වෙලාවක් ගන්නවා.</p>
                     </div>
                     <div id="tts-voice-picker-wrap" class="hidden" style="margin-top: 10px;">
                         <label for="tts-voice-select" style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 6px;" data-i18n="voice_label">🗣️ Voice:</label>
