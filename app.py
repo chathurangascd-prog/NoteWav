@@ -775,21 +775,40 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # tries the more established 2.5 Flash TTS model — which sits on
     # separate capacity/infrastructure and is often still healthy even
     # when 3.1 isn't. Only falls back v31 -> v25 (never the reverse,
-    # since v25 is the safer default already). Each model gets its own
-    # full set of retries; overall time is still bounded by the same
-    # TOTAL_TIME_BUDGET_SECONDS budget below.
+    # since v25 is the safer default already).
     model_attempt_plan = [model_version] if model_version == 'v25' else [model_version, 'v25']
 
-    max_tts_retries = 3
+    # FIX #2 (Aug 19, 2026 — confirmed by production logs): the first
+    # version of this fallback gave EVERY model in the plan the full 3
+    # retries. In practice, when v31 was down, it burned all 3 attempts
+    # (~40s timeout each, ~120s+ total) before ever trying v25 — leaving
+    # v25 (the actually-reliable fallback) only enough of the remaining
+    # time budget for ONE attempt with no room to retry, which is
+    # exactly what failed in production (log: "v31 failed after 3
+    # attempts" at the ~37s mark, then v25's single attempt hit the
+    # 150s budget wall before it could retry its own transient error).
+    # Now the risky/first-choice model gets only 1 attempt — fail fast,
+    # don't burn the budget retrying a model that's already down — and
+    # the reliable fallback model gets the FULL retry budget, since
+    # it's the one actually worth retrying.
+    def _max_attempts_for(is_last_model_in_plan):
+        return 3 if is_last_model_in_plan else 1
+
     response = None
     last_tts_error = None
     synth_start_time = time.time()
-    TOTAL_TIME_BUDGET_SECONDS = 150  # hard ceiling, safely under gunicorn's NEW 180s timeout
+    # Raised from 150s now that gunicorn's own worker timeout is 180s
+    # (see Render Start Command) — gives the reliable fallback model
+    # genuine room for its 3 attempts instead of running out of budget
+    # immediately after the first model gives up.
+    TOTAL_TIME_BUDGET_SECONDS = 165
     actual_model_used = model_version
 
-    for plan_model in model_attempt_plan:
+    for plan_index, plan_model in enumerate(model_attempt_plan):
+        is_last_model = (plan_index == len(model_attempt_plan) - 1)
+        max_attempts_this_model = _max_attempts_for(is_last_model)
         model_succeeded = False
-        for attempt in range(1, max_tts_retries + 1):
+        for attempt in range(1, max_attempts_this_model + 1):
             elapsed = time.time() - synth_start_time
             if elapsed > TOTAL_TIME_BUDGET_SECONDS:
                 print(f"⚠️ Gemini TTS aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
@@ -817,11 +836,11 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
                 break  # success — exit retry loop for this model
             except Exception as e:
                 last_tts_error = e
-                if _is_rate_limit_error(e) and attempt < max_tts_retries:
+                if _is_rate_limit_error(e) and attempt < max_attempts_this_model:
                     print(f"⚠️ Gemini TTS ({plan_model}) rate-limited (attempt {attempt}), retrying in 5s: {e}")
                     time.sleep(5)
                     continue
-                if _is_transient_gemini_error(e) and attempt < max_tts_retries:
+                if _is_transient_gemini_error(e) and attempt < max_attempts_this_model:
                     wait_seconds = min(attempt * 3, 8)
                     print(f"⚠️ Gemini TTS ({plan_model}) transient error (attempt {attempt}), retrying in {wait_seconds}s: {e}")
                     time.sleep(wait_seconds)
