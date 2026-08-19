@@ -40,7 +40,6 @@
         }
         a { color: inherit; }
 
-        /* ===== ADMIN SHELL (sidebar + main content) ===== */
         .admin-shell { display: flex; min-height: 100vh; }
         .sidebar {
             width: 250px;
@@ -170,7 +169,6 @@
         .view-section { display: none; }
         .view-section.active { display: block; }
 
-        /* ===== STAT CARDS ===== */
         .stats-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -226,7 +224,6 @@
         .csv-export-btn:hover { background: var(--surface-hover); }
         .csv-export-btn .ic { font-size: 1rem; }
 
-        /* ===== SECTION CARDS ===== */
         .section-card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -258,7 +255,6 @@
             letter-spacing: -0.1px;
         }
 
-        /* ===== ANNOUNCE ===== */
         .announce-row { display: flex; flex-direction: column; gap: 10px; }
         #announce-input {
             width: 100%;
@@ -290,7 +286,6 @@
         #announce-send-btn:hover { transform: translateY(-1px); }
         .announce-status { font-size: 0.78rem; color: var(--green); margin: 10px 0 0; min-height: 1em; font-weight: 600; }
 
-        /* ===== TABLE ===== */
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px 14px; text-align: left; font-size: 0.83rem; border-bottom: 1px solid var(--border); }
         th { color: var(--text-dim); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; }
@@ -316,7 +311,6 @@
         }
         #search-input:focus, #notes-search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-        /* ===== CHARTS ===== */
         .chart-wrap { display: flex; align-items: flex-end; gap: 10px; height: 140px; padding-top: 10px; }
         .chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
         .chart-bars { display: flex; gap: 3px; align-items: flex-end; height: 100px; }
@@ -334,7 +328,6 @@
         .subject-bar-fill { height: 100%; background: var(--accent-grad); border-radius: 6px; }
         .subject-count { font-size: 0.8rem; color: var(--text-dim); width: 34px; text-align: right; font-family: 'JetBrains Mono', monospace; }
 
-        /* ===== NOTES / ANNOUNCEMENTS LIST ===== */
         .note-item, .ann-item {
             display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
             padding: 14px 16px; background: var(--surface-2); border-radius: 10px; margin-bottom: 8px;
@@ -358,7 +351,6 @@
         .ann-item-text { font-size: 0.86rem; color: var(--text); }
         .ann-item-date { font-size: 0.7rem; color: var(--text-faint); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
 
-        /* ===== MODAL ===== */
         .modal-backdrop { position: fixed; inset: 0; background: rgba(5, 5, 10, 0.75); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 999; }
         .modal-backdrop.open { display: flex; }
         .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 420px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
@@ -480,6 +472,9 @@
             </div>
             <div class="stat-card action-card">
                 <a href="https://aistudio.google.com/billing?billing=010C7E-3B1DD1-FD072E" target="_blank" rel="noopener" class="csv-export-btn"><span class="ic">💳</span> Gemini API Billing</a>
+            </div>
+            <div class="stat-card action-card">
+                <a href="https://platform.openai.com/settings/organization/usage" target="_blank" rel="noopener" class="csv-export-btn"><span class="ic">🤖</span> OpenAI Usage</a>
             </div>
         </div>
         </div>
@@ -676,9 +671,6 @@
     </div>
 
     <script>
-        // ========================================
-        // SIDEBAR VIEW SWITCHING (show only the clicked topic)
-        // ========================================
         const VIEW_TITLES = {
             dashboard: ['Dashboard', 'Usage & Content Overview'],
             users: ['Users', 'Everyone using the app'],
@@ -775,7 +767,6 @@
             attachRowClickHandlers();
         }
 
-        // NEW: client-side search filter for the users table
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('user-search-input');
             if (!searchInput) return;
@@ -816,10 +807,6 @@
             const banStatusEl = document.getElementById('ban-status');
             const banBtnEl = document.getElementById('ban-toggle-btn');
             if (banStatusEl) banStatusEl.textContent = '';
-            // FIX: this used to always reset to "Ban this device" no
-            // matter what — even for an already-banned user. It now
-            // shows a neutral placeholder until the actual ban status
-            // arrives from the /admin/user-timeline fetch below.
             if (banBtnEl) banBtnEl.textContent = '⏳ Checking ban status...';
             if (addCoinsStatus) addCoinsStatus.textContent = '';
             if (currentTimelineEmail) {
@@ -844,9 +831,6 @@
                 const res = await fetch('/admin/user-timeline/' + encodeURIComponent(anonId));
                 const data = await res.json();
 
-                // FIX: this must run BEFORE the empty-events early
-                // return below — otherwise a user with zero timeline
-                // events would never get their real ban status shown.
                 const banBtnEl = document.getElementById('ban-toggle-btn');
                 if (banBtnEl && data.status === 'success') {
                     banBtnEl.textContent = data.is_banned ? '✅ Unban this device' : '🚫 Ban this device';
@@ -1015,7 +999,7 @@
             loadReports();
         }
 
-        setInterval(pollDashboard, 20000); // was 8s — reduced to lower Turso rows-read usage (this page calls 8 endpoints per poll)
+        setInterval(pollDashboard, 20000);
         attachRowClickHandlers();
 
         const announceInput = document.getElementById('announce-input');
@@ -1034,8 +1018,6 @@
             const message = announceInput.value.trim();
             if (!message) return;
 
-            // NEW: if "Schedule for later" is checked, this announcement
-            // stays hidden from students until the chosen date/time.
             let scheduledAt = null;
             if (announceScheduleToggle && announceScheduleToggle.checked) {
                 const localValue = announceScheduleInput.value;
@@ -1044,9 +1026,6 @@
                     announceStatus.style.color = '#f87171';
                     return;
                 }
-                // datetime-local gives local time with no timezone —
-                // convert to a proper UTC ISO string so it compares
-                // correctly against the server's own UTC "now".
                 scheduledAt = new Date(localValue).toISOString();
             }
 
@@ -1260,9 +1239,6 @@
                     const tag = a.target_anon_id
                         ? `<span style="color:#f59e0b; font-size:0.68rem; font-weight:700;">🔒 PRIVATE → ${escapeHtml(a.target_name || ('device: ' + a.target_anon_id.slice(0, 10) + '...'))}</span>`
                         : '<span style="color:#4ade80; font-size:0.68rem; font-weight:700;">📢 BROADCAST</span>';
-                    // NEW: if scheduled_at is in the future, this
-                    // announcement hasn't actually reached anyone yet —
-                    // make that clearly visible in the history list.
                     const isPending = a.scheduled_at && new Date(a.scheduled_at).getTime() > nowMs;
                     const scheduleTag = isPending
                         ? ` <span style="color:#a78bfa; font-size:0.68rem; font-weight:700;">⏳ SCHEDULED for ${new Date(a.scheduled_at).toLocaleString()}</span>`
@@ -1291,18 +1267,9 @@
             }
         }
 
-        // ===== NEW: Reports =====
-        let expandedReportIds = new Set(); // remembers which reports are expanded, across auto-refresh re-renders
+        let expandedReportIds = new Set();
         let lastReportsData = [];
 
-        // FIX: this used to be a single "seen up to this ID" threshold
-        // that cleared for ALL reports just from visiting the Reports
-        // tab — even ones the admin never actually opened. Now tracks
-        // a SET of individually-viewed report IDs — a report only
-        // stops being highlighted once the admin has actually opened
-        // ITS content (via "View full note", or automatically for
-        // short reports whose full text is already visible with no
-        // click needed).
         function getViewedReportIds() {
             try {
                 return new Set(JSON.parse(localStorage.getItem('notewav_admin_viewed_report_ids') || '[]'));
@@ -1320,15 +1287,13 @@
             viewed.add(reportId);
             saveViewedReportIds(viewed);
             updateReportsBadge();
-            // Re-render so THIS report's highlight clears immediately,
-            // without waiting for the next poll cycle.
             renderReportsList();
         }
         function markReportUnviewed(reportId) {
             const viewed = getViewedReportIds();
             viewed.delete(reportId);
             saveViewedReportIds(viewed);
-            expandedReportIds.delete(reportId); // collapse it back too
+            expandedReportIds.delete(reportId);
             updateReportsBadge();
             renderReportsList();
         }
@@ -1346,9 +1311,6 @@
                 if (data.status !== 'success') return;
                 lastReportsData = data.reports;
 
-                // Housekeeping: drop viewed-IDs for reports that are no
-                // longer in the active list (dismissed/note deleted) —
-                // keeps localStorage from growing forever.
                 const activeIds = new Set(lastReportsData.map(r => r.id));
                 const viewed = getViewedReportIds();
                 let pruned = false;
@@ -1379,14 +1341,6 @@
                 const hasMore = fullText.length > 160;
                 const preview = hasMore ? fullText.slice(0, 160) + '…' : fullText;
 
-                // FIX: previously, reports whose full text was already
-                // short enough to show with no "expand" needed got
-                // AUTO-marked as viewed the instant they rendered —
-                // meaning the highlight/NEW tag never actually showed
-                // for them at all (most real reports are short, so
-                // this broke the feature almost entirely). Every
-                // report now requires an explicit click on "👁️ View"
-                // to clear its highlight, regardless of length.
                 const isNew = !viewed.has(r.id);
                 const itemClass = isNew ? 'note-item report-item-new' : 'note-item';
                 const newTag = isNew
@@ -1420,10 +1374,8 @@
                 expandedReportIds.delete(reportId);
             } else {
                 expandedReportIds.add(reportId);
-                // Expanding = actually reading the full content — mark
-                // it viewed so its highlight clears from now on.
                 markReportViewed(reportId);
-                return; // markReportViewed already re-renders
+                return;
             }
             renderReportsList();
         }
@@ -1438,7 +1390,6 @@
             }
         }
 
-        // ===== NEW: Insights (coins economy, level distribution, retention, leaderboard, Gemini load) =====
         async function loadInsights() {
             try {
                 const res = await fetch('/admin/insights');
@@ -1452,9 +1403,6 @@
                 const load = data.gemini_load;
                 const img = data.image_storage;
 
-                // Color-codes green/orange/red as usage approaches the
-                // free-tier limit, so a real capacity problem is
-                // visually obvious at a glance, not just a number.
                 let imgColor = '#4ade80';
                 if (img.pct_of_free_tier >= 70) imgColor = '#ef4444';
                 else if (img.pct_of_free_tier >= 40) imgColor = '#fb923c';
