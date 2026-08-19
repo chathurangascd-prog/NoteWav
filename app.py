@@ -31,10 +31,23 @@ load_dotenv()
 
 # ===== UTF-8 FIX (SAFE) =====
 try:
+    # FIX (Aug 19, 2026 — diagnostic ⏱️ logs weren't appearing in
+    # Render's live log stream at all, or all appeared bunched together
+    # with near-identical timestamps only when a worker restarted):
+    # re-wrapping stdout/stderr like this, WITHOUT specifying
+    # line_buffering=True, leaves Python free to use its default block
+    # buffering for a non-interactive stream (which a container's
+    # stdout always is) — meaning every print() call was being held in
+    # memory and only actually sent to Render's logs once that buffer
+    # filled up or the process exited/restarted. That's exactly why
+    # print() statements added specifically to time slow requests
+    # (gTTS, Gemini) were invisible in real time. line_buffering=True
+    # forces a flush after every newline, so print()'d logs now show up
+    # immediately, as they happen.
     if hasattr(sys.stdout, 'buffer'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
     if hasattr(sys.stderr, 'buffer'):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
 except Exception as e:
     print(f"⚠️ Could not rewrap stdout/stderr as UTF-8: {e}")
 
