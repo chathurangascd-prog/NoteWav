@@ -779,27 +779,21 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     model_attempt_plan = [model_version] if model_version == 'v25' else [model_version, 'v25']
 
     # FIX #2 (Aug 19, 2026 — confirmed by production logs): the first
-    # version of this fallback gave EVERY model in the plan the full 3
-    # retries. In practice, when v31 was down, it burned all 3 attempts
-    # (~40s timeout each, ~120s+ total) before ever trying v25 — leaving
-    # v25 (the actually-reliable fallback) only enough of the remaining
-    # time budget for ONE attempt with no room to retry, which is
-    # exactly what failed in production (log: "v31 failed after 3
-    # attempts" at the ~37s mark, then v25's single attempt hit the
-    # 150s budget wall before it could retry its own transient error).
-    # Now the risky/first-choice model gets only 1 attempt — fail fast,
-    # don't burn the budget retrying a model that's already down — and
-    # the reliable fallback model gets the FULL retry budget, since
-    # it's the one actually worth retrying.
+    # UPDATE (Aug 19, 2026 — per explicit request): give BOTH models 2
+    # attempts each (2+2) instead of the previous fail-fast-then-full-
+    # retry split (1+3). Worst-case total time is still bounded by
+    # TOTAL_TIME_BUDGET_SECONDS below, which aborts early if the
+    # combined attempts run long — so this can't blow past gunicorn's
+    # 180s worker timeout even if every attempt times out.
     def _max_attempts_for(is_last_model_in_plan):
-        return 3 if is_last_model_in_plan else 1
+        return 2
 
     response = None
     last_tts_error = None
     synth_start_time = time.time()
     # Raised from 150s now that gunicorn's own worker timeout is 180s
     # (see Render Start Command) — gives the reliable fallback model
-    # genuine room for its 3 attempts instead of running out of budget
+    # genuine room for its attempts instead of running out of budget
     # immediately after the first model gives up.
     TOTAL_TIME_BUDGET_SECONDS = 165
     actual_model_used = model_version
