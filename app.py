@@ -765,55 +765,73 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         f"{text}"
     )
 
-    # FIX (Aug 18, 2026 — 2-minute near-miss incident): worst-case wall
-    # time here used to be able to reach ~128s (4 retries x up to 60s
-    # per-call timeout + backoff sleeps), dangerously close to
-    # gunicorn's 120s worker timeout — this is exactly what a ~2min
-    # audio generation matches. Reduced per-call timeout AND retry
-    # count so the true worst case (3 x 40s + ~16s of backoff sleep ≈
-    # 136s) stays safely under the NOW-180s gunicorn timeout (raised in
-    # Render's Start Command alongside this fix) with real margin to
-    # spare, instead of nearly touching the ceiling.
+    # FIX (Aug 19, 2026 — automatic model fallback, same pattern as
+    # call_gemini_structured): gemini-3.1-flash-tts-preview is a newer,
+    # less-established preview model that's been showing repeated
+    # 503/504 errors (confirmed both in our own production logs and on
+    # Google's own developer forum — other developers report the exact
+    # same "3.1 fails, 3.0/2.5-generation models go through" pattern).
+    # Rather than failing outright when 3.1 is degraded, this now also
+    # tries the more established 2.5 Flash TTS model — which sits on
+    # separate capacity/infrastructure and is often still healthy even
+    # when 3.1 isn't. Only falls back v31 -> v25 (never the reverse,
+    # since v25 is the safer default already). Each model gets its own
+    # full set of retries; overall time is still bounded by the same
+    # TOTAL_TIME_BUDGET_SECONDS budget below.
+    model_attempt_plan = [model_version] if model_version == 'v25' else [model_version, 'v25']
+
     max_tts_retries = 3
     response = None
     last_tts_error = None
     synth_start_time = time.time()
     TOTAL_TIME_BUDGET_SECONDS = 150  # hard ceiling, safely under gunicorn's NEW 180s timeout
+    actual_model_used = model_version
 
-    for attempt in range(1, max_tts_retries + 1):
-        elapsed = time.time() - synth_start_time
-        if elapsed > TOTAL_TIME_BUDGET_SECONDS:
-            print(f"⚠️ Gemini TTS aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
-            raise GeminiGenerationError("Gemini TTS timed out across retries (server-side time budget exceeded).")
+    for plan_model in model_attempt_plan:
+        model_succeeded = False
+        for attempt in range(1, max_tts_retries + 1):
+            elapsed = time.time() - synth_start_time
+            if elapsed > TOTAL_TIME_BUDGET_SECONDS:
+                print(f"⚠️ Gemini TTS aborting — total time budget ({TOTAL_TIME_BUDGET_SECONDS}s) exceeded after {elapsed:.1f}s")
+                raise GeminiGenerationError("Gemini TTS timed out across retries (server-side time budget exceeded).")
 
-        _gemini_tts_call_gate()
-        try:
-            response = client.models.generate_content(
-                model=GEMINI_TTS_MODEL_VERSIONS.get(model_version, GEMINI_TTS_MODEL_VERSIONS['v25']),
-                contents=directed_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
-                        )
-                    ),
-                    http_options=types.HttpOptions(timeout=40_000),  # milliseconds — see timeout/retry note above
+            _gemini_tts_call_gate()
+            try:
+                response = client.models.generate_content(
+                    model=GEMINI_TTS_MODEL_VERSIONS.get(plan_model, GEMINI_TTS_MODEL_VERSIONS['v25']),
+                    contents=directed_prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+                            )
+                        ),
+                        http_options=types.HttpOptions(timeout=40_000),  # milliseconds — see timeout/retry note above
+                    )
                 )
-            )
-            break  # success
-        except Exception as e:
-            last_tts_error = e
-            if _is_rate_limit_error(e) and attempt < max_tts_retries:
-                print(f"⚠️ Gemini TTS rate-limited (attempt {attempt}), retrying in 5s: {e}")
-                time.sleep(5)
-                continue
-            if _is_transient_gemini_error(e) and attempt < max_tts_retries:
-                wait_seconds = min(attempt * 3, 8)
-                print(f"⚠️ Gemini TTS transient error (attempt {attempt}), retrying in {wait_seconds}s: {e}")
-                time.sleep(wait_seconds)
-                continue
-            raise
+                actual_model_used = plan_model
+                model_succeeded = True
+                if plan_model != model_version:
+                    print(f"✅ Gemini TTS succeeded on fallback model {plan_model} (requested {model_version} was unavailable)")
+                break  # success — exit retry loop for this model
+            except Exception as e:
+                last_tts_error = e
+                if _is_rate_limit_error(e) and attempt < max_tts_retries:
+                    print(f"⚠️ Gemini TTS ({plan_model}) rate-limited (attempt {attempt}), retrying in 5s: {e}")
+                    time.sleep(5)
+                    continue
+                if _is_transient_gemini_error(e) and attempt < max_tts_retries:
+                    wait_seconds = min(attempt * 3, 8)
+                    print(f"⚠️ Gemini TTS ({plan_model}) transient error (attempt {attempt}), retrying in {wait_seconds}s: {e}")
+                    time.sleep(wait_seconds)
+                    continue
+                # Non-retryable error, or retries exhausted for this model
+                print(f"⚠️ Gemini TTS ({plan_model}) failed after {attempt} attempt(s): {e}")
+                break  # give up on this model, try the next one in the plan (if any)
+        if model_succeeded:
+            break  # got audio — no need to try the next model in the plan
+
     if response is None:
         raise last_tts_error or GeminiGenerationError("Gemini TTS failed after retries.")
 
@@ -844,7 +862,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         })
         cursor_ms = end_ms
 
-    return audio_segment, sentence_timings
+    return audio_segment, sentence_timings, actual_model_used
 
 
 class GeminiGenerationError(Exception):
@@ -1561,18 +1579,23 @@ def text_to_speech():
     if engine == 'gemini':
         try:
             print(f"🎙️ Requesting Gemini TTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
-            audio_segment, sentence_timings = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name, model_version=model_version)
+            audio_segment, sentence_timings, actual_model_used = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name, model_version=model_version)
             unique_name = f"output_{uuid.uuid4().hex}.mp3"
             filename = os.path.join('static', unique_name)
             audio_segment.export(filename, format='mp3')
-            print("✅ Gemini TTS Success!")
+            print(f"✅ Gemini TTS Success! (model used: {actual_model_used})")
             return jsonify({
                 'status': 'success',
                 'audio_url': '/' + filename.replace('\\', '/'),
                 'sentence_timings': sentence_timings,
                 'engine': 'gemini',
-                'coin_cost': calculate_gemini_tts_coin_cost(len(formatted_text), model_version=model_version),
-                'model_version': model_version,
+                # FIX (Aug 19, 2026): charge for whichever model ACTUALLY
+                # generated the audio, not necessarily the one the person
+                # picked — if v31 failed and this fell back to v25, the
+                # person should pay v25's lower price, not v31's.
+                'coin_cost': calculate_gemini_tts_coin_cost(len(formatted_text), model_version=actual_model_used),
+                'model_version': actual_model_used,
+                'fallback_used': actual_model_used != model_version,
             })
         except Exception as e:
             print(f"❌ Gemini TTS Error: {str(e)}")

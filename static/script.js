@@ -2246,6 +2246,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 trackUsageEvent('audio_generated');
                 saveOfflineAudioEntry(text, data.audio_url);
 
+                // NEW (Aug 19, 2026): if the backend silently fell back
+                // from NoteWav 3.1 to 2.5 (because 3.1 was down/erroring),
+                // let the person know why they got a different voice
+                // model than they picked — instead of it being a silent,
+                // confusing surprise.
+                if (data.fallback_used) {
+                    const fbLang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+                    showErrorBanner(fbLang === 'en'
+                        ? 'NoteWav 3.1 was temporarily unavailable — used NoteWav 2.5 instead (charged at the lower price).'
+                        : 'NoteWav 3.1 එක තාවකාලිකව available නැති නිසා, NoteWav 2.5 එකෙන් audio එක හදුනා (අඩු coins ගාණකින්).');
+                }
+
                 if (data.engine === 'gemini') {
                     const freeUsesLeft = getGeminiFreeTrialsLeft();
                     if (freeUsesLeft > 0) {
