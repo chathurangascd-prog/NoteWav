@@ -2171,8 +2171,20 @@ def admin_logout():
 
 
 def _get_admin_usage_data():
+    # FIX (Aug 18, 2026 — intermittent /admin/data 500 errors +
+    # "Unclosed client session" warnings in Render logs): if any query
+    # below raised an exception, the function exited immediately
+    # WITHOUT ever reaching conn.close() further down — leaving the
+    # underlying Turso network connection open/leaked. That leaked
+    # connection would later get garbage-collected mid-flight during a
+    # totally unrelated request, producing the "Unclosed client
+    # session" warning seen in the logs right after a /process-note
+    # call. Wrapping everything in try/finally guarantees conn.close()
+    # runs — success or failure — exactly like the "always close your
+    # umbrella" rule, whether it stopped raining or you gave up early.
     conn = get_db()
-    users = conn.execute("""
+    try:
+        users = conn.execute("""
         SELECT
             anon_id,
             (SELECT user_name FROM usage_events ue2
@@ -2206,15 +2218,15 @@ def _get_admin_usage_data():
         ORDER BY last_seen DESC
     """).fetchall()
 
-    total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
+        total_notes_in_library = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
 
-    month_start = datetime.now(timezone.utc).strftime('%Y-%m-01')
-    gemini_calls_row = conn.execute(
-        'SELECT COUNT(*) FROM gemini_calls WHERE created_at >= ?', (month_start,)
-    ).fetchone()
-    gemini_calls_this_month = gemini_calls_row[0] if gemini_calls_row else 0
-
-    conn.close()
+        month_start = datetime.now(timezone.utc).strftime('%Y-%m-01')
+        gemini_calls_row = conn.execute(
+            'SELECT COUNT(*) FROM gemini_calls WHERE created_at >= ?', (month_start,)
+        ).fetchone()
+        gemini_calls_this_month = gemini_calls_row[0] if gemini_calls_row else 0
+    finally:
+        conn.close()
 
     sl_offset = timedelta(hours=5, minutes=30)
     now_utc = datetime.now(timezone.utc)
