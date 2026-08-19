@@ -1709,8 +1709,28 @@ document.addEventListener('DOMContentLoaded', function() {
             const finalWidth = width + brutePadding * 2;
             const finalHeight = height + brutePadding * 2;
             svgClone.setAttribute('viewBox', `${vx - brutePadding} ${vy - brutePadding} ${width + brutePadding * 2} ${height + brutePadding * 2}`);
-            svgClone.setAttribute('width', String(finalWidth));
-            svgClone.setAttribute('height', String(finalHeight));
+
+            // FIX (Aug 20, 2026 — blurry/pixelated downloads): raise the
+            // quality ceiling first, THEN set the SVG's own width/height
+            // attributes directly to this HIGH-RES target size (not the
+            // small natural size). This is the actual root cause fix —
+            // browsers rasterize an SVG-sourced <img> ONCE at whatever
+            // width/height the SVG itself declares, and cache that
+            // raster. Previously we set width/height to the small
+            // natural size, then asked canvas.drawImage() to stretch
+            // that already-small raster up to a bigger canvas — pure
+            // upscaling of a low-res image, hence blur. Now the browser
+            // decodes the vector natively AT the final resolution, so
+            // text stays crisp no matter how large the export is.
+            const SAFE_MAX_CANVAS_DIMENSION = 6000;
+            const desiredScale = 3.5;
+            const largestSide = Math.max(finalWidth, finalHeight);
+            const adaptiveScale = Math.min(desiredScale, SAFE_MAX_CANVAS_DIMENSION / largestSide);
+            const targetWidth = Math.round(finalWidth * adaptiveScale);
+            const targetHeight = Math.round(finalHeight * adaptiveScale);
+
+            svgClone.setAttribute('width', String(targetWidth));
+            svgClone.setAttribute('height', String(targetHeight));
 
             const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             bgRect.setAttribute('x', String(vx - brutePadding));
@@ -1733,15 +1753,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 img.src = svgDataUrl;
             });
 
-            const SAFE_MAX_CANVAS_DIMENSION = 4000;
-            const desiredScale = 2.5;
-            const largestSide = Math.max(finalWidth, finalHeight);
-            const adaptiveScale = Math.min(desiredScale, SAFE_MAX_CANVAS_DIMENSION / largestSide);
-
             const canvas = document.createElement('canvas');
-            canvas.width = Math.round(finalWidth * adaptiveScale);
-            canvas.height = Math.round(finalHeight * adaptiveScale);
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
             const ctx = canvas.getContext('2d');
+            // Belt-and-suspenders: even with the fix above, make sure
+            // canvas itself never does any low-quality resampling.
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            // 1:1 draw now — img was already decoded AT this exact
+            // resolution, so this is no longer an upscale at all.
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
             const watermarkFontSize = Math.max(14, Math.round(20 * adaptiveScale));
