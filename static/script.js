@@ -1416,7 +1416,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let mindmapNaturalHeight = 0;
 
     function setMindMapZoom(level) {
-        mindmapZoom = Math.min(10, Math.max(0.3, level));
+        // UPDATE (Aug 20, 2026): max zoom raised from 10x (1000%) to
+        // 50x (5000%) — with the fit-to-screen default restored below,
+        // people need real room to zoom in further from a small fitted
+        // view without hitting the ceiling quickly.
+        mindmapZoom = Math.min(50, Math.max(0.3, level));
         if (mindmapZoomWrapper && mindmapNaturalWidth && mindmapNaturalHeight) {
             mindmapZoomWrapper.style.width = (mindmapNaturalWidth * mindmapZoom) + 'px';
             mindmapZoomWrapper.style.height = (mindmapNaturalHeight * mindmapZoom) + 'px';
@@ -1434,28 +1438,45 @@ document.addEventListener('DOMContentLoaded', function() {
         mindmapZoomWrapper.style.transform = '';
         mindmapModalBackdrop.classList.remove('hidden');
 
-        // FIX (Aug 20, 2026 — default zoom too small/cramped): this
-        // used to shrink the diagram down to FIT the visible container
-        // — meaning bigger mind maps (with lots of nodes) opened at a
-        // tiny, hard-to-read size by default. Now defaults to a fixed
-        // ~1000px-wide view instead — comfortably readable text size
-        // regardless of diagram complexity. The container scrolls (and
-        // now supports pinch-zoom/finger-drag on mobile, see below) so
-        // people can still see the whole thing by zooming out or
-        // panning around, but the FIRST thing they see is legible.
-        const DEFAULT_ZOOM_TARGET_WIDTH = 1000;
+        // FIX (Aug 20, 2026 — "reopen shows blank" bug): the modal body
+        // is the SAME DOM element every time the modal opens/closes —
+        // only its content is swapped. Its scrollLeft/scrollTop from a
+        // previous pinch-zoom/pan session were never being reset, so
+        // reopening could leave the view scrolled off into empty space
+        // even though the diagram itself rendered correctly. Resetting
+        // scroll position on every open fixes that.
+        if (mindmapModalBody) {
+            mindmapModalBody.scrollLeft = 0;
+            mindmapModalBody.scrollTop = 0;
+        }
+
+        // REVERTED to fit-to-screen as the default view (per request) —
+        // the diagram opens sized to fit the visible area, and people
+        // can zoom in further from there (mouse wheel, pinch, or the
+        // +/- buttons) up to the raised 5000% ceiling above.
         requestAnimationFrame(() => {
             const svgEl = mindmapZoomWrapper.querySelector('svg');
-            if (svgEl) {
+            if (svgEl && mindmapModalBody) {
                 const widthAttr = parseFloat(svgEl.getAttribute('width'));
                 const heightAttr = parseFloat(svgEl.getAttribute('height'));
                 const svgRect = svgEl.getBoundingClientRect();
                 mindmapNaturalWidth = widthAttr || svgRect.width;
                 mindmapNaturalHeight = heightAttr || svgRect.height;
 
-                if (mindmapNaturalWidth > 0) {
-                    const targetScale = DEFAULT_ZOOM_TARGET_WIDTH / mindmapNaturalWidth;
-                    setMindMapZoom(targetScale);
+                const margin = 70;
+                const availableWidth = mindmapModalBody.clientWidth - margin;
+                const availableHeight = mindmapModalBody.clientHeight - margin;
+                if (mindmapNaturalWidth > 0 && mindmapNaturalHeight > 0) {
+                    const fitScale = Math.min(
+                        availableWidth / mindmapNaturalWidth,
+                        availableHeight / mindmapNaturalHeight,
+                        2.5
+                    );
+                    setMindMapZoom(fitScale);
+                    if (mindmapModalBody) {
+                        mindmapModalBody.scrollLeft = 0;
+                        mindmapModalBody.scrollTop = 0;
+                    }
                     return;
                 }
             }
@@ -1496,12 +1517,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (mindmapModalBody) {
         mindmapModalBody.addEventListener('wheel', function(e) {
             e.preventDefault();
-            const step = 0.15;
-            setMindMapZoom(mindmapZoom + (e.deltaY < 0 ? step : -step));
+            const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+            setMindMapZoom(mindmapZoom * factor);
         }, { passive: false });
     }
-    if (mindmapZoomInBtn) mindmapZoomInBtn.addEventListener('click', () => setMindMapZoom(mindmapZoom + 0.25));
-    if (mindmapZoomOutBtn) mindmapZoomOutBtn.addEventListener('click', () => setMindMapZoom(mindmapZoom - 0.25));
+    if (mindmapZoomInBtn) mindmapZoomInBtn.addEventListener('click', () => setMindMapZoom(mindmapZoom * 1.25));
+    if (mindmapZoomOutBtn) mindmapZoomOutBtn.addEventListener('click', () => setMindMapZoom(mindmapZoom / 1.25));
     if (mindmapZoomResetBtn) mindmapZoomResetBtn.addEventListener('click', () => setMindMapZoom(1));
 
     let isDraggingMindMap = false;
