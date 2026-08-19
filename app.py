@@ -574,7 +574,18 @@ def split_into_sentences(text):
     return [p.strip() for p in parts if p.strip()]
 
 
-def split_into_clauses(sentence, max_words=14):
+def split_into_clauses(sentence, max_words=20):
+    # FIX (Aug 18, 2026 — 45-52s gTTS slowness, confirmed via logs):
+    # raised from 14. Render's Google TTS calls run ~4-8x slower than
+    # they would from a home computer (confirmed: 1.67s avg per call in
+    # production logs, vs a normal ~0.2-0.4s) — likely Google
+    # throttling/deprioritizing traffic from cloud datacenter IPs. Each
+    # clause is one separate network call, so fewer/longer clauses
+    # means fewer total calls. Kept at 20 (not more) rather than
+    # removing clause-splitting altogether, since natural mid-sentence
+    # breathing pauses (the whole reason clauses exist) still matter
+    # for audio quality — this is a moderate reduction in call count,
+    # not a quality-for-speed trade that guts the pacing.
     raw_parts = re.split(r'(?<=[,;])\s+', sentence)
     final_parts = []
     for part in raw_parts:
@@ -599,7 +610,18 @@ def _tts_sentence_to_segment(args):
 
 
 def synthesize_gtts_natural(text, lang='si', pause_ms=350, paragraph_pause_ms=600,
-                             clause_pause_ms=140, forced_break_pause_ms=90, max_workers=5):
+                             clause_pause_ms=140, forced_break_pause_ms=90, max_workers=15):
+    # FIX (Aug 18, 2026 — see split_into_clauses comment for the full
+    # root-cause writeup): raised from 5. With ~29 clauses and only 5
+    # running at once, calls went out in ~6 sequential batches — each
+    # batch itself slow (Render->Google network latency), so the
+    # batches stacked up to the reported 45-52s. Firing more calls at
+    # once means fewer batches (ideally 2 instead of 6 for a
+    # similar-length note), directly cutting total wall time roughly
+    # proportionally. 15 is a safe middle ground — high enough to
+    # collapse most notes into 1-2 batches, not so high it risks
+    # Render's own connection limits or looking like a burst/abuse
+    # pattern to Google.
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()] or [text]
 
     flat_sentences = []
