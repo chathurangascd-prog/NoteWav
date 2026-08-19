@@ -288,9 +288,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? `🎁 Free trials left: ${freeLeft}/${GEMINI_FREE_TRIALS_TOTAL}`
                 : `🎁 Free trials ඉතුරුයි: ${freeLeft}/${GEMINI_FREE_TRIALS_TOTAL}`;
         } else {
-            // NEW: never show the coin price/balance — the exact
-            // pricing tiers are an internal business detail, not
-            // something to expose to the person.
             statusEl.classList.add('hidden');
         }
     }
@@ -411,8 +408,6 @@ document.addEventListener('DOMContentLoaded', function() {
             playbackSpeed = parseFloat(this.dataset.speed);
             speedButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            // Gemini (Natural AI) audio stays locked to its own default
-            // pace — the speed slider only affects Standard (gTTS) audio.
             if (audio) audio.playbackRate = getEffectivePlaybackRate();
             try {
                 localStorage.setItem(SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -431,15 +426,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const SPEED_BOOST_MULTIPLIER = 1.15;
     function getEffectivePlaybackRate() {
-        // gTTS (Standard) keeps its EXACT existing behavior unchanged —
-        // "1x" has always actually played at 1.15x, because gTTS's
-        // mechanical voice sounds noticeably duller/slower at a true
-        // 1.0x than a natural human voice does.
-        //
-        // Gemini (Natural AI) already has its own carefully-paced,
-        // natural-sounding delivery, so it does NOT get that artificial
-        // boost — its "1x" means a genuine, unmodified 1.0x, and the
-        // speed buttons scale from that true baseline.
         if (currentAudioEngine === 'gemini') {
             return playbackSpeed;
         }
@@ -460,13 +446,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========================================
     // ERROR BANNER (Feature 2: friendly error UI)
     // ========================================
-    // FIX: error messages across the app were hardcoded in Sinhala at
-    // every call site (38 of them) — switching app language to English
-    // didn't translate these at all. Rather than editing every call
-    // site individually, showErrorBanner() itself now looks up a
-    // translation when the app language is English, covering both
-    // exact-match messages and ones with a dynamic suffix (like
-    // "...අසාර්ථක විය: " + err.message).
     const ERROR_MESSAGE_TRANSLATIONS_EN = {
         'කරුණාකර පාඩම් සටහනක් ඇතුළත් කරන්න.': 'Please enter your study note.',
         'Network error. කරුණාකර නැවත උත්සාහ කරන්න.': 'Network error. Please try again.',
@@ -634,10 +613,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // NEW: search now goes through the backend (debounced) instead of
-    // only filtering title/subject already loaded in the browser — this
-    // means it searches the FULL saved note content too, not just the
-    // title/subject shown in the list.
     if (librarySearchInput) {
         librarySearchInput.addEventListener('input', function() {
             const term = this.value;
@@ -667,14 +642,6 @@ document.addEventListener('DOMContentLoaded', function() {
             grouped[subject].push(note);
         });
 
-        // FIX: subjects were sorted alphabetically (A-Z), which meant a
-        // note just saved under a subject starting with a later letter
-        // (e.g. "Zoology") wouldn't appear "on top" even though it was
-        // the most recent save — the notes ARRAY itself is already
-        // correctly ordered newest-first by the backend, so subject
-        // GROUPS are now ordered by their own most-recent note's
-        // timestamp instead, keeping the just-saved note's group at
-        // the very top regardless of its subject name.
         const sortedSubjects = Object.keys(grouped).sort((a, b) => {
             const aLatest = new Date(grouped[a][0].created_at).getTime();
             const bLatest = new Date(grouped[b][0].created_at).getTime();
@@ -729,14 +696,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: lets a student flag a Library note as inappropriate/spam —
-    // admin reviews it in the dashboard's "Reports" section instead of
-    // the note just silently staying up with no way to raise it.
-    // NEW: shows the original uploaded photo for a note (fetched
-    // fresh, since the list view deliberately doesn't include the
-    // full image data to keep that response light) — a simple
-    // lightbox overlay, without disturbing the main editor state the
-    // way "Load" does.
     async function viewLibraryNoteImage(noteId) {
         try {
             const res = await fetch(`/library/notes/${noteId}`);
@@ -767,10 +726,6 @@ document.addEventListener('DOMContentLoaded', function() {
             ? 'Why are you reporting this note? (optional)'
             : 'ඇයි මේ note එක report කරන්නේ? (optional)';
         const rawReason = window.prompt(promptText, '');
-        // FIX: window.prompt() returns null specifically when the
-        // person clicks Cancel — the old code did `|| ''`, which
-        // silently turned that null into an empty string and still
-        // submitted the report anyway. Now Cancel genuinely aborts.
         if (rawReason === null) return;
         const reason = rawReason;
         try {
@@ -840,14 +795,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                // Reuse the normal script/safety-check flow — drop the
-                // combined text straight into it, exactly as if it had
-                // just been processed, so the existing "Generate Audio"
-                // button and pipeline handle it unchanged.
                 if (scriptOutput) scriptOutput.value = combinedText;
                 safetySection.classList.remove('hidden');
                 audioSection.classList.add('hidden');
-                if (mindmapSection) mindmapSection.classList.add('hidden'); // no combined mind map — audio-only feature
+                if (mindmapSection) mindmapSection.classList.add('hidden');
                 const quizSectionCombineEl = document.getElementById('quiz-section');
                 if (quizSectionCombineEl) quizSectionCombineEl.classList.add('hidden');
 
@@ -949,9 +900,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 showErrorBanner('Save කරන්න note එකක් නෑ.');
                 return;
             }
-            // NEW: Library saving now requires being signed in with
-            // Google. Guests get a friendly prompt instead of the
-            // save silently going nowhere.
             if (typeof notewavIsLoggedIn !== 'undefined' && !notewavIsLoggedIn) {
                 const loginModal = document.getElementById('login-required-modal-backdrop');
                 if (loginModal) loginModal.classList.remove('hidden');
@@ -1698,11 +1646,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // NEW: subtle brand watermark, bottom-right corner. When a
-            // student shares this PNG/PDF with classmates (WhatsApp,
-            // print, etc.), this small credit line is how a friend who
-            // never used the app discovers it — organic, zero-cost
-            // growth from content that's already being shared anyway.
             const watermarkFontSize = Math.max(14, Math.round(20 * adaptiveScale));
             ctx.font = `600 ${watermarkFontSize}px 'Plus Jakarta Sans', sans-serif`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
@@ -1888,10 +1831,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // NEW: 'multiple' is now enabled on the gallery file input — if the
-    // person selects several photos at once (e.g. pages of the same
-    // lesson), batch-process all of them into one combined note instead
-    // of only ever handling a single image.
     imageInput.addEventListener('change', function(e) {
         const files = Array.from(this.files || []);
         if (files.length > 0 && !isOCRRunning) {
@@ -1964,11 +1903,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // NEW: batch-processes several photos (e.g. pages 1, 2, 3 of the
-    // same lesson) sequentially through the existing single-image OCR
-    // endpoint, then joins all the extracted text together with clear
-    // page markers into one combined note — no backend change needed,
-    // this just loops the existing /ocr call per file.
     async function handleMultipleImages(files) {
         const validFiles = files.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
         if (!validFiles.length) {
@@ -2086,10 +2020,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                // NEW: hold onto a compressed copy of THIS uploaded
-                // photo — if the resulting note later gets saved to
-                // the Library, it's included so the student can look
-                // back at the original page image, not just the text.
                 compressImageDataUrl(imageUrl, 1000, 0.72).then(compressed => {
                     if (compressed) currentSourceImageDataUrl = compressed;
                 });
@@ -2151,11 +2081,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // NEW: compresses/downscales an image data URL via canvas before
-    // it gets saved with a note — phone camera photos can be several
-    // MB, far too large to store as a base64 blob in the database.
-    // Caps the longest side at maxDimension and re-encodes as JPEG at
-    // the given quality, typically landing well under 300KB.
     function compressImageDataUrl(dataUrl, maxDimension, quality) {
         return new Promise((resolve) => {
             try {
@@ -2220,11 +2145,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 trackUsageEvent('note_processed');
 
                 if (data.ai_processed === false && data.warning) {
-                    // FIX: this is a "soft failure" — Gemini processing
-                    // didn't fully work and a warning banner (looks
-                    // like an error) is shown to the person, so it
-                    // shouldn't count as a completed note toward
-                    // leveling up.
                     showErrorBanner(data.warning);
                 } else {
                     incrementNotesProcessedCount();
@@ -2273,9 +2193,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // NEW: Gemini (Natural AI) is a paid feature after the first 3
-        // free trials — check BEFORE spending any time/API calls
-        // generating audio the person can't actually afford/use.
         let estimatedCoinCost = 0;
         if (ttsEngine === 'gemini') {
             const freeUsesLeft = getGeminiFreeTrialsLeft();
@@ -2313,14 +2230,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }),
             });
 
-            // FIX: if the server times out or the connection drops
-            // mid-request (e.g. a slow AI generation getting cut off),
-            // the response body isn't valid JSON — it might be an
-            // empty body or an HTML error page from a gateway timeout.
-            // response.json() would throw a raw, confusing
-            // 'SyntaxError: JSON.parse...' in that case. Parsing text
-            // first and JSON.parse-ing it ourselves lets us catch that
-            // specific failure and show a clear message instead.
             const rawBody = await response.text();
             let data;
             try {
@@ -2337,9 +2246,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 trackUsageEvent('audio_generated');
                 saveOfflineAudioEntry(text, data.audio_url);
 
-                // NEW: only charge AFTER a successful generation — a
-                // failed/errored request shouldn't cost the person
-                // anything.
                 if (data.engine === 'gemini') {
                     const freeUsesLeft = getGeminiFreeTrialsLeft();
                     if (freeUsesLeft > 0) {
@@ -2395,13 +2301,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     showErrorBanner('Audio playback error. Please try again.');
                 });
 
-                // FIX (couldn't seek on mobile): the old handler only
-                // listened for 'click', which fires on a simple tap but
-                // never fires while dragging a finger along the bar —
-                // so seeking only sort-of worked with an exact single
-                // tap and never with a drag-to-scrub gesture. Pointer
-                // Events unify mouse and touch, so this now handles
-                // both a tap AND a drag consistently on any device.
                 let isDraggingProgress = false;
 
                 function seekFromPointerEvent(e) {
@@ -2742,36 +2641,12 @@ window.addEventListener('load', function() {
 // ========================================
 // PWA: SERVICE WORKER REGISTRATION
 // ========================================
-// FIX (install button never appeared, especially on Samsung Internet):
-// previously this registered '/static/sw.js', which auto-restricts the
-// service worker's scope to '/static/' — meaning it could never
-// control the actual home page ('/'). Several browsers require the
-// service worker to control start_url before offering the install
-// prompt, so that check was silently failing. Now the SAME sw.js file
-// is served from the app's root path via a new Flask route
-// (@app.route('/sw.js') in app.py, with a Service-Worker-Allowed: /
-// header for extra safety), and registered here with an explicit
-// scope of '/' so it can control the entire site as the manifest
-// intends.
-// NEW: a mobile-device check shared by both install-button code paths
-// below. The person only wants the "Install app" button to ever show
-// up on phones/tablets — desktop browsers (even ones that technically
-// support PWA install, like desktop Chrome/Edge) should never show it.
 function isMobileDeviceForInstall() {
     return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-        // FIX (Samsung Internet still not showing install prompt after
-        // the scope fix): a PREVIOUS visit may have already registered
-        // the old, wrongly-scoped worker at '/static/sw.js' before this
-        // fix was deployed. That stale registration doesn't just go
-        // away on its own — the browser can end up tracking two
-        // registrations for the same site. Explicitly finding and
-        // unregistering any worker whose scope still contains
-        // '/static/' clears that leftover confusion before registering
-        // the correctly-scoped one at '/'.
         navigator.serviceWorker.getRegistrations().then((registrations) => {
             registrations.forEach((reg) => {
                 if (reg.scope && reg.scope.includes('/static/')) {
@@ -2795,9 +2670,6 @@ let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e) {
     e.preventDefault();
     deferredInstallPrompt = e;
-    // NEW: only ever surface the button on mobile, per request — even
-    // though Chromium desktop browsers CAN fire this event and support
-    // installing, the person doesn't want the button appearing there.
     if (!isMobileDeviceForInstall()) return;
     const btn = document.getElementById('install-app-btn');
     if (btn) btn.classList.remove('hidden');
@@ -2827,18 +2699,10 @@ window.addEventListener('appinstalled', function() {
 // ========================================
 // FIREFOX / OTHER NON-CHROMIUM: manual "Add to Home Screen" fallback
 // ========================================
-// NEW: Firefox (desktop & Android) never fires 'beforeinstallprompt'
-// at all — that's a Chromium-only API (Chrome, Samsung Internet,
-// Edge). Without this, the install button would just silently never
-// appear there. This detects that case and shows the SAME button, but
-// clicking it opens simple manual instructions instead of the native
-// prompt.
 document.addEventListener('DOMContentLoaded', function() {
     const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     const btn = document.getElementById('install-app-btn');
-    // NEW: mobile-only, same as the Chromium install button above —
-    // this fallback used to show on desktop Firefox too.
     if (!btn || !isFirefox || isStandalone || !isMobileDeviceForInstall()) return;
 
     setTimeout(() => {
@@ -2846,7 +2710,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 2500);
 
     btn.addEventListener('click', function firefoxInstallHandler(e) {
-        if (deferredInstallPrompt) return; // let the normal Chromium flow handle it if it exists
+        if (deferredInstallPrompt) return;
         e.stopImmediatePropagation();
         alert('Firefox එකේ Install කරන්න:\n\n☰ Menu (⋮) → "Install" හෝ "Add to Home screen" click කරන්න.');
     }, true);
@@ -3030,11 +2894,6 @@ function useGeminiFreeTrial() {
     }
 }
 
-// Mirrors the backend's calculate_gemini_tts_coin_cost() tiers exactly
-// — used here only to check affordability BEFORE sending the request;
-// the actual authoritative charge always comes from the server's own
-// `coin_cost` in the /tts response. v31 costs exactly 2x v25, matching
-// its 2x per-token API price.
 function estimateGeminiCoinCost(textLength, modelVersion) {
     let base;
     if (textLength <= 500) base = 5;
@@ -3046,11 +2905,6 @@ function estimateGeminiCoinCost(textLength, modelVersion) {
 // ========================================
 // AUDIO GENERATION — Animated waiting messages
 // ========================================
-// Makes the wait feel purposeful instead of a dead/frozen screen —
-// especially relevant now that Gemini TTS requests can sit briefly in
-// a server-side queue during busy periods. Cycles through friendly
-// phase-like messages; if generation runs long, it gently loops the
-// later messages instead of getting stuck on one line.
 const AUDIO_GEN_STATUS_MESSAGES = {
     si: [
         '📖 ඔබේ note එක කියවමින්...',
@@ -3077,8 +2931,6 @@ function startAudioGenStatusCycle(engine) {
     el.classList.remove('hidden');
     el.style.opacity = '1';
 
-    // Gemini (Natural AI) requests can genuinely take longer (queueing
-    // + generation) — cycle a bit slower so messages don't feel rushed.
     const stepMs = engine === 'gemini' ? 4500 : 3000;
 
     clearInterval(audioGenStatusInterval);
@@ -3150,7 +3002,6 @@ function renderStatsModal() {
     if (streakCountEl) streakCountEl.textContent = getStreakCountForStats();
     if (activeDaysEl) activeDaysEl.textContent = activeDays;
 
-    // Calendar heatmap — last 90 days, GitHub-style grid (7 rows = weekdays)
     const grid = document.getElementById('stats-heatmap-grid');
     if (!grid) return;
     const maxCount = Math.max(1, ...Object.values(log));
@@ -3196,10 +3047,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // DAILY QUOTE GREETING CARD (once per day, first open)
 // ========================================
-// 20 short, well-known, verifiably-attributed quotes — a mix of
-// globally-recognized figures and simple, widely-taught Buddhist
-// teachings. Kept short and paraphrased in Claude's own words rather
-// than claiming exact verbatim scripture/literary translation.
 const DAILY_QUOTES = [
     { si: { text: 'ඉගෙනගත් දෙයක් කිසිවෙකුට අහෝසි කරන්න බැහැ.', author: 'B.B. King' }, en: { text: 'The beautiful thing about learning is nobody can take it away from you.', author: 'B.B. King' } },
     { si: { text: 'අධ්‍යාපනය ලෝකය වෙනස් කරන්න පුළුවන් බලවත්ම ආයුධයයි.', author: 'Nelson Mandela' }, en: { text: 'Education is the most powerful weapon to change the world.', author: 'Nelson Mandela' } },
@@ -3231,12 +3078,6 @@ function getDayOfYear(date) {
 
 const QUOTE_SEEN_DATE_KEY = 'notewav_last_quote_date';
 
-// NEW: extracted into a standalone, reusable function — called from
-// three places: (1) auto-trigger on page load, (2) right after a
-// first-time visitor finishes/skips onboarding (so they still get
-// the quote today, just after the tutorial instead of colliding with
-// it), and (3) the "📜 Quote of the Day" menu button, so anyone can
-// re-view today's quote on demand at any time.
 function showDailyQuoteCard(markAsShown) {
     const modal = document.getElementById('daily-quote-modal-backdrop');
     if (!modal) return;
@@ -3266,8 +3107,6 @@ function showDailyQuoteCard(markAsShown) {
 
     const startBtn = document.getElementById('daily-quote-start-btn');
     if (startBtn) {
-        // Clone-replace to avoid stacking duplicate listeners across
-        // repeated manual opens from the menu button.
         const freshBtn = startBtn.cloneNode(true);
         startBtn.parentNode.replaceChild(freshBtn, startBtn);
         freshBtn.addEventListener('click', function() {
@@ -3286,23 +3125,15 @@ document.addEventListener('DOMContentLoaded', function() {
     try { lastShownDate = localStorage.getItem(QUOTE_SEEN_DATE_KEY); } catch (e) { /* ignore */ }
     if (lastShownDate === todayStr) return; // already shown today
 
-    // Avoid colliding with the onboarding tutorial (also shown once,
-    // shortly after the splash screen) — a brand-new visitor sees
-    // onboarding FIRST; the daily quote card is shown right after
-    // onboarding closes instead (see closeOnboarding below), rather
-    // than stacking on the same screen at the same moment.
     let onboardingAlreadySeen = true;
     try { onboardingAlreadySeen = localStorage.getItem('notewav_onboarding_seen') === '1'; } catch (e) { /* ignore */ }
     if (!onboardingAlreadySeen) return;
 
-    // Small delay so it doesn't compete with the splash screen animation.
     setTimeout(() => {
         showDailyQuoteCard(true);
     }, 3600);
 });
 
-// NEW: "📜 Quote of the Day" menu button — lets anyone re-view today's
-// quote on demand, any time, not just the one automatic popup.
 document.addEventListener('DOMContentLoaded', function() {
     const menuQuoteBtn = document.getElementById('open-daily-quote-btn');
     if (menuQuoteBtn) {
@@ -3356,10 +3187,6 @@ document.addEventListener('DOMContentLoaded', function() {
         onboardingModal.classList.add('hidden');
         try { localStorage.setItem(ONBOARDING_SEEN_KEY, '1'); } catch (e) { /* ignore */ }
 
-        // NEW: a brand-new visitor's daily quote was deliberately held
-        // back (to avoid stacking two modals at once) — show it now
-        // that onboarding is done, unless it's somehow already been
-        // shown today via another path.
         let alreadyShownToday = false;
         try {
             const todayStr = new Date().toISOString().slice(0, 10);
@@ -3370,15 +3197,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // NEW (Aug 19, 2026 — fixes Welcome-name-card and Onboarding-tutorial
+    // overlapping/showing at the same time): this is the ONE place that
+    // decides whether to open the tutorial modal. Exposed on window so
+    // the Welcome (name) card section further down in this file can
+    // call it explicitly, right after the person saves/skips their
+    // name — this is what enforces the strict order Name -> Tutorial ->
+    // Daily Quote, instead of the name card and this tutorial's own
+    // independent timer both firing around the same time and stacking
+    // on screen together.
+    window.notewavStartOnboardingTutorial = function() {
+        let alreadySeenNow = false;
+        try { alreadySeenNow = localStorage.getItem(ONBOARDING_SEEN_KEY) === '1'; } catch (e) { /* ignore */ }
+        if (alreadySeenNow) {
+            // Tutorial already completed before — nothing to show here,
+            // but still run the same daily-quote check closeOnboarding()
+            // does, so the quote isn't silently skipped.
+            let alreadyShownToday = false;
+            try {
+                const todayStr = new Date().toISOString().slice(0, 10);
+                alreadyShownToday = localStorage.getItem(QUOTE_SEEN_DATE_KEY) === todayStr;
+            } catch (e) { /* ignore */ }
+            if (!alreadyShownToday && typeof showDailyQuoteCard === 'function') {
+                setTimeout(() => showDailyQuoteCard(true), 500);
+            }
+            return;
+        }
+        onboardingStepIndex = 0;
+        renderOnboardingStep();
+        onboardingModal.classList.remove('hidden');
+    };
+
     let alreadySeen = false;
     try { alreadySeen = localStorage.getItem(ONBOARDING_SEEN_KEY) === '1'; } catch (e) { /* ignore */ }
 
-    if (!alreadySeen) {
+    // NEW: this independent timer only auto-opens the tutorial if the
+    // Welcome (name) card is NOT ALSO going to show for this visitor —
+    // if it IS going to show, the Welcome card's own close handler
+    // (further down this file) calls window.notewavStartOnboardingTutorial()
+    // itself right after the name step finishes, so this timer stays
+    // quiet to avoid both modals appearing on screen together.
+    let welcomeCardWillShow = false;
+    try {
+        const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+        const existingName = (profile.name || '').trim();
+        const onboardingDoneFlag = localStorage.getItem('notewav_onboarding_done') === 'true';
+        welcomeCardWillShow = !existingName && !onboardingDoneFlag;
+    } catch (e) {
+        welcomeCardWillShow = false;
+    }
+
+    if (!alreadySeen && !welcomeCardWillShow) {
         // Small delay so it doesn't compete with the splash screen animation
         setTimeout(() => {
-            onboardingStepIndex = 0;
-            renderOnboardingStep();
-            onboardingModal.classList.remove('hidden');
+            window.notewavStartOnboardingTutorial();
         }, 3600);
     }
 
@@ -3420,14 +3292,12 @@ function renderLevelBadge() {
             : `Level ${info.level}: ${info.title} — ඉහළම level එකට ළඟා වුනා! 🎉`;
     }
 
-    // NEW: profile avatar ring color, matched to the current level.
     const avatarBtn = document.getElementById('profile-avatar-btn');
     if (avatarBtn) {
         avatarBtn.style.borderColor = info.color;
         avatarBtn.style.boxShadow = `0 0 0 2px ${info.color}22`;
     }
 
-    // NEW: profile drawer — level label + progress bar toward next level.
     const profileLevelLabel = document.getElementById('profile-level-label');
     const profileProgressText = document.getElementById('profile-level-progress-text');
     const profileProgressFill = document.getElementById('profile-level-progress-fill');
@@ -3448,7 +3318,6 @@ function renderLevelBadge() {
             : 'MAX';
     }
 
-    // NEW: header level badge popup content (current level + next level hint)
     const popupCurrentEl = document.getElementById('level-popup-current');
     const popupNextEl = document.getElementById('level-popup-next');
     if (popupCurrentEl) popupCurrentEl.textContent = `${info.icon} Level ${info.level}: ${info.title}`;
@@ -3487,7 +3356,6 @@ function showLevelUpCelebration(newLevelInfo) {
     const subtextEl = document.getElementById('level-up-subtext');
     if (!overlay) return;
 
-    // Reward: 5 free coins for reaching a new level.
     const LEVEL_UP_COINS_REWARD = 5;
     if (typeof addCoins === 'function') addCoins(LEVEL_UP_COINS_REWARD);
     if (typeof updateCoinsDisplay === 'function') updateCoinsDisplay();
@@ -3592,10 +3460,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================
 // OFFLINE AUDIO LIST (recently played, still playable offline)
 // ========================================
-// Relies on the service worker having already cached the audio file
-// the first time it played (network-first strategy, falls back to
-// cache when offline or after the server's hourly cleanup) — this just
-// keeps a small, friendly list of what's available to replay.
 const OFFLINE_AUDIO_KEY = 'notewav_offline_audio';
 const OFFLINE_AUDIO_MAX = 10;
 
@@ -3638,9 +3502,6 @@ function offlineAudioEscapeHtml(str) {
     return div.innerHTML;
 }
 
-// Single shared <audio> reused across all offline-list items — only one
-// track plays at a time, which keeps the play/pause + seek UI simple
-// and matches how the main audio player already behaves.
 const offlineAudioPlayer = new Audio();
 let offlineAudioActiveUrl = null;
 
@@ -3897,12 +3758,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // NEW: name is now display-only by default, with a pencil icon to
-    // enter edit mode and an explicit Save (✓) button to commit — a
-    // clearer, more deliberate flow than "every keystroke auto-saves
-    // silently." Saving here ALSO marks the name as manually chosen
-    // (nameManuallySet: true), so a later Google Sign-In never
-    // silently overwrites a name the person specifically picked.
     if (nameEditBtn && nameEditRow) {
         nameEditBtn.addEventListener('click', function() {
             nameEditRow.classList.remove('hidden');
@@ -3915,9 +3770,6 @@ document.addEventListener('DOMContentLoaded', function() {
         saveProfile({ name: value, nameManuallySet: true });
         if (nameEditRow) nameEditRow.classList.add('hidden');
         if (typeof updateGreeting === 'function') updateGreeting();
-        // If signed in, persist this to the account too — so it
-        // follows the person to any other device they log into,
-        // instead of only ever living in this browser's localStorage.
         if (typeof notewavIsLoggedIn !== 'undefined' && notewavIsLoggedIn) {
             fetch('/user/update-profile', {
                 method: 'POST',
@@ -4025,6 +3877,21 @@ document.addEventListener('DOMContentLoaded', function() {
         welcomeBackdrop.classList.add('hidden');
     }
 
+    // NEW (Aug 19, 2026 — enforces Name -> Tutorial -> Daily Quote
+    // order): after this Welcome (name) card closes, explicitly start
+    // the Onboarding Tutorial next, instead of leaving it to that
+    // section's own independent timer (which used to fire around the
+    // same time as this card and overlap with it). See the ONBOARDING
+    // TUTORIAL section's window.notewavStartOnboardingTutorial for the
+    // other half of this fix.
+    function proceedToTutorial() {
+        setTimeout(() => {
+            if (typeof window.notewavStartOnboardingTutorial === 'function') {
+                window.notewavStartOnboardingTutorial();
+            }
+        }, 400);
+    }
+
     function saveNameAndClose() {
         const name = welcomeNameInput.value.trim();
         if (name) {
@@ -4044,6 +3911,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         markOnboardingDone();
         closeWelcomeModal();
+        proceedToTutorial();
     }
 
     welcomeSaveBtn.addEventListener('click', saveNameAndClose);
@@ -4053,6 +3921,7 @@ document.addEventListener('DOMContentLoaded', function() {
     welcomeSkipBtn.addEventListener('click', function() {
         markOnboardingDone();
         closeWelcomeModal();
+        proceedToTutorial();
     });
 });
 
@@ -4293,10 +4162,6 @@ function getCoinsBalance() {
 
 function updateCoinsDisplay() {
     const el = document.getElementById('coins-count');
-    // NEW: show a plain "Free" label instead of the actual number —
-    // the underlying coin balance (getCoinsBalance()) still tracks
-    // normally in localStorage for future paid-feature gating, this
-    // only changes what's DISPLAYED on the badge.
     if (el) el.textContent = 'Free';
 }
 
@@ -4456,9 +4321,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const supportLink = document.getElementById('support-link');
     if (aboutLink) aboutLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('about'); });
     if (supportLink) supportLink.addEventListener('click', e => { e.preventDefault(); openInfoModal('support'); });
-    // NOTE: 'privacy-link' no longer opens a modal — it's now a real
-    // link to the /privacy page (required for AdSense/AdMob approval,
-    // which needs a genuinely accessible URL, not an in-app modal).
 
     if (infoModalClose) infoModalClose.addEventListener('click', () => infoModalBackdrop.classList.add('hidden'));
     infoModalBackdrop.addEventListener('click', function(e) {
@@ -4470,21 +4332,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // NOTIFICATION BELL (admin → users broadcast)
 // ========================================
 document.addEventListener('DOMContentLoaded', function() {
-    // FIX: this used to only ever fetch/show the SINGLE most recent
-    // announcement — if admin sent several messages close together, a
-    // student who checked in late would only ever see the LAST one
-    // and never know earlier ones existed. Now fetches the full recent
-    // list and shows all of them; "Clear All" dismisses the whole
-    // batch at once (marks the highest id seen).
-    //
-    // Two SEPARATE tracking ids, on purpose:
-    // - SEEN_KEY: only controls the red badge DOT. Updates the moment
-    //   the bell is clicked (opening the popup = "I've seen there's
-    //   something new"), same as most notification systems.
-    // - CLEARED_KEY: only controls which messages actually DISAPPEAR
-    //   from the popup's message list. Only updates when the person
-    //   explicitly presses "Clear All" — just opening/viewing the
-    //   popup must NOT erase the messages themselves.
     const SEEN_KEY = 'notewav_last_seen_announcement_id';
     const CLEARED_KEY = 'notewav_last_cleared_announcement_id';
     const bellBtn = document.getElementById('notification-bell-btn');
@@ -4497,8 +4344,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let announcements = [];
 
-    // Local helper — the main escapeHtml() lives in a different
-    // DOMContentLoaded closure and isn't accessible from this one.
     function escapeNotificationHtml(str) {
         const div = document.createElement('div');
         div.textContent = str == null ? '' : String(str);
@@ -4556,9 +4401,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderPopupList() {
-        // Shows everything NOT explicitly cleared yet (independent of
-        // the seen/badge state) — so opening the bell never erases
-        // messages, only "Clear All" does.
         const visible = announcements.filter(a => a.id > getClearedId());
         if (!visible.length) {
             const lang = getAppLanguage();
@@ -4584,8 +4426,6 @@ document.addEventListener('DOMContentLoaded', function() {
     bellBtn.addEventListener('click', function() {
         renderPopupList();
         popup.classList.toggle('hidden');
-        // Clears only the red dot — the message list itself is
-        // untouched, so it stays readable until explicitly cleared.
         markAllSeen();
     });
 
@@ -4613,16 +4453,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     checkForAnnouncement();
-    // FIX (cost/scale concern): this was temporarily set very
-    // aggressive (3s) while debugging a notification-delay bug. That
-    // bug's ROOT CAUSE (a broken Turso connection) is now fixed, so
-    // this no longer needs to poll so frequently — the visibilitychange
-    // + window focus listeners below already catch the moment someone
-    // actually looks at the app, which was the real goal. Polling
-    // every 3s per device, multiplied across many simultaneous
-    // students, adds up fast against Turso's free-tier monthly
-    // rows-read limit. 20s is still responsive enough for a
-    // notification, without the multiplied cost.
     setInterval(checkForAnnouncement, 20000); // check every 20 seconds
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
