@@ -406,6 +406,7 @@
 
                 <div class="nav-group-label">Insights</div>
                 <a href="#" class="nav-item" data-view="insights"><span class="nav-ic">💡</span> Insights</a>
+                <a href="#" class="nav-item" data-view="engine-health"><span class="nav-ic">⚙️</span> Engine Health</a>
 
                 <div class="nav-group-label">Communication</div>
                 <a href="#" class="nav-item" data-view="announcements"><span class="nav-ic">📜</span> Announcements</a>
@@ -630,6 +631,36 @@
             <div id="insights-wrap"></div>
         </div>
         </div>
+
+        <div class="view-section" data-view="engine-health">
+        <div class="section-card" id="section-engine-breakdown">
+            <div class="section-head">
+                <div class="chip">🎙️</div>
+                <h2 class="section-title">TTS/Script Engine Breakdown</h2>
+            </div>
+            <div id="engine-breakdown-wrap"></div>
+        </div>
+
+        <div class="section-card" id="section-processing-time">
+            <div class="section-head">
+                <div class="chip">⏱️</div>
+                <h2 class="section-title">Average Processing Time (Last 7 Days)</h2>
+            </div>
+            <div id="processing-time-chart-wrap" class="chart-wrap"></div>
+            <div class="chart-legend">
+                <span><span class="legend-dot" style="background:#a78bfa;"></span> Audio (TTS)</span>
+                <span><span class="legend-dot" style="background:#22d3ee;"></span> Script (Smart Study)</span>
+            </div>
+        </div>
+
+        <div class="section-card" id="section-device-breakdown">
+            <div class="section-head">
+                <div class="chip">📱</div>
+                <h2 class="section-title">Device / Browser Breakdown</h2>
+            </div>
+            <div id="device-breakdown-wrap"></div>
+        </div>
+        </div>
     </div>
         </main>
     </div>
@@ -682,6 +713,7 @@
             reports: ['Reports', 'Notes flagged by students'],
             insights: ['Insights', 'Coins economy, levels, retention, leaderboard'],
             announcements: ['Announcements', 'Send and review notifications'],
+            'engine-health': ['Engine Health', 'TTS/Script engine usage, errors, and speed'],
         };
 
         function switchView(viewName) {
@@ -997,6 +1029,9 @@
             loadNotes();
             loadAnnouncements();
             loadReports();
+            loadEngineBreakdown();
+            loadProcessingTimeTrend();
+            loadDeviceBreakdown();
         }
 
         setInterval(pollDashboard, 20000);
@@ -1466,6 +1501,99 @@
             </div>`;
         }
 
+        // ===== NEW: Engine Health (breakdown, error rate, processing time, device usage) =====
+        const ENGINE_DISPLAY_NAMES = {
+            gtts: '🤖 Standard (gTTS)',
+            openai: '✨ NoteWav 2.1 (OpenAI)',
+            gemini: '✨ NoteWav (Gemini)',
+        };
+
+        async function loadEngineBreakdown() {
+            try {
+                const res = await fetch('/admin/engine-breakdown');
+                const data = await res.json();
+                if (data.status !== 'success' || !data.breakdown.length) {
+                    document.getElementById('engine-breakdown-wrap').innerHTML = '<div class="empty-state">No engine usage data yet.</div>';
+                    return;
+                }
+                let html = '<table><thead><tr><th>Type</th><th>Engine</th><th>Model</th><th>Calls</th><th>Avg Time</th><th>Fail Rate</th></tr></thead><tbody>';
+                data.breakdown.forEach(row => {
+                    const engineLabel = ENGINE_DISPLAY_NAMES[row.engine] || escapeHtml(row.engine);
+                    const typeLabel = row.event_type === 'tts' ? '🎙️ Audio' : '📝 Script';
+                    const avgTime = row.avg_duration_seconds !== null ? `${row.avg_duration_seconds}s` : '—';
+                    const failColor = row.fail_rate_pct >= 20 ? '#f87171' : (row.fail_rate_pct >= 5 ? '#fb923c' : '#4ade80');
+                    html += `<tr>
+                        <td>${typeLabel}</td>
+                        <td>${engineLabel}</td>
+                        <td>${escapeHtml(row.model_version)}</td>
+                        <td>${row.total_calls}</td>
+                        <td>${avgTime}</td>
+                        <td style="color:${failColor}; font-weight:700;">${row.fail_rate_pct}% <span style="color:var(--text-faint); font-weight:400;">(${row.fail_count}/${row.total_calls})</span></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('engine-breakdown-wrap').innerHTML = html;
+            } catch (e) {
+                document.getElementById('engine-breakdown-wrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
+            }
+        }
+
+        async function loadProcessingTimeTrend() {
+            try {
+                const res = await fetch('/admin/processing-time-trend');
+                const data = await res.json();
+                const wrap = document.getElementById('processing-time-chart-wrap');
+                if (data.status !== 'success' || !data.trend.length) {
+                    wrap.innerHTML = '<div class="empty-state">No processing time data yet.</div>';
+                    return;
+                }
+                const maxVal = Math.max(1, ...data.trend.map(d => Math.max(d.tts || 0, d.script || 0)));
+                let html = '';
+                data.trend.forEach(d => {
+                    const ttsH = Math.round(((d.tts || 0) / maxVal) * 100);
+                    const scriptH = Math.round(((d.script || 0) / maxVal) * 100);
+                    const label = d.day ? d.day.slice(5) : '';
+                    const ttsTitle = d.tts !== null ? `${d.tts}s avg` : 'no data';
+                    const scriptTitle = d.script !== null ? `${d.script}s avg` : 'no data';
+                    html += `<div class="chart-col"><div class="chart-bars"><div class="chart-bar notes" style="height:${ttsH}px" title="${ttsTitle}"></div><div class="chart-bar audio" style="height:${scriptH}px" title="${scriptTitle}"></div></div><div class="chart-day-label">${label}</div></div>`;
+                });
+                wrap.innerHTML = html;
+            } catch (e) {
+                document.getElementById('processing-time-chart-wrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
+            }
+        }
+
+        async function loadDeviceBreakdown() {
+            try {
+                const res = await fetch('/admin/device-breakdown');
+                const data = await res.json();
+                const wrap = document.getElementById('device-breakdown-wrap');
+                if (data.status !== 'success' || (!data.browsers.length && !data.operating_systems.length)) {
+                    wrap.innerHTML = '<div class="empty-state">No device data yet.</div>';
+                    return;
+                }
+
+                function renderGroup(title, items) {
+                    if (!items.length) return '';
+                    const maxCount = Math.max(...items.map(i => i.count));
+                    let groupHtml = `<h3 style="font-size:0.88rem; margin:18px 0 10px;">${title}</h3>`;
+                    items.forEach(item => {
+                        const pct = Math.round((item.count / maxCount) * 100);
+                        groupHtml += `<div class="subject-row"><div class="subject-name">${escapeHtml(item.label)}</div><div class="subject-bar-track"><div class="subject-bar-fill" style="width:${pct}%"></div></div><div class="subject-count">${item.count}</div></div>`;
+                    });
+                    return groupHtml;
+                }
+
+                let html = '';
+                html += renderGroup('🌐 Browser', data.browsers);
+                html += renderGroup('💻 Operating System', data.operating_systems);
+                html += renderGroup('📱 Device Type', data.device_types);
+                wrap.innerHTML = html || '<div class="empty-state">No device data yet.</div>';
+            } catch (e) {
+                document.getElementById('device-breakdown-wrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
+            }
+        }
+
         loadActivityChart();
         loadUserGrowth();
         loadFeatureUsage();
@@ -1474,6 +1602,9 @@
         loadAnnouncements();
         loadReports();
         loadInsights();
+        loadEngineBreakdown();
+        loadProcessingTimeTrend();
+        loadDeviceBreakdown();
     </script>
 </body>
 </html>

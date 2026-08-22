@@ -310,6 +310,25 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # NEW (Aug 20, 2026): powers 4 admin dashboard insights — TTS/script
+    # engine breakdown, error-rate tracking per engine, and processing
+    # time trends. Kept as its own lightweight table (not bolted onto
+    # usage_events) so it can log BOTH successes and failures with rich
+    # detail (duration, exact error) without cluttering the simpler
+    # usage_events table that only records that an action happened.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS engine_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            engine TEXT NOT NULL,
+            model_version TEXT,
+            duration_seconds REAL,
+            success INTEGER NOT NULL,
+            error_message TEXT,
+            device_info TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS banned_identities (
             identity TEXT PRIMARY KEY,
@@ -336,6 +355,31 @@ def init_db():
 
 
 init_db()
+
+
+def log_engine_event(event_type, engine, model_version=None, duration_seconds=None, success=True, error_message=None):
+    """Best-effort logging for the admin dashboard's Engine Health
+    insights (breakdown, error rates, processing time trends). Never
+    raises — a logging failure must never break the actual feature."""
+    try:
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO engine_events
+               (event_type, engine, model_version, duration_seconds, success, error_message, device_info, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                event_type, engine, model_version,
+                round(duration_seconds, 2) if duration_seconds is not None else None,
+                1 if success else 0,
+                (error_message or '')[:300] if error_message else None,
+                parse_device_info(request.headers.get('User-Agent', '')) if request else None,
+                datetime.now(timezone.utc).isoformat(),
+            )
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ Engine event logging failed (non-critical): {e}")
 
 # ========================================
 # FEATURE 2: ABUSE PREVENTION / SAFETY VALIDATION
@@ -1754,17 +1798,19 @@ def text_to_speech():
         # options, giving the person 3 models to choose from under one
         # "Natural (AI)" umbrella.
         if model_version == 'v21':
+            _openai_start = time.time()
             try:
                 openai_voice = GEMINI_TO_OPENAI_VOICE.get(voice_name, voice_name)
                 if openai_voice not in OPENAI_TTS_VOICE_OPTIONS:
                     openai_voice = 'nova'
                 print(f"🎙️ Requesting OpenAI TTS ({len(formatted_text)} chars, voice: {openai_voice})...")
-                _openai_start = time.time()
                 audio_segment, sentence_timings = synthesize_openai_tts(formatted_text, voice_name=openai_voice)
                 unique_name = f"output_{uuid.uuid4().hex}.mp3"
                 filename = os.path.join('static', unique_name)
                 audio_segment.export(filename, format='mp3')
-                print(f"✅ OpenAI TTS Success! Total time: {time.time() - _openai_start:.1f}s")
+                _openai_elapsed = time.time() - _openai_start
+                print(f"✅ OpenAI TTS Success! Total time: {_openai_elapsed:.1f}s")
+                log_engine_event('tts', 'openai', 'v21', _openai_elapsed, success=True)
                 return jsonify({
                     'status': 'success',
                     'audio_url': '/' + filename.replace('\\', '/'),
@@ -1776,18 +1822,22 @@ def text_to_speech():
                 })
             except Exception as e:
                 print(f"❌ OpenAI TTS Error: {str(e)}")
+                log_engine_event('tts', 'openai', 'v21', time.time() - _openai_start, success=False, error_message=str(e))
                 return jsonify({
                     'status': 'error',
                     'message': 'NoteWav 2.1 එකෙන් audio එක generate කරගැනීම අසාර්ථක විය — වෙනත් AI Model එකකින් try කරන්න.'
                 }), 500
 
+        _gemini_tts_route_start = time.time()
         try:
             print(f"🎙️ Requesting Gemini TTS ({len(formatted_text)} chars, lang: {gtts_lang})...")
             audio_segment, sentence_timings, actual_model_used = synthesize_gemini_tts(formatted_text, lang=gtts_lang, voice_name=voice_name, model_version=model_version)
             unique_name = f"output_{uuid.uuid4().hex}.mp3"
             filename = os.path.join('static', unique_name)
             audio_segment.export(filename, format='mp3')
+            _gemini_tts_elapsed = time.time() - _gemini_tts_route_start
             print(f"✅ Gemini TTS Success! (model used: {actual_model_used})")
+            log_engine_event('tts', 'gemini', actual_model_used, _gemini_tts_elapsed, success=True)
             return jsonify({
                 'status': 'success',
                 'audio_url': '/' + filename.replace('\\', '/'),
@@ -1803,6 +1853,7 @@ def text_to_speech():
             })
         except Exception as e:
             print(f"❌ Gemini TTS Error: {str(e)}")
+            log_engine_event('tts', 'gemini', model_version, time.time() - _gemini_tts_route_start, success=False, error_message=str(e))
             return jsonify({
                 'status': 'error',
                 'message': 'NoteWav AI Voice (Beta) එකෙන් audio එක generate කරගැනීම අසාර්ථක විය — Standard Voice එකෙන් try කරන්න.'
@@ -1815,7 +1866,9 @@ def text_to_speech():
         unique_name = f"output_{uuid.uuid4().hex}.mp3"
         filename = os.path.join('static', unique_name)
         audio_segment.export(filename, format='mp3')
-        print(f"✅ TTS Success! Total /tts route time: {time.time() - _tts_route_start:.1f}s")
+        _gtts_elapsed = time.time() - _tts_route_start
+        print(f"✅ TTS Success! Total /tts route time: {_gtts_elapsed:.1f}s")
+        log_engine_event('tts', 'gtts', None, _gtts_elapsed, success=True)
         return jsonify({
             'status': 'success',
             'audio_url': '/' + filename.replace('\\', '/'),
@@ -1824,6 +1877,7 @@ def text_to_speech():
         })
     except Exception as e:
         print(f"❌ gTTS Error: {str(e)}")
+        log_engine_event('tts', 'gtts', None, time.time() - _tts_route_start, success=False, error_message=str(e))
         return jsonify({
             'status': 'error',
             'message': 'gTTS හරහා audio එක generate කරගැනීම අසාර්ථක විය. පසුව උත්සාහ කරන්න.'
@@ -2107,10 +2161,13 @@ def process_note():
             'warning': ''
         })
 
+    _script_gen_start = time.time()
     try:
         podcast_script, mermaid_code_si, mermaid_code_en = call_gemini_structured(note_text, output_language)
+        log_engine_event('script', 'gemini', None, time.time() - _script_gen_start, success=True)
     except GeminiGenerationError as e:
         print(f"Gemini Error: {e}")
+        log_engine_event('script', 'gemini', None, time.time() - _script_gen_start, success=False, error_message=str(e))
         return jsonify({
             'status': 'success',
             'processed_text': note_text,
@@ -2580,6 +2637,130 @@ def admin_user_growth():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     try:
         return jsonify({'status': 'success', 'growth': _get_user_growth()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# NEW (Aug 20, 2026): "Engine Health" admin insights — built on top of
+# the engine_events table logged from /tts and /process-note above.
+# Three views: which engines/models are actually used and their cost,
+# how often each one fails, and how processing time trends day to day.
+@app.route('/admin/engine-breakdown')
+def admin_engine_breakdown():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT
+                event_type,
+                engine,
+                COALESCE(model_version, '—') AS model_version,
+                COUNT(*) AS total_calls,
+                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success_count,
+                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS fail_count,
+                AVG(CASE WHEN success = 1 THEN duration_seconds ELSE NULL END) AS avg_duration_seconds
+            FROM engine_events
+            GROUP BY event_type, engine, model_version
+            ORDER BY total_calls DESC
+        """).fetchall()
+        conn.close()
+
+        breakdown = []
+        for row in rows:
+            total = row['total_calls'] or 0
+            fails = row['fail_count'] or 0
+            breakdown.append({
+                'event_type': row['event_type'],
+                'engine': row['engine'],
+                'model_version': row['model_version'],
+                'total_calls': total,
+                'success_count': row['success_count'] or 0,
+                'fail_count': fails,
+                'fail_rate_pct': round((fails / total) * 100, 1) if total else 0,
+                'avg_duration_seconds': round(row['avg_duration_seconds'], 1) if row['avg_duration_seconds'] is not None else None,
+            })
+        return jsonify({'status': 'success', 'breakdown': breakdown})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/processing-time-trend')
+def admin_processing_time_trend():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT
+                substr(created_at, 1, 10) AS day,
+                event_type,
+                AVG(CASE WHEN success = 1 THEN duration_seconds ELSE NULL END) AS avg_duration
+            FROM engine_events
+            WHERE created_at >= datetime('now', '-7 days')
+            GROUP BY day, event_type
+            ORDER BY day ASC
+        """).fetchall()
+        conn.close()
+
+        days_map = {}
+        for row in rows:
+            day = row['day']
+            days_map.setdefault(day, {'day': day, 'tts': None, 'script': None})
+            avg_val = round(row['avg_duration'], 1) if row['avg_duration'] is not None else None
+            if row['event_type'] == 'tts':
+                days_map[day]['tts'] = avg_val
+            elif row['event_type'] == 'script':
+                days_map[day]['script'] = avg_val
+
+        trend = sorted(days_map.values(), key=lambda d: d['day'])
+        return jsonify({'status': 'success', 'trend': trend})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/admin/device-breakdown')
+def admin_device_breakdown():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        conn = get_db()
+        # device_info is stored as "Browser · OS · DeviceType" (see
+        # parse_device_info) — split it into 3 separate breakdowns
+        # rather than one giant list of exact combinations, since
+        # "Chrome · Android · Mobile" vs "Chrome · Windows · Desktop"
+        # buried in one flat list is much harder to scan at a glance.
+        rows = conn.execute("""
+            SELECT device_info, COUNT(*) AS cnt
+            FROM (
+                SELECT anon_id, device_info, MAX(created_at) AS latest
+                FROM usage_events
+                WHERE device_info IS NOT NULL
+                GROUP BY anon_id
+            )
+            GROUP BY device_info
+        """).fetchall()
+        conn.close()
+
+        browsers, oses, device_types = {}, {}, {}
+        for row in rows:
+            parts = [p.strip() for p in (row['device_info'] or '').split('·')]
+            cnt = row['cnt']
+            if len(parts) == 3:
+                browser, os_name, dtype = parts
+                browsers[browser] = browsers.get(browser, 0) + cnt
+                oses[os_name] = oses.get(os_name, 0) + cnt
+                device_types[dtype] = device_types.get(dtype, 0) + cnt
+
+        def to_sorted_list(d):
+            return sorted([{'label': k, 'count': v} for k, v in d.items()], key=lambda x: x['count'], reverse=True)
+
+        return jsonify({
+            'status': 'success',
+            'browsers': to_sorted_list(browsers),
+            'operating_systems': to_sorted_list(oses),
+            'device_types': to_sorted_list(device_types),
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
