@@ -2132,6 +2132,7 @@ def process_note():
 
 
 @app.route('/library/save', methods=['POST'])
+@rate_limited(15, 60)
 def library_save():
     if not session.get('user_id'):
         return jsonify({
@@ -3110,5 +3111,16 @@ def admin_dashboard():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    debug_mode = os.environ.get('FLASK_DEBUG', 'true').lower() == 'true'
+    # FIX (Aug 20, 2026 — pre-launch security audit): default was
+    # 'true'. This block only runs if someone executes `python app.py`
+    # directly — gunicorn (Render's actual Start Command) imports this
+    # file as a WSGI module and never reaches this line, so this was
+    # NOT an active risk on the live site. Still, defaulting debug mode
+    # ON is genuinely dangerous if this is ever run directly: Flask's
+    # debug mode exposes an interactive in-browser Python console on
+    # any unhandled exception, which is remote code execution if
+    # anyone finds it. Defaulting to 'false' is the safe choice —
+    # someone can still opt in explicitly for local development by
+    # setting FLASK_DEBUG=true in their own .env.
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     app.run(debug=debug_mode, host='0.0.0.0', port=port)

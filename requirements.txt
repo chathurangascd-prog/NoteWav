@@ -10,3 +10,4 @@ libsql-client
 sentry-sdk
 pymupdf
 openai
+requests
