@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ===== TTS Voice Engine (Standard gTTS vs Natural Gemini AI) =====
     let ttsEngine = 'gtts';
-    let ttsModelVersion = 'v25';
+    let ttsModelVersion = 'v31';
     const ttsEngineGttsBtn = document.getElementById('tts-engine-gtts-btn');
     const ttsEngineGeminiBtn = document.getElementById('tts-engine-gemini-btn');
     const ttsVoicePickerWrap = document.getElementById('tts-voice-picker-wrap');
