@@ -1232,7 +1232,7 @@ JSON object එක parse කළ නොහැකි නම් සම්පූර�
 """
 
 
-def _parse_json_loose(raw_text):
+def _parse_json_loose(raw_text, error_cls=GeminiGenerationError):
     text = raw_text.strip()
     text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=re.MULTILINE).strip()
 
@@ -1245,7 +1245,7 @@ def _parse_json_loose(raw_text):
                 return json.loads(match.group(0))
             except json.JSONDecodeError:
                 pass
-        raise GeminiGenerationError("Gemini's response could not be parsed as JSON.")
+        raise error_cls("Response could not be parsed as JSON.")
 
 
 def _sanitize_mermaid_labels(code):
@@ -1591,6 +1591,68 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
         log_conn.close()
     except Exception as e:
         print(f"⚠️ Gemini call logging failed (non-critical): {e}")
+
+    return podcast_script, mermaid_code_si, mermaid_code_en
+
+
+OPENAI_SCRIPT_MODEL = 'gpt-4o-mini'  # fallback script/mind-map generator when Gemini fails — cheap, JSON-mode capable
+
+
+def call_openai_structured(note_text, output_language='si'):
+    """Fallback for call_gemini_structured — same JSON contract
+    (podcast_script/mermaid_code_si/mermaid_code_en) and same system
+    instruction, but via OpenAI. Only called from /process-note AFTER
+    Gemini has already exhausted its own model/retry plan (up to 90s),
+    so this keeps its own retry budget short to stay under gunicorn's
+    120s worker timeout."""
+    if not openai_client:
+        raise OpenAIGenerationError("OpenAI API is not configured (missing OPENAI_API_KEY).")
+
+    prompt = f"""පහත පාඩම් සටහන සකසන්න:
+
+{note_text}
+"""
+    system_instruction = build_system_instruction(output_language)
+
+    last_error = None
+    response = None
+    for attempt in (1, 2):
+        try:
+            response = openai_client.chat.completions.create(
+                model=OPENAI_SCRIPT_MODEL,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=8000,
+                response_format={"type": "json_object"},
+                timeout=25,
+            )
+            break
+        except Exception as e:
+            last_error = e
+            if attempt == 1 and _is_transient_gemini_error(e):
+                print(f"⚠️ OpenAI script fallback transient error, retrying once: {e}")
+                time.sleep(2)
+                continue
+            raise OpenAIGenerationError(f"OpenAI script generation failed: {last_error}")
+
+    if response is None:
+        raise OpenAIGenerationError(f"OpenAI script generation failed: {last_error}")
+
+    raw_text = (response.choices[0].message.content or '').strip()
+    if not raw_text:
+        raise OpenAIGenerationError("OpenAI returned an empty response.")
+
+    data = _parse_json_loose(raw_text, error_cls=OpenAIGenerationError)
+
+    podcast_script = _clean_podcast_script((data.get('podcast_script') or '').strip())
+    mermaid_code_si = _clean_mermaid_code(data.get('mermaid_code_si'))
+    mermaid_code_en = _clean_mermaid_code(data.get('mermaid_code_en'))
+
+    if not podcast_script:
+        raise OpenAIGenerationError("OpenAI did not return a podcast script.")
 
     return podcast_script, mermaid_code_si, mermaid_code_en
 
@@ -2165,17 +2227,39 @@ def process_note():
     try:
         podcast_script, mermaid_code_si, mermaid_code_en = call_gemini_structured(note_text, output_language)
         log_engine_event('script', 'gemini', None, time.time() - _script_gen_start, success=True)
-    except GeminiGenerationError as e:
-        print(f"Gemini Error: {e}")
-        log_engine_event('script', 'gemini', None, time.time() - _script_gen_start, success=False, error_message=str(e))
-        return jsonify({
-            'status': 'success',
-            'processed_text': note_text,
-            'mermaid_code_si': '',
-            'mermaid_code_en': '',
-            'ai_processed': False,
-            'warning': _friendly_gemini_error_message(e)
-        })
+    except GeminiGenerationError as gemini_error:
+        print(f"Gemini Error: {gemini_error}")
+        log_engine_event('script', 'gemini', None, time.time() - _script_gen_start, success=False, error_message=str(gemini_error))
+
+        if not openai_client:
+            return jsonify({
+                'status': 'success',
+                'processed_text': note_text,
+                'mermaid_code_si': '',
+                'mermaid_code_en': '',
+                'ai_processed': False,
+                'warning': _friendly_gemini_error_message(gemini_error)
+            })
+
+        # Gemini exhausted its own model/retry plan — fall back to
+        # OpenAI so a Gemini outage doesn't take Smart Study down
+        # entirely, rather than immediately giving up on AI processing.
+        print("⚠️ Gemini failed — falling back to OpenAI for script generation...")
+        _openai_script_start = time.time()
+        try:
+            podcast_script, mermaid_code_si, mermaid_code_en = call_openai_structured(note_text, output_language)
+            log_engine_event('script', 'openai', None, time.time() - _openai_script_start, success=True)
+        except OpenAIGenerationError as openai_error:
+            print(f"OpenAI script fallback Error: {openai_error}")
+            log_engine_event('script', 'openai', None, time.time() - _openai_script_start, success=False, error_message=str(openai_error))
+            return jsonify({
+                'status': 'success',
+                'processed_text': note_text,
+                'mermaid_code_si': '',
+                'mermaid_code_en': '',
+                'ai_processed': False,
+                'warning': _friendly_gemini_error_message(gemini_error)
+            })
 
     final_text = podcast_script if mode == 'smart' else note_text
 
