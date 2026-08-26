@@ -11,3 +11,4 @@ sentry-sdk
 pymupdf
 openai
 requests
+cloudinary

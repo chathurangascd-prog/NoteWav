@@ -520,6 +520,27 @@ except Exception as e:
     print(f"⚠️ Google Cloud Vision not available: {e}")
 
 # ========================================
+# CLOUDINARY (persistent storage for Digital Tuition Sir lesson audio)
+# ========================================
+# Render's local disk is EPHEMERAL — wiped on every redeploy/restart
+# (this is exactly why the DB uses Turso instead of local SQLite; see
+# USE_TURSO above). A course lesson's audio is meant to be permanent
+# (served to every enrolled student, indefinitely), so it can't live
+# on local disk in production. Cloudinary reads its config from the
+# CLOUDINARY_URL env var automatically (cloudinary://key:secret@cloud).
+CLOUDINARY_AVAILABLE = False
+if os.environ.get('CLOUDINARY_URL'):
+    try:
+        import cloudinary
+        import cloudinary.uploader
+        CLOUDINARY_AVAILABLE = True
+        print("✅ Cloudinary (persistent lesson audio storage) is ready!")
+    except Exception as e:
+        print(f"⚠️ Cloudinary setup failed: {e}")
+else:
+    print("⚠️ CLOUDINARY_URL not set — lesson audio will fall back to local disk (LOST on every redeploy — set this before real students use Digital Tuition Sir).")
+
+# ========================================
 # GEMINI API
 # ========================================
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -1923,7 +1944,31 @@ def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400
     return all_lessons
 
 
-LESSON_AUDIO_DIR = os.path.join('static', 'lesson_audio')  # persistent — NOT swept by cleanup_old_audio() (that only globs static/output_*.mp3)
+LESSON_AUDIO_DIR = os.path.join('static', 'lesson_audio')  # local fallback only — see upload_persistent_audio() below
+
+
+def upload_persistent_audio(audio_bytes, public_id):
+    """Stores lesson audio somewhere that survives a redeploy. Uploads
+    to Cloudinary when configured (production); falls back to local
+    disk under LESSON_AUDIO_DIR for local dev/testing without a
+    Cloudinary account (that path is NOT durable on Render — see the
+    CLOUDINARY_AVAILABLE warning printed at startup). Returns the
+    servable URL either way."""
+    if CLOUDINARY_AVAILABLE:
+        result = cloudinary.uploader.upload(
+            io.BytesIO(audio_bytes),
+            resource_type='video',  # Cloudinary files audio under 'video'
+            public_id=public_id,
+            folder='lesson_audio',
+            overwrite=True,
+        )
+        return result['secure_url']
+
+    os.makedirs(LESSON_AUDIO_DIR, exist_ok=True)
+    filepath = os.path.join(LESSON_AUDIO_DIR, f'{public_id}.mp3')
+    with open(filepath, 'wb') as f:
+        f.write(audio_bytes)
+    return '/' + filepath.replace('\\', '/')
 
 
 def generate_lesson_audio(script_text):
@@ -3892,11 +3937,13 @@ def admin_generate_lesson_audio(lesson_id):
         conn.close()
         return jsonify({'status': 'error', 'message': f'Audio generate කිරීම අසාර්ථක විය: {e}'}), 500
 
-    os.makedirs(LESSON_AUDIO_DIR, exist_ok=True)
-    filename = f'lesson_{lesson_id}_ai.mp3'
-    filepath = os.path.join(LESSON_AUDIO_DIR, filename)
-    audio_segment.export(filepath, format='mp3')
-    audio_url = '/' + filepath.replace('\\', '/')
+    buf = io.BytesIO()
+    audio_segment.export(buf, format='mp3')
+    try:
+        audio_url = upload_persistent_audio(buf.getvalue(), f'lesson_{lesson_id}_ai')
+    except Exception as e:
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Audio upload අසාර්ථක විය: {e}'}), 500
 
     conn.execute(
         "UPDATE course_lessons SET ai_audio_url = ?, ai_audio_engine = ? WHERE id = ?",
@@ -3921,11 +3968,10 @@ def admin_upload_lesson_audio(lesson_id):
     if ext not in ('.mp3', '.wav', '.m4a', '.ogg'):
         return jsonify({'status': 'error', 'message': 'mp3/wav/m4a/ogg file එකක් upload කරන්න.'}), 400
 
-    os.makedirs(LESSON_AUDIO_DIR, exist_ok=True)
-    filename = f'lesson_{lesson_id}_manual{ext}'
-    filepath = os.path.join(LESSON_AUDIO_DIR, filename)
-    file.save(filepath)
-    audio_url = '/' + filepath.replace('\\', '/')
+    try:
+        audio_url = upload_persistent_audio(file.read(), f'lesson_{lesson_id}_manual')
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Upload අසාර්ථක විය — file එක corrupt වෙන්න පුළුවන්: {e}'}), 500
 
     conn = get_db()
     conn.execute(
