@@ -374,6 +374,9 @@
             .stats-row { grid-template-columns: repeat(2, 1fr); }
             table, th, td { font-size: 0.76rem; }
         }
+
+        @keyframes splitProgressPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        #split-progress-fill.pulsing { animation: splitProgressPulse 1.4s ease-in-out infinite; }
     </style>
 </head>
 <body>
@@ -677,7 +680,10 @@
                     <button id="split-pdf-btn" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.82rem; font-weight:700; cursor:pointer; font-family:inherit;">Split PDF</button>
                 </div>
                 <p style="font-size:0.72rem; color:var(--text-faint); margin:0 0 10px;">Min/Max words = එක lesson (day) එකකට PDF එකෙන් කොච්චර content ප්‍රමාණයක් තියෙන්නද කියන target range එක — AI එක topic boundary එකට priority දෙනවා, exact number එකට නෙවෙයි.</p>
-                <p id="split-pdf-status" style="font-size:0.76rem; color:var(--text-dim); margin:0; min-height:1em;"></p>
+                <p id="split-pdf-status" style="font-size:0.76rem; color:var(--text-dim); margin:0 0 6px; min-height:1em;"></p>
+                <div id="split-progress-track" style="display:none; height:8px; border-radius:50px; background:var(--surface-2); overflow:hidden; margin-bottom:10px;">
+                    <div id="split-progress-fill" style="height:100%; width:0%; border-radius:50px; background:var(--accent-grad); transition:width 0.3s ease;"></div>
+                </div>
                 <div id="split-preview-wrap"></div>
                 <button id="save-lessons-btn" style="display:none; margin-top:12px; padding:11px 20px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.84rem; font-weight:700; cursor:pointer; font-family:inherit;">Save Lessons</button>
             </div>
@@ -1817,7 +1823,9 @@
                     statusEl.textContent = '❌ ' + (data.message || 'Failed.');
                     return;
                 }
-                btn.textContent = `Processing 0/${data.total_pages} pages...`;
+                btn.textContent = `OCR 0/${data.total_pages} pages...`;
+                document.getElementById('split-progress-track').style.display = 'block';
+                document.getElementById('split-progress-fill').style.width = '0%';
                 pollSplitJob(data.job_id, btn, statusEl);
             } catch (e) {
                 btn.disabled = false;
@@ -1835,21 +1843,43 @@
                     if (data.status !== 'success') return;  // transient fetch hiccup — try again next tick
                     const job = data.job;
 
+                    const fillEl = document.getElementById('split-progress-fill');
+
                     if (job.status === 'processing') {
-                        btn.textContent = `Processing ${job.processed_pages}/${job.total_pages} pages...`;
-                        statusEl.textContent = `OCR + AI splitting — page ${job.processed_pages} of ${job.total_pages}...`;
+                        const ocrDone = job.processed_pages >= job.total_pages;
+                        if (!ocrDone) {
+                            // OCR phase — maps to 0-85% of the bar, leaving room to
+                            // show the AI-split phase is a distinct next step.
+                            const pct = Math.round((job.processed_pages / job.total_pages) * 85);
+                            fillEl.classList.remove('pulsing');
+                            fillEl.style.width = pct + '%';
+                            btn.textContent = `OCR ${job.processed_pages}/${job.total_pages} pages...`;
+                            statusEl.textContent = `OCR — page ${job.processed_pages} of ${job.total_pages}...`;
+                        } else {
+                            // OCR finished but still processing = now in the AI
+                            // split step (no page-level progress for this part —
+                            // pulse the bar so it doesn't look frozen).
+                            fillEl.style.width = '92%';
+                            fillEl.classList.add('pulsing');
+                            btn.textContent = 'AI splitting into lessons...';
+                            statusEl.textContent = 'AI එකෙන් content එක lessons වලට කඩමින් — මේකට විනාඩි කිහිපයක් යන්න පුළුවන්...';
+                        }
                         return;
                     }
 
                     clearInterval(splitPollTimer);
                     btn.disabled = false;
                     btn.textContent = 'Split PDF';
+                    fillEl.classList.remove('pulsing');
 
                     if (job.status === 'error') {
+                        document.getElementById('split-progress-track').style.display = 'none';
                         statusEl.textContent = '❌ ' + (job.error_message || 'Failed.');
                         return;
                     }
 
+                    fillEl.style.width = '100%';
+                    setTimeout(() => { document.getElementById('split-progress-track').style.display = 'none'; }, 600);
                     currentSplitPreview = job.lessons;
                     statusEl.textContent = `✅ ${job.lessons.length} lessons found — review below, then Save.`;
                     renderSplitPreview();
