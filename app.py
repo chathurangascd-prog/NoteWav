@@ -1727,6 +1727,265 @@ def call_openai_structured(note_text, output_language='si'):
     return podcast_script, mermaid_code_si, mermaid_code_en
 
 
+# ========================================
+# DIGITAL TUITION SIR — course content pipeline
+# (admin-authored PDF -> day-by-day lessons -> teacher-style script ->
+# audio, all generated ONCE per course and served to every enrolled
+# student, unlike the per-user note pipeline above)
+# ========================================
+
+TEACHER_SYSTEM_INSTRUCTION = """
+ඔබ ශ්‍රී ලංකාවේ ඉතා ප්‍රසිද්ධ, ළමයින්ට ප්‍රියතම Tuition Sir කෙනෙකි. ඔබට textbook එකේ
+lesson කොටසක් ලැබී ඇත. ඔබ එය **පන්තියක සිටින ළමයෙකුට කෙළින්ම කතා කරමින්** උගන්වන
+ආකාරයට podcast script එකක් බවට පත් කරන්න.
+
+**JSON object එකක් විතරක්** output කරන්න, වෙන කිසිදු text/markdown fence නොදාන්න:
+{
+  "podcast_script": "<සම්පූර්ණ teaching script එක>",
+  "mermaid_code_si": "<Mermaid.js mindmap syntax එකක්, node labels සියල්ලම සිංහලෙන්>",
+  "mermaid_code_en": "<Mermaid.js mindmap syntax එකක්, node labels සියල්ලම English වලින්>"
+}
+
+=== "podcast_script" සඳහා නීති ===
+1. **Hook** — "ළමයිනේ, අද අපි ඉගෙන ගන්නවා..." වගේ, topic එක හඳුන්වා දෙන්නෙන් පටන් ගන්න.
+2. **Real-life connect** — content එකේ raw fact එකකින් නෙවෙයි, ළමයෙකුට familiar
+   example එකකින් පටන් ගන්න.
+3. **Step-by-step explain** — fact එක කෙළින්ම කියවන්නේ නැතුව "ඇයි මෙහෙම" කියලා
+   logic එකෙන් walk-through කරන්න.
+4. **Check-in questions** — "තේරුණාද මේක? හරි, ඊළඟට..." වගේ, engage කරන්න.
+5. **Recap** — අන්තිමට "ඉතින් අද ඉගෙන ගත්තේ මොනවද කිව්වොත්..." කියලා සාරාංශ කරන්න.
+6. Content එකේ ඇති සියලුම facts, terms, numbers කිසිසේත් මගහැරෙන්නේ නෑ.
+7. සරල, ස්වාභාවික, කථනාත්මක සිංහල භාෂාවෙන්ම ලියන්න.
+8. **ඉතාම වැදගත් — මේක TEXT-TO-SPEECH එකකින් ශබ්දයෙන් කියවෙනවා, කියවන්නේ නෑ:**
+   කිසිසේත් markdown formatting (**, ##, -, *) හෝ numbered lists (1. 2. 3.) යොදන්න
+   එපා — TTS එකෙන් ඒ symbols ම වචන විදිහට කියවෙනවා, එය අස්වාභාවික හඬ නගනවා.
+   "පළමුවෙනුව", "ඊළඟට", "දෙවෙනුව", "අන්තිමට" වගේ කථනාත්මක වචන පාවිච්චි කරලා list
+   එකක් තියෙන බව පෙන්වන්න. සම්පූර්ණ script එකම plain, running Sinhala වාක්‍ය පමණක් විය
+   යුතුය.
+9. "podcast_script" එක අකුරු 1800ක් නොඉක්මවිය යුතුය.
+
+=== "mermaid_code_si"/"mermaid_code_en" සඳහා නීති ===
+- "flowchart TD" වලින්ම පටන් ගන්න.
+- Root node එකෙන් කෙලින්ම පටන්ගන්නා ප්‍රධාන branch ගණන උපරිම 4කට සීමා කරන්න.
+- Node id ලෙස ඉංග්‍රීසි අකුරු/සංඛ්‍යා පමණක් (Sinhala නෑ), දෙකෙහිම node id එකම විය යුතුය.
+"""
+
+
+def call_teacher_script(source_text, max_retries=2):
+    """Turns a lesson's raw (verbatim-from-PDF) source_text into a
+    warm, spoken "Sir teaching a class" script + mind map — the
+    Digital Tuition Sir equivalent of call_gemini_structured above,
+    but with a teaching-persona prompt instead of a generic podcast
+    one, and no output_language branch (course lessons are Sinhala-
+    only for now)."""
+    if not client:
+        raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
+
+    MODELS_TO_TRY = ['gemini-2.5-flash', 'gemini-3.7-flash']
+    last_error = None
+    response = None
+    for model_name in MODELS_TO_TRY:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=f"මේ lesson එක teach කරන්න:\n\n{source_text}",
+                config=types.GenerateContentConfig(
+                    system_instruction=TEACHER_SYSTEM_INSTRUCTION,
+                    temperature=0.4,
+                    max_output_tokens=8000,
+                    response_mime_type='application/json',
+                    safety_settings=SAFETY_SETTINGS,
+                    thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
+                    http_options=types.HttpOptions(timeout=40_000),
+                )
+            )
+            break
+        except Exception as e:
+            last_error = e
+            if _is_transient_gemini_error(e):
+                continue
+            raise GeminiGenerationError(f"Teacher script generation failed: {e}")
+
+    if response is None:
+        raise GeminiGenerationError(f"Teacher script generation failed after trying {MODELS_TO_TRY}: {last_error}")
+
+    raw_text = response.text
+    if not raw_text:
+        raise GeminiGenerationError("Gemini returned an empty teacher-script response.")
+
+    data = _parse_json_loose(raw_text)
+    script = _clean_podcast_script((data.get('podcast_script') or '').strip())
+    mermaid_si = _clean_mermaid_code(data.get('mermaid_code_si'))
+    mermaid_en = _clean_mermaid_code(data.get('mermaid_code_en'))
+
+    # Safety net (defense in depth): strip any stray markdown the model
+    # might still slip in, since a TTS engine reads "**"/"1." literally.
+    script = re.sub(r'\*\*?|#+', '', script)
+    script = re.sub(r'(?:^|\n)\s*\d+\.\s*', ' ', script)
+    script = re.sub(r'\s+', ' ', script).strip()
+
+    if not script:
+        raise GeminiGenerationError("Gemini did not return a teaching script.")
+
+    return script, mermaid_si, mermaid_en
+
+
+def build_split_system_instruction(min_words, max_words):
+    return f"""
+ඔබ ශ්‍රී ලංකාවේ පළපුරුදු Tuition Sir කෙනෙකි. ඔබට textbook/lesson content එකක් සම්පූර්ණයෙන්ම
+ලැබී ඇත. ඔබේ වැඩේ මේක **day-by-day lessons** කිහිපයකට කඩන එකයි — ශිෂ්‍යයෙකුට දිනකට එක
+lesson එකක් විදිහට ඉගෙන ගන්න පුළුවන් වෙන ලෙස.
+
+**JSON object එකක් විතරක්** output කරන්න, වෙන කිසිදු text/markdown fence නොදාන්න:
+{{
+  "lessons": [
+    {{ "title": "<මේ lesson එකේ මාතෘකාව, වචන 3-6ක් තරම්>", "source_text": "<මුල් content එකෙන්ම>" }}
+  ]
+}}
+
+=== නීති ===
+1. **source_text එක මුල් text එකෙන්ම විය යුතුය** — සාරාංශ කරන්න එපා, rewrite කරන්න එපා,
+   වචනයක්වත් වෙනස් කරන්න එපා.
+2. එක lesson එකක් තුළ **එක logical topic/sub-topic කණ්ඩායමක්** විතරක් තියෙන්න ඕන —
+   මැද්දෙන් definition එකක් හෝ example එකක් කැඩෙන්නේ නැති ලෙස boundary එක තෝරන්න.
+3. එක lesson එකක source_text එකේ දිග වචන {min_words}-{max_words} අතර තියෙන්න උත්සාහ කරන්න
+   (හරියටම නෙවෙයි — topic boundary එකට priority දෙන්න, word count එකට නෙවෙයි).
+4. Lessons පිළිවෙළ, මුල් content එකේ පිළිවෙළම විය යුතුය.
+5. OCR text එකේ ඇති page numbers, headers වගේ noise (topic content නොවන දේ) lessons
+   වලට ඇතුළත් කරන්න එපා.
+6. content එකේ ඇති සියලුම කොටස්ම එක lesson එකකට හෝ තව එකකට allocate විය යුතුය —
+   කිසිම කොටසක් මගහැරෙන්නේ නෑ, duplicate වෙන්නේත් නෑ.
+"""
+
+
+def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400):
+    """Splits a (possibly book-length) PDF's OCR'd text into day-by-day
+    lesson chunks. Processes in ~words_per_chunk-sized pieces (on
+    paragraph boundaries) rather than one giant Gemini call — verbatim
+    source_text echo means output tokens scale with input size, and a
+    single huge call risks hitting the model's output-token ceiling
+    (confirmed in testing: a ~4700-word module needed 2 chunked calls,
+    not 1, to avoid truncated/invalid JSON)."""
+    if not client:
+        raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
+
+    paragraphs = [p for p in full_text.split('\n\n') if p.strip()]
+    chunks = []
+    current, current_words = [], 0
+    for para in paragraphs:
+        para_words = len(para.split())
+        if current and current_words + para_words > words_per_chunk:
+            chunks.append('\n\n'.join(current))
+            current, current_words = [], 0
+        current.append(para)
+        current_words += para_words
+    if current:
+        chunks.append('\n\n'.join(current))
+
+    split_instruction = build_split_system_instruction(min_words, max_words)
+    all_lessons = []
+    for chunk in chunks:
+        last_error = None
+        response = None
+        for model_name in ['gemini-2.5-flash', 'gemini-3.7-flash']:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=f"මේ content එක lessons වලට කඩන්න:\n\n{chunk}",
+                    config=types.GenerateContentConfig(
+                        system_instruction=split_instruction,
+                        temperature=0.2,
+                        max_output_tokens=16000,
+                        response_mime_type='application/json',
+                        safety_settings=SAFETY_SETTINGS,
+                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
+                        http_options=types.HttpOptions(timeout=60_000),
+                    )
+                )
+                break
+            except Exception as e:
+                last_error = e
+                if _is_transient_gemini_error(e):
+                    continue
+                raise GeminiGenerationError(f"PDF split failed on one chunk: {e}")
+        if response is None:
+            raise GeminiGenerationError(f"PDF split failed on one chunk after retries: {last_error}")
+
+        data = _parse_json_loose(response.text)
+        all_lessons.extend(data.get('lessons') or [])
+
+    for i, lesson in enumerate(all_lessons, 1):
+        lesson['day'] = i
+
+    if not all_lessons:
+        raise GeminiGenerationError("PDF split produced no lessons.")
+
+    return all_lessons
+
+
+LESSON_AUDIO_DIR = os.path.join('static', 'lesson_audio')  # persistent — NOT swept by cleanup_old_audio() (that only globs static/output_*.mp3)
+
+
+def generate_lesson_audio(script_text):
+    """Cascading fallback for course-lesson audio, same resilience
+    order proven out manually for this feature: Gemini 3.1 -> Gemini
+    2.5 (already Gemini's own internal fallback inside
+    synthesize_gemini_tts) -> OpenAI 2.1 -> gTTS. A lesson's audio
+    should never be blocked entirely by one provider being down.
+    Returns (audio_segment, engine_used)."""
+    formatted = format_for_podcast(script_text)
+    lang = detect_language(formatted)
+    gtts_lang = {'Sinhala': 'si', 'Tamil': 'ta', 'English': 'en'}.get(lang, 'si')
+
+    if client:
+        try:
+            audio_segment, _, actual_model_used = synthesize_gemini_tts(formatted, lang=gtts_lang, model_version='v31')
+            return audio_segment, f'gemini-{actual_model_used}'
+        except Exception as e:
+            print(f"⚠️ Lesson audio: Gemini TTS unavailable, trying OpenAI: {e}")
+
+    if openai_client:
+        try:
+            audio_segment, _ = synthesize_openai_tts(formatted, voice_name='nova')
+            return audio_segment, 'openai-v21'
+        except Exception as e:
+            print(f"⚠️ Lesson audio: OpenAI TTS unavailable, falling back to gTTS: {e}")
+
+    audio_segment, _ = synthesize_gtts_natural(formatted, lang=gtts_lang)
+    return audio_segment, 'gtts'
+
+
+def _ocr_pdf_pages_to_text(pdf_bytes, max_pages=80):
+    """Same render-page-as-image + Cloud Vision OCR approach as
+    /pdf-extract below — factored out so the course-PDF-split admin
+    route can reuse it with a higher page cap (curated admin uploads,
+    not a public abuse-prone endpoint)."""
+    if not CLOUD_OCR_AVAILABLE:
+        raise RuntimeError("Cloud Vision API not configured")
+
+    doc = fitz.open(stream=pdf_bytes, filetype='pdf')
+    page_count = min(len(doc), max_pages)
+    pages_text = []
+    for i in range(page_count):
+        page = doc[i]
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        img_bytes = pix.tobytes('png')
+        image = vision.Image(content=img_bytes)
+        image_context = vision.ImageContext(language_hints=['si', 'ta', 'en'])
+        response = vision_client.text_detection(image=image, image_context=image_context)
+        if response.error.message:
+            print(f"⚠️ Vision error on course PDF page {i + 1}: {response.error.message}")
+            continue
+        texts = response.text_annotations
+        if texts:
+            page_text = texts[0].description.strip()
+            if page_text:
+                pages_text.append(page_text)
+    total_pages_in_pdf = len(doc)
+    doc.close()
+    return '\n\n'.join(pages_text).strip(), total_pages_in_pdf, page_count
+
+
 @app.route('/pdf-extract', methods=['POST'])
 @rate_limited(6, 60)
 def pdf_extract():
@@ -3429,6 +3688,292 @@ def announcements_latest():
     except Exception as e:
         print(f"❌ Announcements fetch error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ========================================
+# DIGITAL TUITION SIR — admin course management
+# ========================================
+
+def _lesson_row_to_dict(row):
+    d = dict(row)
+    return d
+
+
+@app.route('/admin/courses', methods=['POST'])
+def admin_create_course():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    grade = (data.get('grade') or '').strip()
+    subject = (data.get('subject') or '').strip()
+    title = (data.get('title') or '').strip()
+    if not grade or not subject or not title:
+        return jsonify({'status': 'error', 'message': 'Grade, subject, title තුනම ඕන.'}), 400
+
+    exam_target = (data.get('exam_target') or '').strip() or None
+    price_lkr = data.get('price_lkr')
+    try:
+        price_lkr = int(price_lkr) if price_lkr not in (None, '') else None
+    except (TypeError, ValueError):
+        price_lkr = None
+    try:
+        free_trial_days = int(data.get('free_trial_days') or 0)
+    except (TypeError, ValueError):
+        free_trial_days = 0
+
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO courses (grade, subject, title, exam_target, price_lkr, free_trial_days, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)""",
+        (grade, subject, title, exam_target, price_lkr, free_trial_days, datetime.now(timezone.utc).isoformat())
+    )
+    conn.commit()
+    new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+    conn.close()
+    return jsonify({'status': 'success', 'id': new_id})
+
+
+@app.route('/admin/courses-list', methods=['GET'])
+def admin_list_courses():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT c.id, c.grade, c.subject, c.title, c.exam_target, c.price_lkr, c.free_trial_days,
+               c.status, c.created_at,
+               COUNT(l.id) AS lesson_count,
+               COALESCE(SUM(CASE WHEN l.status = 'published' THEN 1 ELSE 0 END), 0) AS published_count
+        FROM courses c
+        LEFT JOIN course_lessons l ON l.course_id = c.id
+        GROUP BY c.id
+        ORDER BY c.created_at DESC
+    """).fetchall()
+    conn.close()
+    return jsonify({'status': 'success', 'courses': [dict(r) for r in rows]})
+
+
+@app.route('/admin/courses/<int:course_id>/delete', methods=['POST'])
+def admin_delete_course(course_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    conn.execute("DELETE FROM course_lessons WHERE course_id = ?", (course_id,))
+    conn.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/admin/courses/<int:course_id>/split-pdf', methods=['POST'])
+def admin_split_course_pdf(course_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    if 'pdf' not in request.files:
+        return jsonify({'status': 'error', 'message': 'PDF file එකක් attach කරලා නෑ.'}), 400
+    if not CLOUD_OCR_AVAILABLE:
+        return jsonify({'status': 'error', 'message': 'Cloud Vision API configure වී නෑ.'}), 500
+
+    # Course PDFs are curated admin uploads (auth-gated above), not a
+    # public endpoint — override the app-wide 5MB cap (sized for
+    # public routes) for this request only.
+    request.max_content_length = 30 * 1024 * 1024
+
+    try:
+        min_words = int(request.form.get('min_words') or 100)
+        max_words = int(request.form.get('max_words') or 220)
+    except (TypeError, ValueError):
+        min_words, max_words = 100, 220
+
+    pdf_bytes = request.files['pdf'].read()
+    try:
+        full_text, total_pages, processed_pages = _ocr_pdf_pages_to_text(pdf_bytes)
+    except Exception as e:
+        print(f"❌ Course PDF OCR error: {e}")
+        return jsonify({'status': 'error', 'message': f'PDF එකෙන් text extract කරගැනීම අසාර්ථක විය: {e}'}), 500
+
+    if len(full_text) < 20:
+        return jsonify({'status': 'error', 'message': 'මේ PDF එකෙන් text extract කරගන්න බැරි උනා.'}), 400
+
+    try:
+        lessons = call_pdf_split(full_text, min_words=min_words, max_words=max_words)
+    except GeminiGenerationError as e:
+        return jsonify({'status': 'error', 'message': f'Lessons වලට split කරගැනීම අසාර්ථක විය: {e}'}), 500
+
+    note = None
+    if total_pages > processed_pages:
+        note = f'PDF එකේ pages {total_pages}ක් තිබුණි — මුල් pages {processed_pages} විතරක් process කරන ලදී.'
+
+    return jsonify({'status': 'success', 'lessons': lessons, 'note': note})
+
+
+@app.route('/admin/courses/<int:course_id>/lessons/save-batch', methods=['POST'])
+def admin_save_course_lessons(course_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    lessons = data.get('lessons') or []
+    if not lessons:
+        return jsonify({'status': 'error', 'message': 'Save කරන්න lessons නෑ.'}), 400
+
+    conn = get_db()
+    now = datetime.now(timezone.utc).isoformat()
+    for lesson in lessons:
+        title = (lesson.get('title') or '').strip()[:200] or 'Untitled Lesson'
+        source_text = (lesson.get('source_text') or '').strip()
+        day_number = lesson.get('day')
+        if not source_text or not day_number:
+            continue
+        conn.execute("""
+            INSERT INTO course_lessons (course_id, day_number, title, source_text, status, created_at)
+            VALUES (?, ?, ?, ?, 'draft', ?)
+            ON CONFLICT(course_id, day_number) DO UPDATE SET
+                title = excluded.title,
+                source_text = excluded.source_text
+        """, (course_id, day_number, title, source_text, now))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/admin/courses/<int:course_id>/lessons-list', methods=['GET'])
+def admin_list_course_lessons(course_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM course_lessons WHERE course_id = ? ORDER BY day_number ASC",
+        (course_id,)
+    ).fetchall()
+    conn.close()
+    return jsonify({'status': 'success', 'lessons': [_lesson_row_to_dict(r) for r in rows]})
+
+
+@app.route('/admin/lessons/<int:lesson_id>/generate-script', methods=['POST'])
+def admin_generate_lesson_script(lesson_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    lesson = conn.execute("SELECT * FROM course_lessons WHERE id = ?", (lesson_id,)).fetchone()
+    if not lesson:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Lesson එක හම්බුනේ නෑ.'}), 404
+
+    try:
+        script, mermaid_si, mermaid_en = call_teacher_script(lesson['source_text'])
+    except GeminiGenerationError as e:
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Script generate කිරීම අසාර්ථක විය: {e}'}), 500
+
+    conn.execute(
+        "UPDATE course_lessons SET script_text = ?, mermaid_code_si = ?, mermaid_code_en = ? WHERE id = ?",
+        (script, mermaid_si, mermaid_en, lesson_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success', 'script_text': script, 'mermaid_code_si': mermaid_si, 'mermaid_code_en': mermaid_en})
+
+
+@app.route('/admin/lessons/<int:lesson_id>/generate-audio', methods=['POST'])
+def admin_generate_lesson_audio(lesson_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    lesson = conn.execute("SELECT * FROM course_lessons WHERE id = ?", (lesson_id,)).fetchone()
+    if not lesson:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Lesson එක හම්බුනේ නෑ.'}), 404
+    if not lesson['script_text']:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'මුලින්ම script එක generate කරන්න ඕන.'}), 400
+
+    try:
+        audio_segment, engine_used = generate_lesson_audio(lesson['script_text'])
+    except Exception as e:
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Audio generate කිරීම අසාර්ථක විය: {e}'}), 500
+
+    os.makedirs(LESSON_AUDIO_DIR, exist_ok=True)
+    filename = f'lesson_{lesson_id}_ai.mp3'
+    filepath = os.path.join(LESSON_AUDIO_DIR, filename)
+    audio_segment.export(filepath, format='mp3')
+    audio_url = '/' + filepath.replace('\\', '/')
+
+    conn.execute(
+        "UPDATE course_lessons SET ai_audio_url = ?, ai_audio_engine = ? WHERE id = ?",
+        (audio_url, engine_used, lesson_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success', 'ai_audio_url': audio_url, 'ai_audio_engine': engine_used})
+
+
+@app.route('/admin/lessons/<int:lesson_id>/upload-audio', methods=['POST'])
+def admin_upload_lesson_audio(lesson_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    if 'audio' not in request.files:
+        return jsonify({'status': 'error', 'message': 'Audio file එකක් attach කරලා නෑ.'}), 400
+
+    request.max_content_length = 20 * 1024 * 1024
+
+    file = request.files['audio']
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.mp3', '.wav', '.m4a', '.ogg'):
+        return jsonify({'status': 'error', 'message': 'mp3/wav/m4a/ogg file එකක් upload කරන්න.'}), 400
+
+    os.makedirs(LESSON_AUDIO_DIR, exist_ok=True)
+    filename = f'lesson_{lesson_id}_manual{ext}'
+    filepath = os.path.join(LESSON_AUDIO_DIR, filename)
+    file.save(filepath)
+    audio_url = '/' + filepath.replace('\\', '/')
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE course_lessons SET manual_audio_url = ?, active_audio_source = 'manual' WHERE id = ?",
+        (audio_url, lesson_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success', 'manual_audio_url': audio_url})
+
+
+@app.route('/admin/lessons/<int:lesson_id>/set-audio-source', methods=['POST'])
+def admin_set_lesson_audio_source(lesson_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    source = data.get('source')
+    if source not in ('ai', 'manual'):
+        return jsonify({'status': 'error', 'message': "source එක 'ai' හෝ 'manual' විය යුතුය."}), 400
+    conn = get_db()
+    conn.execute("UPDATE course_lessons SET active_audio_source = ? WHERE id = ?", (source, lesson_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/admin/lessons/<int:lesson_id>/publish', methods=['POST'])
+def admin_publish_lesson(lesson_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    new_status = 'published' if data.get('publish') else 'draft'
+    conn = get_db()
+    conn.execute("UPDATE course_lessons SET status = ? WHERE id = ?", (new_status, lesson_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success', 'lesson_status': new_status})
+
+
+@app.route('/admin/lessons/<int:lesson_id>/delete', methods=['POST'])
+def admin_delete_lesson(lesson_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    conn.execute("DELETE FROM course_lessons WHERE id = ?", (lesson_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
 
 
 @app.route('/admin')
