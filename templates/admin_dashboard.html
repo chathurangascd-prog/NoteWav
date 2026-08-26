@@ -1793,102 +1793,98 @@
             loadCourses();
         });
 
-        let splitPollTimer = null;
-
+        // FIX (Aug 27, 2026): this used to fire the whole OCR+split job
+        // off to a server-side background thread and poll a status
+        // endpoint. That hung silently in production twice (once with
+        // concurrent Gemini calls, once sequential) with zero error
+        // logged — most likely something about background threads
+        // under this gunicorn deployment, since every plain synchronous
+        // call from a normal request has been reliable all along. Now
+        // the BROWSER drives it: one small fetch per page-batch or
+        // per lesson-chunk, each a normal request/response. No
+        // background thread, no polling — if a step fails it fails
+        // loudly right there, and a closed tab just stops (nothing
+        // left running server-side to leak).
         document.getElementById('split-pdf-btn').addEventListener('click', async function() {
             const fileInput = document.getElementById('course-pdf-input');
             const statusEl = document.getElementById('split-pdf-status');
+            const fillEl = document.getElementById('split-progress-fill');
             if (!fileInput.files.length) {
                 statusEl.textContent = 'PDF file එකක් තෝරන්න.';
                 return;
             }
             const minWords = document.getElementById('split-min-words-input').value || 100;
             const maxWords = document.getElementById('split-max-words-input').value || 220;
+            const pdfFile = fileInput.files[0];
             const btn = this;
             btn.disabled = true;
-            btn.textContent = 'Uploading...';
-            statusEl.textContent = 'PDF එක upload කරමින්...';
-
-            const formData = new FormData();
-            formData.append('pdf', fileInput.files[0]);
-            formData.append('min_words', minWords);
-            formData.append('max_words', maxWords);
+            document.getElementById('split-progress-track').style.display = 'block';
+            fillEl.classList.remove('pulsing');
+            fillEl.style.width = '0%';
 
             try {
-                const res = await fetch(`/admin/courses/${currentCourseId}/split-pdf`, { method: 'POST', body: formData });
-                const data = await res.json();
-                if (data.status !== 'processing') {
-                    btn.disabled = false;
-                    btn.textContent = 'Split PDF';
-                    statusEl.textContent = '❌ ' + (data.message || 'Failed.');
-                    return;
+                const startForm = new FormData();
+                startForm.append('pdf', pdfFile);
+                startForm.append('min_words', minWords);
+                startForm.append('max_words', maxWords);
+                btn.textContent = 'Uploading...';
+                statusEl.textContent = 'PDF එක upload කරමින්...';
+                let res = await fetch(`/admin/courses/${currentCourseId}/pdf-job/start`, { method: 'POST', body: startForm });
+                let data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to start.');
+
+                const jobId = data.job_id;
+                const totalPages = data.total_pages;
+
+                // OCR phase — one batch of pages per request.
+                let processedPages = 0;
+                while (processedPages < totalPages) {
+                    btn.textContent = `OCR ${processedPages}/${totalPages} pages...`;
+                    statusEl.textContent = `OCR — page ${processedPages} of ${totalPages}...`;
+                    const stepForm = new FormData();
+                    stepForm.append('pdf', pdfFile);
+                    stepForm.append('job_id', jobId);
+                    res = await fetch(`/admin/courses/${currentCourseId}/pdf-job/ocr-step`, { method: 'POST', body: stepForm });
+                    data = await res.json();
+                    if (data.status !== 'success') throw new Error(data.message || 'OCR step failed.');
+                    processedPages = data.processed_pages;
+                    fillEl.style.width = Math.round((processedPages / totalPages) * 60) + '%';
+                    if (data.phase === 'split') break;
                 }
-                btn.textContent = `OCR 0/${data.total_pages} pages...`;
-                document.getElementById('split-progress-track').style.display = 'block';
-                document.getElementById('split-progress-fill').style.width = '0%';
-                pollSplitJob(data.job_id, btn, statusEl);
+
+                // AI-split phase — one lesson-chunk per request.
+                let processedChunks = 0;
+                let totalChunks = 1;
+                let lessons = [];
+                while (true) {
+                    btn.textContent = `AI splitting ${processedChunks}/${totalChunks}...`;
+                    statusEl.textContent = `AI එකෙන් content එක lessons වලට කඩමින් — chunk ${processedChunks + 1} of ${totalChunks}...`;
+                    res = await fetch(`/admin/courses/${currentCourseId}/pdf-job/split-step`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ job_id: jobId })
+                    });
+                    data = await res.json();
+                    if (data.status === 'error') throw new Error(data.message || 'Split step failed.');
+                    if (data.status === 'done') { lessons = data.lessons; break; }
+                    processedChunks = data.processed_chunks;
+                    totalChunks = data.total_chunks;
+                    fillEl.style.width = (60 + Math.round((processedChunks / totalChunks) * 40)) + '%';
+                }
+
+                fillEl.style.width = '100%';
+                setTimeout(() => { document.getElementById('split-progress-track').style.display = 'none'; }, 600);
+                currentSplitPreview = lessons;
+                statusEl.textContent = `✅ ${lessons.length} lessons found — review below, then Save.`;
+                renderSplitPreview();
+                document.getElementById('save-lessons-btn').style.display = 'inline-block';
             } catch (e) {
+                document.getElementById('split-progress-track').style.display = 'none';
+                statusEl.textContent = '❌ ' + (e.message || 'Failed — network error.');
+            } finally {
                 btn.disabled = false;
                 btn.textContent = 'Split PDF';
-                statusEl.textContent = '❌ Upload failed — network error.';
             }
         });
-
-        function pollSplitJob(jobId, btn, statusEl) {
-            if (splitPollTimer) clearInterval(splitPollTimer);
-            splitPollTimer = setInterval(async () => {
-                try {
-                    const res = await fetch(`/admin/courses/${currentCourseId}/split-pdf-status/${jobId}`);
-                    const data = await res.json();
-                    if (data.status !== 'success') return;  // transient fetch hiccup — try again next tick
-                    const job = data.job;
-
-                    const fillEl = document.getElementById('split-progress-fill');
-
-                    if (job.status === 'processing') {
-                        const ocrDone = job.processed_pages >= job.total_pages;
-                        if (!ocrDone) {
-                            // OCR phase — maps to 0-85% of the bar, leaving room to
-                            // show the AI-split phase is a distinct next step.
-                            const pct = Math.round((job.processed_pages / job.total_pages) * 85);
-                            fillEl.classList.remove('pulsing');
-                            fillEl.style.width = pct + '%';
-                            btn.textContent = `OCR ${job.processed_pages}/${job.total_pages} pages...`;
-                            statusEl.textContent = `OCR — page ${job.processed_pages} of ${job.total_pages}...`;
-                        } else {
-                            // OCR finished but still processing = now in the AI
-                            // split step (no page-level progress for this part —
-                            // pulse the bar so it doesn't look frozen).
-                            fillEl.style.width = '92%';
-                            fillEl.classList.add('pulsing');
-                            btn.textContent = 'AI splitting into lessons...';
-                            statusEl.textContent = 'AI එකෙන් content එක lessons වලට කඩමින් — මේකට විනාඩි කිහිපයක් යන්න පුළුවන්...';
-                        }
-                        return;
-                    }
-
-                    clearInterval(splitPollTimer);
-                    btn.disabled = false;
-                    btn.textContent = 'Split PDF';
-                    fillEl.classList.remove('pulsing');
-
-                    if (job.status === 'error') {
-                        document.getElementById('split-progress-track').style.display = 'none';
-                        statusEl.textContent = '❌ ' + (job.error_message || 'Failed.');
-                        return;
-                    }
-
-                    fillEl.style.width = '100%';
-                    setTimeout(() => { document.getElementById('split-progress-track').style.display = 'none'; }, 600);
-                    currentSplitPreview = job.lessons;
-                    statusEl.textContent = `✅ ${job.lessons.length} lessons found — review below, then Save.`;
-                    renderSplitPreview();
-                    document.getElementById('save-lessons-btn').style.display = 'inline-block';
-                } catch (e) {
-                    // network hiccup on one poll — keep polling, don't give up
-                }
-            }, 3000);
-        }
 
         function updateSplitPreviewTitle(idx, value) { currentSplitPreview[idx].title = value; }
         function updateSplitPreviewText(idx, value) { currentSplitPreview[idx].source_text = value; }

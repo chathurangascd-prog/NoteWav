@@ -409,11 +409,12 @@ def init_db():
             UNIQUE(user_google_id, lesson_id)
         )
     """)
-    # A large syllabus PDF (up to ~200 pages) is OCR'd + split in a
-    # background thread rather than inside one HTTP request — see
-    # admin_split_course_pdf — so progress/result has to live somewhere
-    # both the kickoff request and later status-poll requests (which
-    # may land on a different gunicorn worker) can see it.
+    # A large syllabus PDF (up to ~200 pages) is OCR'd + split across
+    # many small requests (see admin_pdf_job_start/ocr-step/split-step)
+    # rather than in one HTTP request or a background thread — each
+    # step needs to read/update progress here, and different steps can
+    # land on different gunicorn workers, so this can't just be an
+    # in-memory dict.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS pdf_split_jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -426,6 +427,29 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    # FIX (Aug 27, 2026): a background thread doing the OCR+split work
+    # (kicked off by the request, running after it returned) hung
+    # silently in production TWICE — once with concurrent Gemini calls,
+    # once after reverting to sequential — while every plain synchronous
+    # Gemini call made from a normal request-handling thread has been
+    # reliable all session. That points at something specific to
+    # background threads under this gunicorn deployment (most likely a
+    # fork()-inherited lock on the shared client), not the calls
+    # themselves. New approach: no background thread at all — the
+    # browser drives one page-batch or one lesson-chunk per request,
+    # each a normal fast synchronous call. These columns track that.
+    for column_def in [
+        "phase TEXT DEFAULT 'ocr'",
+        "full_text TEXT",
+        "total_chunks INTEGER DEFAULT 0",
+        "processed_chunks INTEGER DEFAULT 0",
+        "min_words INTEGER DEFAULT 100",
+        "max_words INTEGER DEFAULT 220",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE pdf_split_jobs ADD COLUMN {column_def}")
+        except Exception:
+            pass  # column already exists
 
     conn.commit()
     conn.close()
@@ -1896,17 +1920,11 @@ lesson එකක් විදිහට ඉගෙන ගන්න පුළුව
 """
 
 
-def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400):
-    """Splits a (possibly book-length) PDF's OCR'd text into day-by-day
-    lesson chunks. Processes in ~words_per_chunk-sized pieces (on
-    paragraph boundaries) rather than one giant Gemini call — verbatim
-    source_text echo means output tokens scale with input size, and a
-    single huge call risks hitting the model's output-token ceiling
-    (confirmed in testing: a ~4700-word module needed 2 chunked calls,
-    not 1, to avoid truncated/invalid JSON)."""
-    if not client:
-        raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
-
+def _text_to_chunks(full_text, words_per_chunk=2400):
+    """Splits OCR'd text into ~words_per_chunk-sized pieces on paragraph
+    boundaries. Deterministic given the same input, so a step-based job
+    can recompute chunk N on demand instead of having to persist the
+    whole chunk list separately from full_text."""
     paragraphs = [p for p in full_text.split('\n\n') if p.strip()]
     chunks = []
     current, current_words = [], 0
@@ -1919,61 +1937,43 @@ def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400
         current_words += para_words
     if current:
         chunks.append('\n\n'.join(current))
+    return chunks
 
-    split_instruction = build_split_system_instruction(min_words, max_words)
 
-    def _split_one_chunk(chunk):
-        last_error = None
-        response = None
-        for model_name in ['gemini-2.5-flash', 'gemini-3.7-flash']:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=f"මේ content එක lessons වලට කඩන්න:\n\n{chunk}",
-                    config=types.GenerateContentConfig(
-                        system_instruction=split_instruction,
-                        temperature=0.2,
-                        max_output_tokens=16000,
-                        response_mime_type='application/json',
-                        safety_settings=SAFETY_SETTINGS,
-                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
-                        http_options=types.HttpOptions(timeout=60_000),
-                    )
+def _split_one_gemini_chunk(chunk, split_instruction):
+    """One chunk's worth of the PDF-split Gemini call. Kept as a
+    standalone, single synchronous call (not batched, not threaded) —
+    see the FIX note on the pdf-job routes below for why."""
+    if not client:
+        raise GeminiGenerationError("Gemini API is not configured (missing GEMINI_API_KEY).")
+
+    last_error = None
+    response = None
+    for model_name in ['gemini-2.5-flash', 'gemini-3.7-flash']:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=f"මේ content එක lessons වලට කඩන්න:\n\n{chunk}",
+                config=types.GenerateContentConfig(
+                    system_instruction=split_instruction,
+                    temperature=0.2,
+                    max_output_tokens=16000,
+                    response_mime_type='application/json',
+                    safety_settings=SAFETY_SETTINGS,
+                    thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
+                    http_options=types.HttpOptions(timeout=60_000),
                 )
-                break
-            except Exception as e:
-                last_error = e
-                if _is_transient_gemini_error(e):
-                    continue
-                raise GeminiGenerationError(f"PDF split failed on one chunk: {e}")
-        if response is None:
-            raise GeminiGenerationError(f"PDF split failed on one chunk after retries: {last_error}")
-        data = _parse_json_loose(response.text)
-        return data.get('lessons') or []
-
-    # FIX (Aug 27, 2026): this used to run chunks concurrently via
-    # ThreadPoolExecutor — worked fine in local testing, but a real
-    # production run (via the background-thread job below, on Render's
-    # gunicorn sync workers) hung indefinitely partway through with no
-    # error ever logged. That smells like the google-genai client isn't
-    # safe to call from multiple threads at once (or some other
-    # threading interaction specific to gunicorn's worker model) rather
-    # than a plain slow-response case — a genuinely slow/failed call
-    # still surfaces as a timeout/exception eventually, it doesn't just
-    # go silent forever. Back to sequential: slower, but every prior
-    # test (many, across this session) that ran calls one at a time
-    # completed or failed loudly, never hung silently.
-    all_lessons = []
-    for chunk in chunks:
-        all_lessons.extend(_split_one_chunk(chunk))
-
-    for i, lesson in enumerate(all_lessons, 1):
-        lesson['day'] = i
-
-    if not all_lessons:
-        raise GeminiGenerationError("PDF split produced no lessons.")
-
-    return all_lessons
+            )
+            break
+        except Exception as e:
+            last_error = e
+            if _is_transient_gemini_error(e):
+                continue
+            raise GeminiGenerationError(f"PDF split failed on one chunk: {e}")
+    if response is None:
+        raise GeminiGenerationError(f"PDF split failed on one chunk after retries: {last_error}")
+    data = _parse_json_loose(response.text)
+    return data.get('lessons') or []
 
 
 LESSON_AUDIO_DIR = os.path.join('static', 'lesson_audio')  # local fallback only — see upload_persistent_audio() below
@@ -3844,66 +3844,14 @@ def admin_delete_course(course_id):
 
 
 MAX_OCR_BATCH_PAGES = 25  # pages OCR'd per Vision API round before the job row's processed_pages is updated
+SPLIT_CHUNK_WORDS = 2400  # words per Gemini split call — see _text_to_chunks
 
 
-def _run_pdf_split_job(job_id, pdf_bytes, min_words, max_words):
-    """Runs in a background thread (kicked off by
-    admin_split_course_pdf) — OCRs the PDF in MAX_OCR_BATCH_PAGES-page
-    batches, updating pdf_split_jobs.processed_pages after each batch
-    so the admin sees real progress instead of one long silent wait,
-    then runs the (already-parallelized) Gemini split on the combined
-    text. Writes the final result or error back to the same job row."""
-    try:
-        text_parts = []
-        start_page = 0
-        total_pages = None
-        while True:
-            batch_text, total_pages, end_page = _ocr_pdf_pages_to_text(
-                pdf_bytes, start_page=start_page, max_pages=MAX_OCR_BATCH_PAGES
-            )
-            text_parts.append(batch_text)
-
-            conn = get_db()
-            conn.execute("UPDATE pdf_split_jobs SET processed_pages = ? WHERE id = ?", (end_page, job_id))
-            conn.commit()
-            conn.close()
-
-            if end_page >= total_pages:
-                break
-            start_page = end_page
-
-        full_text = '\n\n'.join(text_parts).strip()
-        if len(full_text) < 20:
-            raise RuntimeError("මේ PDF එකෙන් text extract කරගන්න බැරි උනා.")
-
-        lessons = call_pdf_split(full_text, min_words=min_words, max_words=max_words)
-
-        conn = get_db()
-        conn.execute(
-            "UPDATE pdf_split_jobs SET status = 'done', result_json = ? WHERE id = ?",
-            (json.dumps(lessons, ensure_ascii=False), job_id)
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"❌ PDF split job {job_id} failed: {e}")
-        try:
-            conn = get_db()
-            conn.execute("UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?", (str(e), job_id))
-            conn.commit()
-            conn.close()
-        except Exception as inner_e:
-            print(f"❌ Also failed to record PDF split job {job_id} error: {inner_e}")
-
-
-@app.route('/admin/courses/<int:course_id>/split-pdf', methods=['POST'])
-def admin_split_course_pdf(course_id):
+@app.route('/admin/courses/<int:course_id>/pdf-job/start', methods=['POST'])
+def admin_pdf_job_start(course_id):
     # Course PDFs are curated admin uploads, not a public endpoint —
-    # override the app-wide 5MB cap (sized for public routes) for this
-    # request only. MUST happen before any request.files/request.form
-    # access below — Werkzeug parses (and enforces the cap on) the
-    # multipart body lazily on first access, so setting this after
-    # touching request.files is too late and 413s on the old 5MB cap.
+    # override the app-wide 5MB cap for this request only. MUST happen
+    # before any request.files/request.form access below.
     request.max_content_length = 60 * 1024 * 1024
 
     if not _is_admin_logged_in():
@@ -3921,16 +3869,6 @@ def admin_split_course_pdf(course_id):
 
     pdf_bytes = request.files['pdf'].read()
 
-    # A whole-term PDF can run to ~200 pages — far too long to OCR +
-    # split inside one HTTP request without hitting the server's
-    # timeout (confirmed: a single 32-page module alone can take 100s+
-    # when Gemini is slow). So this endpoint no longer does the work
-    # itself: it validates the page count, creates a job row, and hands
-    # the actual OCR+split off to a background thread in
-    # _run_pdf_split_job, batching OCR MAX_OCR_BATCH_PAGES at a time so
-    # progress is visible instead of one opaque multi-minute wait.
-    # /admin/courses/<id>/split-pdf-status/<job_id> is polled for
-    # progress/result.
     MAX_SPLIT_PAGES = 200
     try:
         page_count_probe = fitz.open(stream=pdf_bytes, filetype='pdf')
@@ -3951,56 +3889,153 @@ def admin_split_course_pdf(course_id):
 
     conn = get_db()
     conn.execute(
-        "INSERT INTO pdf_split_jobs (course_id, status, total_pages, processed_pages, created_at) VALUES (?, 'processing', ?, 0, ?)",
-        (course_id, total_pdf_pages, datetime.now(timezone.utc).isoformat())
+        """INSERT INTO pdf_split_jobs
+           (course_id, status, phase, total_pages, processed_pages, full_text, min_words, max_words, created_at)
+           VALUES (?, 'processing', 'ocr', ?, 0, '', ?, ?, ?)""",
+        (course_id, total_pdf_pages, min_words, max_words, datetime.now(timezone.utc).isoformat())
     )
     conn.commit()
     job_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
     conn.close()
 
-    thread = threading.Thread(
-        target=_run_pdf_split_job,
-        args=(job_id, pdf_bytes, min_words, max_words),
-        daemon=True,
-    )
-    thread.start()
-
-    return jsonify({'status': 'processing', 'job_id': job_id, 'total_pages': total_pdf_pages})
+    return jsonify({'status': 'success', 'job_id': job_id, 'total_pages': total_pdf_pages})
 
 
-@app.route('/admin/courses/<int:course_id>/split-pdf-status/<int:job_id>', methods=['GET'])
-def admin_split_course_pdf_status(course_id, job_id):
+@app.route('/admin/courses/<int:course_id>/pdf-job/ocr-step', methods=['POST'])
+def admin_pdf_job_ocr_step(course_id):
+    # Same ordering requirement as pdf-job/start — before request.files access.
+    request.max_content_length = 60 * 1024 * 1024
+
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    if 'pdf' not in request.files or 'job_id' not in request.form:
+        return jsonify({'status': 'error', 'message': 'PDF file එක හෝ job_id එක නෑ.'}), 400
+
+    job_id = int(request.form['job_id'])
     conn = get_db()
     job = conn.execute("SELECT * FROM pdf_split_jobs WHERE id = ? AND course_id = ?", (job_id, course_id)).fetchone()
     if not job:
         conn.close()
         return jsonify({'status': 'error', 'message': 'Job එක හම්බුනේ නෑ.'}), 404
-
     job = dict(job)
 
-    # Safety net: a background-thread job that never updates again (the
-    # worker process got recycled, a call hung past its own timeout,
-    # etc.) would otherwise leave the admin UI polling forever with no
-    # way out. If a job has sat in 'processing' for over 10 minutes,
-    # treat it as failed here — this runs in a fresh request, unaffected
-    # by whatever the stuck background thread is doing.
-    if job['status'] == 'processing':
-        created = datetime.fromisoformat(job['created_at'])
-        if datetime.now(timezone.utc) - created > timedelta(minutes=10):
-            job['status'] = 'error'
-            job['error_message'] = 'Processing එක ඉතා වේලා ගත්තා (10 min+) — කරුණාකර නැවත try කරන්න, PDF එකේ කොටසක් කුඩා කරලා upload කළොත් වඩා reliable.'
-            conn.execute(
-                "UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?",
-                (job['error_message'], job_id)
-            )
-            conn.commit()
+    if job['phase'] != 'ocr':
+        conn.close()
+        return jsonify({'status': 'success', 'phase': job['phase'], 'job_id': job_id})
 
+    pdf_bytes = request.files['pdf'].read()
+
+    try:
+        batch_text, total_pages, end_page = _ocr_pdf_pages_to_text(
+            pdf_bytes, start_page=job['processed_pages'], max_pages=MAX_OCR_BATCH_PAGES
+        )
+    except Exception as e:
+        conn.execute("UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?", (str(e), job_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'PDF එකෙන් text extract කරගැනීම අසාර්ථක විය: {e}'}), 500
+
+    full_text = (job['full_text'] or '') + ('\n\n' if job['full_text'] else '') + batch_text
+
+    if end_page >= total_pages:
+        # OCR done — move to the split phase.
+        if len(full_text.strip()) < 20:
+            conn.execute("UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?",
+                         ('මේ PDF එකෙන් text extract කරගන්න බැරි උනා.', job_id))
+            conn.commit()
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'මේ PDF එකෙන් text extract කරගන්න බැරි උනා.'}), 400
+
+        chunks = _text_to_chunks(full_text, words_per_chunk=SPLIT_CHUNK_WORDS)
+        conn.execute(
+            """UPDATE pdf_split_jobs SET processed_pages = ?, full_text = ?, phase = 'split',
+               total_chunks = ?, processed_chunks = 0, result_json = '[]' WHERE id = ?""",
+            (end_page, full_text, len(chunks), job_id)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'status': 'success', 'phase': 'split', 'job_id': job_id,
+            'processed_pages': end_page, 'total_pages': total_pages,
+            'total_chunks': len(chunks), 'processed_chunks': 0,
+        })
+
+    conn.execute("UPDATE pdf_split_jobs SET processed_pages = ?, full_text = ? WHERE id = ?", (end_page, full_text, job_id))
+    conn.commit()
     conn.close()
-    if job['status'] == 'done':
-        job['lessons'] = json.loads(job['result_json']) if job['result_json'] else []
-    return jsonify({'status': 'success', 'job': job})
+    return jsonify({
+        'status': 'success', 'phase': 'ocr', 'job_id': job_id,
+        'processed_pages': end_page, 'total_pages': total_pages,
+    })
+
+
+@app.route('/admin/courses/<int:course_id>/pdf-job/split-step', methods=['POST'])
+def admin_pdf_job_split_step(course_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    job_id = data.get('job_id')
+    if not job_id:
+        return jsonify({'status': 'error', 'message': 'job_id එකක් නෑ.'}), 400
+
+    conn = get_db()
+    job = conn.execute("SELECT * FROM pdf_split_jobs WHERE id = ? AND course_id = ?", (job_id, course_id)).fetchone()
+    if not job:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Job එක හම්බුනේ නෑ.'}), 404
+    job = dict(job)
+
+    if job['phase'] != 'split':
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'OCR phase එක තවම ඉවර වී නෑ.'}), 400
+
+    chunks = _text_to_chunks(job['full_text'] or '', words_per_chunk=SPLIT_CHUNK_WORDS)
+    idx = job['processed_chunks']
+
+    if idx >= len(chunks):
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Split step index එක invalid.'}), 400
+
+    split_instruction = build_split_system_instruction(job['min_words'] or 100, job['max_words'] or 220)
+    try:
+        chunk_lessons = _split_one_gemini_chunk(chunks[idx], split_instruction)
+    except GeminiGenerationError as e:
+        conn.execute("UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?", (str(e), job_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Lessons වලට split කරගැනීම අසාර්ථක විය: {e}'}), 500
+
+    accumulated = json.loads(job['result_json'] or '[]') + chunk_lessons
+    new_processed_chunks = idx + 1
+
+    if new_processed_chunks >= len(chunks):
+        for i, lesson in enumerate(accumulated, 1):
+            lesson['day'] = i
+        if not accumulated:
+            conn.execute("UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?",
+                         ('PDF split produced no lessons.', job_id))
+            conn.commit()
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'PDF split එකෙන් lessons කිසිවක් ලැබුනේ නෑ.'}), 500
+
+        conn.execute(
+            "UPDATE pdf_split_jobs SET status = 'done', processed_chunks = ?, result_json = ? WHERE id = ?",
+            (new_processed_chunks, json.dumps(accumulated, ensure_ascii=False), job_id)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'done', 'lessons': accumulated})
+
+    conn.execute(
+        "UPDATE pdf_split_jobs SET processed_chunks = ?, result_json = ? WHERE id = ?",
+        (new_processed_chunks, json.dumps(accumulated, ensure_ascii=False), job_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({
+        'status': 'success', 'phase': 'split',
+        'processed_chunks': new_processed_chunks, 'total_chunks': len(chunks),
+    })
 
 
 @app.route('/admin/courses/<int:course_id>/lessons/save-batch', methods=['POST'])
@@ -4108,7 +4143,7 @@ def admin_generate_lesson_audio(lesson_id):
 
 @app.route('/admin/lessons/<int:lesson_id>/upload-audio', methods=['POST'])
 def admin_upload_lesson_audio(lesson_id):
-    # Same ordering requirement as admin_split_course_pdf above — must
+    # Same ordering requirement as admin_pdf_job_start above — must
     # be set before any request.files/request.form access.
     request.max_content_length = 20 * 1024 * 1024
 
