@@ -2048,9 +2048,19 @@ def _ocr_pdf_pages_to_text(pdf_bytes, start_page=0, max_pages=80):
     pages_text = []
     for i in range(start_page, end_page):
         page = doc[i]
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        # FIX (Aug 27, 2026): dropped from 2x zoom — Render's free tier
+        # (512MB total) was OOM-killing the whole instance mid-job.
+        # 1.5x is still comfortably sharp for Vision OCR on printed
+        # textbook text and meaningfully cuts per-page image memory
+        # (pixmap + PNG encode), which matters here since this loop can
+        # run for many pages across a job. Also drop the pixmap/bytes
+        # references explicitly once OCR'd instead of waiting for the
+        # next loop iteration to overwrite them.
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
         img_bytes = pix.tobytes('png')
+        pix = None
         image = vision.Image(content=img_bytes)
+        img_bytes = None
         image_context = vision.ImageContext(language_hints=['si', 'ta', 'en'])
         response = vision_client.text_detection(image=image, image_context=image_context)
         if response.error.message:
@@ -2090,10 +2100,15 @@ def pdf_extract():
 
         for i in range(page_count):
             page = doc[i]
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            # Dropped from 2x — see the same fix in _ocr_pdf_pages_to_text
+            # above (Render's 512MB memory ceiling was OOM-killing the
+            # whole instance under load).
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
             img_bytes = pix.tobytes('png')
+            pix = None
 
             image = vision.Image(content=img_bytes)
+            img_bytes = None
             image_context = vision.ImageContext(language_hints=['si', 'ta', 'en'])
             response = vision_client.text_detection(image=image, image_context=image_context)
 
@@ -3843,7 +3858,7 @@ def admin_delete_course(course_id):
     return jsonify({'status': 'success'})
 
 
-MAX_OCR_BATCH_PAGES = 25  # pages OCR'd per Vision API round before the job row's processed_pages is updated
+MAX_OCR_BATCH_PAGES = 15  # pages OCR'd per Vision API round before the job row's processed_pages is updated — kept modest given Render's 512MB memory ceiling (see the 1.5x-zoom fix above)
 SPLIT_CHUNK_WORDS = 2400  # words per Gemini split call — see _text_to_chunks
 
 
