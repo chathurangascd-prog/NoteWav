@@ -664,12 +664,19 @@
                     <div class="chip">📄</div>
                     <h2 class="section-title">Upload Syllabus PDF → Split into Lessons</h2>
                 </div>
-                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
                     <input type="file" id="course-pdf-input" accept="application/pdf" style="font-size:0.8rem; color:var(--text-dim);">
-                    <input type="number" id="split-min-words-input" placeholder="Min words/lesson" value="100" style="width:140px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.8rem; font-family:inherit;">
-                    <input type="number" id="split-max-words-input" placeholder="Max words/lesson" value="220" style="width:140px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.8rem; font-family:inherit;">
+                    <div>
+                        <label for="split-min-words-input" style="display:block; font-size:0.66rem; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.3px; margin-bottom:4px;">Min words / lesson</label>
+                        <input type="number" id="split-min-words-input" title="එක lesson (day) එකකට අඩුම වචන ගණන" value="100" style="width:140px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.8rem; font-family:inherit;">
+                    </div>
+                    <div>
+                        <label for="split-max-words-input" style="display:block; font-size:0.66rem; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.3px; margin-bottom:4px;">Max words / lesson</label>
+                        <input type="number" id="split-max-words-input" title="එක lesson (day) එකකට වැඩිම වචන ගණන" value="220" style="width:140px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.8rem; font-family:inherit;">
+                    </div>
                     <button id="split-pdf-btn" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.82rem; font-weight:700; cursor:pointer; font-family:inherit;">Split PDF</button>
                 </div>
+                <p style="font-size:0.72rem; color:var(--text-faint); margin:0 0 10px;">Min/Max words = එක lesson (day) එකකට PDF එකෙන් කොච්චර content ප්‍රමාණයක් තියෙන්නද කියන target range එක — AI එක topic boundary එකට priority දෙනවා, exact number එකට නෙවෙයි.</p>
                 <p id="split-pdf-status" style="font-size:0.76rem; color:var(--text-dim); margin:0; min-height:1em;"></p>
                 <div id="split-preview-wrap"></div>
                 <button id="save-lessons-btn" style="display:none; margin-top:12px; padding:11px 20px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.84rem; font-weight:700; cursor:pointer; font-family:inherit;">Save Lessons</button>

@@ -1951,19 +1951,21 @@ def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400
         data = _parse_json_loose(response.text)
         return data.get('lessons') or []
 
-    # Chunks are independent — run them concurrently instead of one at a
-    # time. executor.map preserves input order in its results, so day
-    # numbers still come out sequential regardless of which chunk's
-    # Gemini call finishes first. This is what keeps a multi-chunk PDF
-    # (a full module, say) inside the request timeout: chunks used to
-    # queue up serially, each taking 15-40s+ with Gemini's current
-    # flakiness, which added up fast.
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        chunk_results = list(executor.map(_split_one_chunk, chunks))
-
+    # FIX (Aug 27, 2026): this used to run chunks concurrently via
+    # ThreadPoolExecutor — worked fine in local testing, but a real
+    # production run (via the background-thread job below, on Render's
+    # gunicorn sync workers) hung indefinitely partway through with no
+    # error ever logged. That smells like the google-genai client isn't
+    # safe to call from multiple threads at once (or some other
+    # threading interaction specific to gunicorn's worker model) rather
+    # than a plain slow-response case — a genuinely slow/failed call
+    # still surfaces as a timeout/exception eventually, it doesn't just
+    # go silent forever. Back to sequential: slower, but every prior
+    # test (many, across this session) that ran calls one at a time
+    # completed or failed loudly, never hung silently.
     all_lessons = []
-    for lessons in chunk_results:
-        all_lessons.extend(lessons)
+    for chunk in chunks:
+        all_lessons.extend(_split_one_chunk(chunk))
 
     for i, lesson in enumerate(all_lessons, 1):
         lesson['day'] = i
@@ -3972,11 +3974,30 @@ def admin_split_course_pdf_status(course_id, job_id):
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     conn = get_db()
     job = conn.execute("SELECT * FROM pdf_split_jobs WHERE id = ? AND course_id = ?", (job_id, course_id)).fetchone()
-    conn.close()
     if not job:
+        conn.close()
         return jsonify({'status': 'error', 'message': 'Job එක හම්බුනේ නෑ.'}), 404
 
     job = dict(job)
+
+    # Safety net: a background-thread job that never updates again (the
+    # worker process got recycled, a call hung past its own timeout,
+    # etc.) would otherwise leave the admin UI polling forever with no
+    # way out. If a job has sat in 'processing' for over 10 minutes,
+    # treat it as failed here — this runs in a fresh request, unaffected
+    # by whatever the stuck background thread is doing.
+    if job['status'] == 'processing':
+        created = datetime.fromisoformat(job['created_at'])
+        if datetime.now(timezone.utc) - created > timedelta(minutes=10):
+            job['status'] = 'error'
+            job['error_message'] = 'Processing එක ඉතා වේලා ගත්තා (10 min+) — කරුණාකර නැවත try කරන්න, PDF එකේ කොටසක් කුඩා කරලා upload කළොත් වඩා reliable.'
+            conn.execute(
+                "UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?",
+                (job['error_message'], job_id)
+            )
+            conn.commit()
+
+    conn.close()
     if job['status'] == 'done':
         job['lessons'] = json.loads(job['result_json']) if job['result_json'] else []
     return jsonify({'status': 'success', 'job': job})
