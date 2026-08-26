@@ -350,6 +350,66 @@ def init_db():
         conn.execute("ALTER TABLE announcements ADD COLUMN scheduled_at TEXT")
     except Exception:
         pass  # column already exists
+
+    # ========================================
+    # DIGITAL TUITION SIR — courses (subject/grade offerings, split from
+    # an admin-uploaded syllabus PDF into day-by-day lessons). Kept as
+    # its own set of tables (not bolted onto `notes`) since a course
+    # lesson is authored ONCE by an admin and served identically to
+    # every enrolled student, unlike a `notes` row which is one
+    # student's own private note.
+    # ========================================
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS courses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            grade TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            title TEXT NOT NULL,
+            exam_target TEXT,
+            price_lkr INTEGER,
+            free_trial_days INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'draft',
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS course_lessons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id INTEGER NOT NULL,
+            day_number INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            source_text TEXT NOT NULL,
+            script_text TEXT,
+            mermaid_code_si TEXT,
+            mermaid_code_en TEXT,
+            ai_audio_url TEXT,
+            ai_audio_engine TEXT,
+            manual_audio_url TEXT,
+            active_audio_source TEXT NOT NULL DEFAULT 'ai',
+            status TEXT NOT NULL DEFAULT 'draft',
+            created_at TEXT NOT NULL,
+            UNIQUE(course_id, day_number)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_course_enrollments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_google_id TEXT NOT NULL,
+            course_id INTEGER NOT NULL,
+            enrolled_at TEXT NOT NULL,
+            UNIQUE(user_google_id, course_id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_lesson_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_google_id TEXT NOT NULL,
+            lesson_id INTEGER NOT NULL,
+            completed_at TEXT NOT NULL,
+            UNIQUE(user_google_id, lesson_id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
