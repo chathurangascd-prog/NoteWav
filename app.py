@@ -1486,7 +1486,15 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
     TOTAL_TIME_BUDGET_SECONDS = 90
 
     MODELS_TO_TRY = ['gemini-3.7-flash', 'gemini-2.5-flash']
-    ATTEMPTS_PER_MODEL = 2
+    # FIX (Aug 26, 2026 — production logs showed gemini-3.7-flash
+    # consistently 503/504-ing under current high demand, on BOTH
+    # attempts, every single request — wasting ~50-60s retrying the
+    # same overloaded model before ever reaching gemini-2.5-flash,
+    # which then succeeds immediately. Dropped from 2 to 1: still
+    # gives 3.7-flash one real shot (unchanged when it's healthy), but
+    # a failure now falls through to 2.5-flash right away instead of
+    # hammering the same overloaded model twice first.
+    ATTEMPTS_PER_MODEL = 1
     attempt_plan = [(model, n) for model in MODELS_TO_TRY for n in range(1, ATTEMPTS_PER_MODEL + 1)]
 
     response = None
