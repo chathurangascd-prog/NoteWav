@@ -1780,6 +1780,8 @@
             loadCourses();
         });
 
+        let splitPollTimer = null;
+
         document.getElementById('split-pdf-btn').addEventListener('click', async function() {
             const fileInput = document.getElementById('course-pdf-input');
             const statusEl = document.getElementById('split-pdf-status');
@@ -1791,8 +1793,8 @@
             const maxWords = document.getElementById('split-max-words-input').value || 220;
             const btn = this;
             btn.disabled = true;
-            btn.textContent = 'Splitting... (may take a minute)';
-            statusEl.textContent = 'OCR + AI splitting in progress...';
+            btn.textContent = 'Uploading...';
+            statusEl.textContent = 'PDF එක upload කරමින්...';
 
             const formData = new FormData();
             formData.append('pdf', fileInput.files[0]);
@@ -1802,22 +1804,54 @@
             try {
                 const res = await fetch(`/admin/courses/${currentCourseId}/split-pdf`, { method: 'POST', body: formData });
                 const data = await res.json();
-                btn.disabled = false;
-                btn.textContent = 'Split PDF';
-                if (data.status !== 'success') {
+                if (data.status !== 'processing') {
+                    btn.disabled = false;
+                    btn.textContent = 'Split PDF';
                     statusEl.textContent = '❌ ' + (data.message || 'Failed.');
                     return;
                 }
-                currentSplitPreview = data.lessons;
-                statusEl.textContent = `✅ ${data.lessons.length} lessons found.${data.note ? ' ' + data.note : ''} — review below, then Save.`;
-                renderSplitPreview();
-                document.getElementById('save-lessons-btn').style.display = 'inline-block';
+                btn.textContent = `Processing 0/${data.total_pages} pages...`;
+                pollSplitJob(data.job_id, btn, statusEl);
             } catch (e) {
                 btn.disabled = false;
                 btn.textContent = 'Split PDF';
-                statusEl.textContent = '❌ Failed — network/timeout error. Try a smaller PDF section.';
+                statusEl.textContent = '❌ Upload failed — network error.';
             }
         });
+
+        function pollSplitJob(jobId, btn, statusEl) {
+            if (splitPollTimer) clearInterval(splitPollTimer);
+            splitPollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/admin/courses/${currentCourseId}/split-pdf-status/${jobId}`);
+                    const data = await res.json();
+                    if (data.status !== 'success') return;  // transient fetch hiccup — try again next tick
+                    const job = data.job;
+
+                    if (job.status === 'processing') {
+                        btn.textContent = `Processing ${job.processed_pages}/${job.total_pages} pages...`;
+                        statusEl.textContent = `OCR + AI splitting — page ${job.processed_pages} of ${job.total_pages}...`;
+                        return;
+                    }
+
+                    clearInterval(splitPollTimer);
+                    btn.disabled = false;
+                    btn.textContent = 'Split PDF';
+
+                    if (job.status === 'error') {
+                        statusEl.textContent = '❌ ' + (job.error_message || 'Failed.');
+                        return;
+                    }
+
+                    currentSplitPreview = job.lessons;
+                    statusEl.textContent = `✅ ${job.lessons.length} lessons found — review below, then Save.`;
+                    renderSplitPreview();
+                    document.getElementById('save-lessons-btn').style.display = 'inline-block';
+                } catch (e) {
+                    // network hiccup on one poll — keep polling, don't give up
+                }
+            }, 3000);
+        }
 
         function updateSplitPreviewTitle(idx, value) { currentSplitPreview[idx].title = value; }
         function updateSplitPreviewText(idx, value) { currentSplitPreview[idx].source_text = value; }

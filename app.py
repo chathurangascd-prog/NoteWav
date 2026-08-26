@@ -409,6 +409,23 @@ def init_db():
             UNIQUE(user_google_id, lesson_id)
         )
     """)
+    # A large syllabus PDF (up to ~200 pages) is OCR'd + split in a
+    # background thread rather than inside one HTTP request — see
+    # admin_split_course_pdf — so progress/result has to live somewhere
+    # both the kickoff request and later status-poll requests (which
+    # may land on a different gunicorn worker) can see it.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pdf_split_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'processing',
+            total_pages INTEGER,
+            processed_pages INTEGER DEFAULT 0,
+            result_json TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
 
     conn.commit()
     conn.close()
@@ -1904,8 +1921,8 @@ def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400
         chunks.append('\n\n'.join(current))
 
     split_instruction = build_split_system_instruction(min_words, max_words)
-    all_lessons = []
-    for chunk in chunks:
+
+    def _split_one_chunk(chunk):
         last_error = None
         response = None
         for model_name in ['gemini-2.5-flash', 'gemini-3.7-flash']:
@@ -1931,9 +1948,22 @@ def call_pdf_split(full_text, min_words=100, max_words=220, words_per_chunk=2400
                 raise GeminiGenerationError(f"PDF split failed on one chunk: {e}")
         if response is None:
             raise GeminiGenerationError(f"PDF split failed on one chunk after retries: {last_error}")
-
         data = _parse_json_loose(response.text)
-        all_lessons.extend(data.get('lessons') or [])
+        return data.get('lessons') or []
+
+    # Chunks are independent — run them concurrently instead of one at a
+    # time. executor.map preserves input order in its results, so day
+    # numbers still come out sequential regardless of which chunk's
+    # Gemini call finishes first. This is what keeps a multi-chunk PDF
+    # (a full module, say) inside the request timeout: chunks used to
+    # queue up serially, each taking 15-40s+ with Gemini's current
+    # flakiness, which added up fast.
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        chunk_results = list(executor.map(_split_one_chunk, chunks))
+
+    all_lessons = []
+    for lessons in chunk_results:
+        all_lessons.extend(lessons)
 
     for i, lesson in enumerate(all_lessons, 1):
         lesson['day'] = i
@@ -2000,18 +2030,21 @@ def generate_lesson_audio(script_text):
     return audio_segment, 'gtts'
 
 
-def _ocr_pdf_pages_to_text(pdf_bytes, max_pages=80):
+def _ocr_pdf_pages_to_text(pdf_bytes, start_page=0, max_pages=80):
     """Same render-page-as-image + Cloud Vision OCR approach as
     /pdf-extract below — factored out so the course-PDF-split admin
-    route can reuse it with a higher page cap (curated admin uploads,
-    not a public abuse-prone endpoint)."""
+    flow can reuse it with a higher page cap (curated admin uploads,
+    not a public abuse-prone endpoint) AND process a big PDF in
+    page-range batches (start_page lets the caller OCR e.g. pages
+    30-59 on one call) rather than always starting from page 0."""
     if not CLOUD_OCR_AVAILABLE:
         raise RuntimeError("Cloud Vision API not configured")
 
     doc = fitz.open(stream=pdf_bytes, filetype='pdf')
-    page_count = min(len(doc), max_pages)
+    total_pages_in_pdf = len(doc)
+    end_page = min(total_pages_in_pdf, start_page + max_pages)
     pages_text = []
-    for i in range(page_count):
+    for i in range(start_page, end_page):
         page = doc[i]
         pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
         img_bytes = pix.tobytes('png')
@@ -2026,9 +2059,8 @@ def _ocr_pdf_pages_to_text(pdf_bytes, max_pages=80):
             page_text = texts[0].description.strip()
             if page_text:
                 pages_text.append(page_text)
-    total_pages_in_pdf = len(doc)
     doc.close()
-    return '\n\n'.join(pages_text).strip(), total_pages_in_pdf, page_count
+    return '\n\n'.join(pages_text).strip(), total_pages_in_pdf, end_page
 
 
 @app.route('/pdf-extract', methods=['POST'])
@@ -3809,19 +3841,75 @@ def admin_delete_course(course_id):
     return jsonify({'status': 'success'})
 
 
+MAX_OCR_BATCH_PAGES = 25  # pages OCR'd per Vision API round before the job row's processed_pages is updated
+
+
+def _run_pdf_split_job(job_id, pdf_bytes, min_words, max_words):
+    """Runs in a background thread (kicked off by
+    admin_split_course_pdf) — OCRs the PDF in MAX_OCR_BATCH_PAGES-page
+    batches, updating pdf_split_jobs.processed_pages after each batch
+    so the admin sees real progress instead of one long silent wait,
+    then runs the (already-parallelized) Gemini split on the combined
+    text. Writes the final result or error back to the same job row."""
+    try:
+        text_parts = []
+        start_page = 0
+        total_pages = None
+        while True:
+            batch_text, total_pages, end_page = _ocr_pdf_pages_to_text(
+                pdf_bytes, start_page=start_page, max_pages=MAX_OCR_BATCH_PAGES
+            )
+            text_parts.append(batch_text)
+
+            conn = get_db()
+            conn.execute("UPDATE pdf_split_jobs SET processed_pages = ? WHERE id = ?", (end_page, job_id))
+            conn.commit()
+            conn.close()
+
+            if end_page >= total_pages:
+                break
+            start_page = end_page
+
+        full_text = '\n\n'.join(text_parts).strip()
+        if len(full_text) < 20:
+            raise RuntimeError("මේ PDF එකෙන් text extract කරගන්න බැරි උනා.")
+
+        lessons = call_pdf_split(full_text, min_words=min_words, max_words=max_words)
+
+        conn = get_db()
+        conn.execute(
+            "UPDATE pdf_split_jobs SET status = 'done', result_json = ? WHERE id = ?",
+            (json.dumps(lessons, ensure_ascii=False), job_id)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"❌ PDF split job {job_id} failed: {e}")
+        try:
+            conn = get_db()
+            conn.execute("UPDATE pdf_split_jobs SET status = 'error', error_message = ? WHERE id = ?", (str(e), job_id))
+            conn.commit()
+            conn.close()
+        except Exception as inner_e:
+            print(f"❌ Also failed to record PDF split job {job_id} error: {inner_e}")
+
+
 @app.route('/admin/courses/<int:course_id>/split-pdf', methods=['POST'])
 def admin_split_course_pdf(course_id):
+    # Course PDFs are curated admin uploads, not a public endpoint —
+    # override the app-wide 5MB cap (sized for public routes) for this
+    # request only. MUST happen before any request.files/request.form
+    # access below — Werkzeug parses (and enforces the cap on) the
+    # multipart body lazily on first access, so setting this after
+    # touching request.files is too late and 413s on the old 5MB cap.
+    request.max_content_length = 60 * 1024 * 1024
+
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     if 'pdf' not in request.files:
         return jsonify({'status': 'error', 'message': 'PDF file එකක් attach කරලා නෑ.'}), 400
     if not CLOUD_OCR_AVAILABLE:
         return jsonify({'status': 'error', 'message': 'Cloud Vision API configure වී නෑ.'}), 500
-
-    # Course PDFs are curated admin uploads (auth-gated above), not a
-    # public endpoint — override the app-wide 5MB cap (sized for
-    # public routes) for this request only.
-    request.max_content_length = 30 * 1024 * 1024
 
     try:
         min_words = int(request.form.get('min_words') or 100)
@@ -3830,25 +3918,68 @@ def admin_split_course_pdf(course_id):
         min_words, max_words = 100, 220
 
     pdf_bytes = request.files['pdf'].read()
+
+    # A whole-term PDF can run to ~200 pages — far too long to OCR +
+    # split inside one HTTP request without hitting the server's
+    # timeout (confirmed: a single 32-page module alone can take 100s+
+    # when Gemini is slow). So this endpoint no longer does the work
+    # itself: it validates the page count, creates a job row, and hands
+    # the actual OCR+split off to a background thread in
+    # _run_pdf_split_job, batching OCR MAX_OCR_BATCH_PAGES at a time so
+    # progress is visible instead of one opaque multi-minute wait.
+    # /admin/courses/<id>/split-pdf-status/<job_id> is polled for
+    # progress/result.
+    MAX_SPLIT_PAGES = 200
     try:
-        full_text, total_pages, processed_pages = _ocr_pdf_pages_to_text(pdf_bytes)
+        page_count_probe = fitz.open(stream=pdf_bytes, filetype='pdf')
+        total_pdf_pages = len(page_count_probe)
+        page_count_probe.close()
     except Exception as e:
-        print(f"❌ Course PDF OCR error: {e}")
-        return jsonify({'status': 'error', 'message': f'PDF එකෙන් text extract කරගැනීම අසාර්ථක විය: {e}'}), 500
+        return jsonify({'status': 'error', 'message': f'PDF එක open කරගැනීම අසාර්ථක විය: {e}'}), 400
 
-    if len(full_text) < 20:
-        return jsonify({'status': 'error', 'message': 'මේ PDF එකෙන් text extract කරගන්න බැරි උනා.'}), 400
+    if total_pdf_pages > MAX_SPLIT_PAGES:
+        return jsonify({
+            'status': 'error',
+            'message': (
+                f'මේ PDF එකේ pages {total_pdf_pages}ක් තියෙනවා — උපරිම {MAX_SPLIT_PAGES}ක් '
+                f'විතරයි support කරන්නේ. කරුණාකර පොත කොටස් 2ක/3කට split කරලා, එකින් එක upload '
+                f'කරන්න.'
+            )
+        }), 400
 
-    try:
-        lessons = call_pdf_split(full_text, min_words=min_words, max_words=max_words)
-    except GeminiGenerationError as e:
-        return jsonify({'status': 'error', 'message': f'Lessons වලට split කරගැනීම අසාර්ථක විය: {e}'}), 500
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO pdf_split_jobs (course_id, status, total_pages, processed_pages, created_at) VALUES (?, 'processing', ?, 0, ?)",
+        (course_id, total_pdf_pages, datetime.now(timezone.utc).isoformat())
+    )
+    conn.commit()
+    job_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+    conn.close()
 
-    note = None
-    if total_pages > processed_pages:
-        note = f'PDF එකේ pages {total_pages}ක් තිබුණි — මුල් pages {processed_pages} විතරක් process කරන ලදී.'
+    thread = threading.Thread(
+        target=_run_pdf_split_job,
+        args=(job_id, pdf_bytes, min_words, max_words),
+        daemon=True,
+    )
+    thread.start()
 
-    return jsonify({'status': 'success', 'lessons': lessons, 'note': note})
+    return jsonify({'status': 'processing', 'job_id': job_id, 'total_pages': total_pdf_pages})
+
+
+@app.route('/admin/courses/<int:course_id>/split-pdf-status/<int:job_id>', methods=['GET'])
+def admin_split_course_pdf_status(course_id, job_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    conn = get_db()
+    job = conn.execute("SELECT * FROM pdf_split_jobs WHERE id = ? AND course_id = ?", (job_id, course_id)).fetchone()
+    conn.close()
+    if not job:
+        return jsonify({'status': 'error', 'message': 'Job එක හම්බුනේ නෑ.'}), 404
+
+    job = dict(job)
+    if job['status'] == 'done':
+        job['lessons'] = json.loads(job['result_json']) if job['result_json'] else []
+    return jsonify({'status': 'success', 'job': job})
 
 
 @app.route('/admin/courses/<int:course_id>/lessons/save-batch', methods=['POST'])
@@ -3956,12 +4087,14 @@ def admin_generate_lesson_audio(lesson_id):
 
 @app.route('/admin/lessons/<int:lesson_id>/upload-audio', methods=['POST'])
 def admin_upload_lesson_audio(lesson_id):
+    # Same ordering requirement as admin_split_course_pdf above — must
+    # be set before any request.files/request.form access.
+    request.max_content_length = 20 * 1024 * 1024
+
     if not _is_admin_logged_in():
         return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
     if 'audio' not in request.files:
         return jsonify({'status': 'error', 'message': 'Audio file එකක් attach කරලා නෑ.'}), 400
-
-    request.max_content_length = 20 * 1024 * 1024
 
     file = request.files['audio']
     ext = os.path.splitext(file.filename or '')[1].lower()
