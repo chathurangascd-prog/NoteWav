@@ -114,9 +114,13 @@ async function checkGoogleAuthStatus() {
         const sidebarSignedInName = document.getElementById('dts-sidebar-signed-in-name');
         const sidebarSignedInEmail = document.getElementById('dts-sidebar-signed-in-email');
         const sidebarChangeAccountLink = document.getElementById('dts-sidebar-change-account-link');
+        // Mobile bottom nav's own Sign In item — sidebar is hidden below
+        // 860px, so this is the only sign-in entry point there.
+        const bottomNavSignIn = document.getElementById('bottomnav-sign-in');
 
         if (data.logged_in) {
             if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.add('hidden');
+            if (bottomNavSignIn) bottomNavSignIn.classList.add('hidden');
             if (signedInInfo) signedInInfo.classList.remove('hidden');
             if (signedInName) signedInName.textContent = data.name || 'Google User';
             if (signedInEmail) signedInEmail.textContent = data.email || data.phone || '';
@@ -168,6 +172,7 @@ async function checkGoogleAuthStatus() {
             if (typeof updateGreeting === 'function') updateGreeting();
         } else {
             if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.remove('hidden');
+            if (bottomNavSignIn) bottomNavSignIn.classList.remove('hidden');
             if (signedInInfo) signedInInfo.classList.add('hidden');
             if (sidebarAuthOpenBtn) sidebarAuthOpenBtn.classList.remove('hidden');
             if (sidebarSignedInInfo) sidebarSignedInInfo.classList.add('hidden');
