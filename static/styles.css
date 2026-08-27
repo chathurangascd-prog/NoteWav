@@ -1721,11 +1721,11 @@ textarea:hover {
 
 .dts-home-greeting {
     font-family: 'Fraunces', serif;
-    font-size: 1.5rem;
-    font-weight: 700;
+    font-size: 1.65rem;
+    font-weight: 900;
     color: #fff;
     margin: 0 0 4px;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.4px;
 }
 
 .dts-home-subgreeting {
@@ -2105,8 +2105,8 @@ textarea:hover {
         align-items: center;
         gap: 9px;
         font-family: 'Fraunces', serif;
-        font-size: 0.92rem;
-        font-weight: 700;
+        font-size: 0.95rem;
+        font-weight: 900;
         margin-bottom: 42px;
     }
 
@@ -2204,10 +2204,11 @@ textarea:hover {
 
 .dts-auth-title {
     font-family: 'Fraunces', serif;
-    font-size: 1.3rem;
-    font-weight: 700;
+    font-size: 1.35rem;
+    font-weight: 900;
     color: #2b1c10;
     margin-bottom: 4px;
+    letter-spacing: -0.2px;
 }
 
 .dts-auth-subtitle {
