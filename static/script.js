@@ -107,6 +107,13 @@ async function checkGoogleAuthStatus() {
         const signedInName = document.getElementById('google-signed-in-name');
         const signedInEmail = document.getElementById('google-signed-in-email');
         const changeAccountLink = document.getElementById('google-change-account-link');
+        // The persistent sidebar (page-tuition) has its own, separate
+        // copy of this sign-in UI — same auth state, different DOM nodes.
+        const sidebarAuthOpenBtn = document.getElementById('dts-sidebar-auth-open-btn');
+        const sidebarSignedInInfo = document.getElementById('dts-sidebar-signed-in-info');
+        const sidebarSignedInName = document.getElementById('dts-sidebar-signed-in-name');
+        const sidebarSignedInEmail = document.getElementById('dts-sidebar-signed-in-email');
+        const sidebarChangeAccountLink = document.getElementById('dts-sidebar-change-account-link');
 
         if (data.logged_in) {
             if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.add('hidden');
@@ -116,6 +123,12 @@ async function checkGoogleAuthStatus() {
             // "Change account" only makes sense for Google — a local
             // (mobile/email+password) account has no account picker to change to.
             if (changeAccountLink) changeAccountLink.classList.toggle('hidden', data.auth_provider === 'local');
+
+            if (sidebarAuthOpenBtn) sidebarAuthOpenBtn.classList.add('hidden');
+            if (sidebarSignedInInfo) sidebarSignedInInfo.classList.remove('hidden');
+            if (sidebarSignedInName) sidebarSignedInName.textContent = data.name || 'Google User';
+            if (sidebarSignedInEmail) sidebarSignedInEmail.textContent = data.email || data.phone || '';
+            if (sidebarChangeAccountLink) sidebarChangeAccountLink.classList.toggle('hidden', data.auth_provider === 'local');
 
             // Server is now the source of truth for coins/streak — pull
             // the account's saved values down and overwrite whatever
@@ -156,6 +169,8 @@ async function checkGoogleAuthStatus() {
         } else {
             if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.remove('hidden');
             if (signedInInfo) signedInInfo.classList.add('hidden');
+            if (sidebarAuthOpenBtn) sidebarAuthOpenBtn.classList.remove('hidden');
+            if (sidebarSignedInInfo) sidebarSignedInInfo.classList.add('hidden');
         }
     } catch (e) {
         console.warn('Could not check Google auth status:', e);
@@ -4750,6 +4765,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Persistent sidebar's own nav items (page-tuition only — see the
+    // .dts-sidebar rules in index.html). No drawer to close here since
+    // the sidebar is always visible, not a slide-in panel.
+    const sidebarNavMyCourses = document.getElementById('sidebar-nav-my-courses');
+    if (sidebarNavMyCourses) sidebarNavMyCourses.addEventListener('click', openDtsCoursesModal);
+
+    const sidebarNavMyLibrary = document.getElementById('sidebar-nav-my-library');
+    if (sidebarNavMyLibrary) {
+        sidebarNavMyLibrary.addEventListener('click', function() {
+            const libraryBtn = document.getElementById('open-library-btn');
+            if (libraryBtn) libraryBtn.click();
+        });
+    }
+
+    const sidebarNavNotices = document.getElementById('sidebar-nav-notices');
+    if (sidebarNavNotices) {
+        sidebarNavNotices.addEventListener('click', function() {
+            const bellBtn = document.getElementById('notification-bell-btn');
+            if (bellBtn) bellBtn.click();
+        });
+    }
+
     const dtsHomePillTutor = document.getElementById('dts-home-pill-tutor');
     if (dtsHomePillTutor) {
         dtsHomePillTutor.addEventListener('click', function() { window.location.href = '/notewav'; });
@@ -5266,15 +5303,21 @@ document.addEventListener('DOMContentLoaded', function() {
         if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
     }
 
-    const dtsAuthOpenBtn = document.getElementById('dts-auth-open-btn');
-    if (dtsAuthOpenBtn) {
-        dtsAuthOpenBtn.addEventListener('click', function() {
-            dtsAuthSetMode('login');
-            dtsAuthSetIdType('phone');
-            document.getElementById('dts-auth-form').reset();
-            document.getElementById('dts-auth-modal-backdrop').classList.remove('hidden');
-        });
+    function dtsAuthOpen() {
+        dtsAuthSetMode('login');
+        dtsAuthSetIdType('phone');
+        document.getElementById('dts-auth-form').reset();
+        document.getElementById('dts-auth-modal-backdrop').classList.remove('hidden');
     }
+
+    const dtsAuthOpenBtn = document.getElementById('dts-auth-open-btn');
+    if (dtsAuthOpenBtn) dtsAuthOpenBtn.addEventListener('click', dtsAuthOpen);
+
+    // Persistent sidebar's own Sign In trigger (page-tuition only) — same
+    // modal, separate DOM element since the sidebar and the ☰ drawer can
+    // both be present in the document at once.
+    const dtsSidebarAuthOpenBtn = document.getElementById('dts-sidebar-auth-open-btn');
+    if (dtsSidebarAuthOpenBtn) dtsSidebarAuthOpenBtn.addEventListener('click', dtsAuthOpen);
 
     const dtsAuthCloseBtn = document.getElementById('dts-auth-close-btn');
     if (dtsAuthCloseBtn) {
