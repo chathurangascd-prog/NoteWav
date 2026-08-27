@@ -5336,11 +5336,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const dtsAuthOpenBtn = document.getElementById('dts-auth-open-btn');
     if (dtsAuthOpenBtn) dtsAuthOpenBtn.addEventListener('click', dtsAuthOpen);
 
-    // Persistent sidebar's own Sign In trigger (page-tuition only) — same
-    // modal, separate DOM element since the sidebar and the ☰ drawer can
-    // both be present in the document at once.
-    const dtsSidebarAuthOpenBtn = document.getElementById('dts-sidebar-auth-open-btn');
-    if (dtsSidebarAuthOpenBtn) dtsSidebarAuthOpenBtn.addEventListener('click', dtsAuthOpen);
+    // Note: the sidebar's own Sign In item (#dts-sidebar-auth-open-btn) is
+    // now a plain <a href="/login"> to the standalone login page, not a
+    // modal trigger — no JS wiring needed for it here.
 
     const dtsAuthCloseBtn = document.getElementById('dts-auth-close-btn');
     if (dtsAuthCloseBtn) {
@@ -5351,6 +5349,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const dtsAuthModalBackdrop = document.getElementById('dts-auth-modal-backdrop');
     if (dtsAuthModalBackdrop) {
         dtsAuthModalBackdrop.addEventListener('click', function(e) {
+            // On the standalone /login page this backdrop IS the page (no
+            // overlay to dismiss) — hiding it on an outside click would
+            // blank the whole page since everything else is hidden there.
+            if (document.body.classList.contains('page-login')) return;
             if (e.target === this) this.classList.add('hidden');
         });
     }
@@ -5417,6 +5419,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!res.ok) {
                     dtsAuthShowError(data.error || 'Something went wrong — try again.');
                     submitBtn.disabled = false;
+                    return;
+                }
+                // On the standalone /login page there's nothing else on
+                // screen to reveal by hiding this — go to the home page,
+                // now signed in, instead of just closing an "overlay".
+                if (document.body.classList.contains('page-login')) {
+                    window.location.href = '/';
                     return;
                 }
                 document.getElementById('dts-auth-modal-backdrop').classList.add('hidden');

@@ -114,6 +114,22 @@
         .page-tuition #notewav-header-block, .page-tuition .notewav-only { display: none; }
         .page-notewav #dts-home-hero, .page-notewav #dts-home-continue-section, .page-notewav #dts-home-empty-state { display: none; }
 
+        /* Standalone /login page — the auth card/promo panel is normally a
+           modal (backdrop over the current page); here it's shown as the
+           WHOLE page instead, so everything else (sidebar, bottom nav,
+           header, hero, note-tool flow) is hidden. */
+        .page-login .app-container, .page-login .dts-sidebar, .page-login .dts-bottom-nav { display: none; }
+        .page-login #dts-auth-modal-backdrop {
+            position: static;
+            background: none;
+            backdrop-filter: none;
+            min-height: 100vh;
+            box-sizing: border-box;
+            padding: 40px 20px;
+            animation: none;
+        }
+        .page-login #dts-auth-close-btn { display: none; }
+
         /* Persistent Digital Tuition Sir sidebar — page-tuition only, no
            hamburger toggle (unlike the ☰ drawer, which stays for /notewav).
            Deliberately white/orange, independent of the app's theme tokens,
@@ -455,7 +471,7 @@
         </div>
     </div>
 
-    <div id="dts-auth-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Digital Tuition Sir Sign In">
+    <div id="dts-auth-modal-backdrop" class="mindmap-modal-backdrop{{ '' if page_mode == 'login' else ' hidden' }}" role="dialog" aria-modal="true" aria-label="Digital Tuition Sir Sign In">
         <div class="dts-auth-shell">
             <div class="dts-auth-promo">
                 <div class="dts-auth-promo-logo"><i class="fas fa-graduation-cap"></i> Digital Tuition Sir</div>
@@ -682,10 +698,10 @@
         </nav>
 
         <div class="dts-sidebar-account">
-            <button type="button" id="dts-sidebar-auth-open-btn" class="dts-sidebar-nav-item">
+            <a href="/login" id="dts-sidebar-auth-open-btn" class="dts-sidebar-nav-item">
                 <span class="dts-sidebar-nav-icon"><i class="fas fa-right-to-bracket"></i></span>
                 <span class="dts-sidebar-nav-label">Sign In</span>
-            </button>
+            </a>
             <div id="dts-sidebar-signed-in-info" class="dts-sidebar-signed-in hidden">
                 <span class="dts-sidebar-signed-in-name" id="dts-sidebar-signed-in-name"></span>
                 <span class="dts-sidebar-signed-in-email" id="dts-sidebar-signed-in-email"></span>

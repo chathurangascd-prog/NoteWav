@@ -2423,6 +2423,16 @@ def notewav_tool_page():
     return render_template('index.html', page_mode='notewav')
 
 
+@app.route('/login')
+def login_page():
+    """Standalone Digital Tuition Sir sign-in page — the same auth
+    card/promo panel that also opens as a modal from the sidebar, just
+    shown full-page (see .page-login in styles.css) instead of as an
+    overlay, for users who land here directly rather than via the modal
+    trigger."""
+    return render_template('index.html', page_mode='login')
+
+
 @app.route('/.well-known/assetlinks.json')
 def assetlinks_json():
     content = [{
