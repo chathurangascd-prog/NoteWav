@@ -1607,7 +1607,7 @@ textarea:hover {
     overflow: hidden;
     border-radius: 20px;
     padding: 22px 22px 20px;
-    background: linear-gradient(90deg, #e8560a 0%, #ff6a00 35%, #ff9142 70%, #ffb37d 100%);
+    background: linear-gradient(90deg, #e8560a 0%, #ff6a00 45%, #ff7d1f 82%, #ff9142 100%);
     color: #fff;
     box-shadow: 0 14px 34px rgba(255, 106, 0, 0.28);
     margin-bottom: 16px;
