@@ -1607,7 +1607,7 @@ textarea:hover {
     overflow: hidden;
     border-radius: 20px;
     padding: 22px 22px 20px;
-    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    background: linear-gradient(90deg, #e8560a 0%, #ff6a00 35%, #ff9142 70%, #ffb37d 100%);
     color: #fff;
     box-shadow: 0 14px 34px rgba(255, 106, 0, 0.28);
     margin-bottom: 16px;
@@ -1623,6 +1623,11 @@ textarea:hover {
     height: 100%;
     z-index: 0;
     pointer-events: none;
+    /* Fades in from the left edge, peaks around the middle (where the
+       text sits, over the deepest orange), then eases off toward the
+       lighter-orange right side so the wires don't clash against it. */
+    -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 40%, rgba(0, 0, 0, 1) 62%, rgba(0, 0, 0, 0.12) 100%);
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 40%, rgba(0, 0, 0, 1) 62%, rgba(0, 0, 0, 0.12) 100%);
 }
 .dts-home-hero-circuit .dts-wire {
     fill: none;
