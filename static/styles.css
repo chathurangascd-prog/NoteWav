@@ -1604,12 +1604,66 @@ textarea:hover {
 .dts-home-hero {
     text-align: left;
     position: relative;
+    overflow: hidden;
     border-radius: 20px;
     padding: 22px 22px 20px;
     background: linear-gradient(135deg, #ff9142, #ff6a00);
     color: #fff;
     box-shadow: 0 14px 34px rgba(255, 106, 0, 0.28);
     margin-bottom: 16px;
+}
+
+/* Decorative "digital wired light" — faint circuit traces with a bright
+   pulse of light traveling along each one, on loop. Purely decorative
+   (aria-hidden), sits behind .dts-home-hero-content. */
+.dts-home-hero-circuit {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+}
+.dts-home-hero-circuit .dts-wire {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.22);
+    stroke-width: 1.5;
+}
+.dts-home-hero-circuit .dts-wire-pulse {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #ffe4c2);
+    stroke-dasharray: 90 990;
+    animation: dtsWireTravel1 4.5s linear infinite;
+}
+.dts-home-hero-circuit .dts-wire-pulse-2 {
+    stroke-dasharray: 80 970;
+    animation-name: dtsWireTravel2;
+    animation-duration: 5.5s;
+    animation-delay: -1.6s;
+}
+.dts-home-hero-circuit .dts-wire-pulse-3 {
+    stroke-dasharray: 70 890;
+    animation-name: dtsWireTravel3;
+    animation-duration: 4s;
+    animation-delay: -2.4s;
+}
+@keyframes dtsWireTravel1 { to { stroke-dashoffset: -1080; } }
+@keyframes dtsWireTravel2 { to { stroke-dashoffset: -1050; } }
+@keyframes dtsWireTravel3 { to { stroke-dashoffset: -960; } }
+@media (prefers-reduced-motion: reduce) {
+    .dts-home-hero-circuit .dts-wire-pulse,
+    .dts-home-hero-circuit .dts-wire-pulse-2,
+    .dts-home-hero-circuit .dts-wire-pulse-3 {
+        animation: none;
+    }
+}
+
+.dts-home-hero-content {
+    position: relative;
+    z-index: 1;
 }
 
 .dts-home-portal-badge {
@@ -1976,14 +2030,29 @@ textarea:hover {
         justify-content: center;
         flex: 1 1 44%;
         padding: 48px 42px;
-        background-image: url('/static/images/auth-promo-figures.png'), linear-gradient(160deg, #ff9142, #ff6a00 55%, #d94e00);
-        background-size: auto 82%, cover;
-        background-position: center, center;
-        background-repeat: no-repeat, no-repeat;
+        background: linear-gradient(160deg, #ff9142, #ff6a00 55%, #d94e00);
         color: #fff;
         position: relative;
         overflow: hidden;
         text-align: left;
+    }
+    /* The figures photo — its own layer (not part of the panel's own
+       background) so opacity only fades the PHOTO, never the orange
+       or the text. Anchored to the top and mask-faded to transparent
+       toward the bottom, so it blends into the orange instead of
+       ending in a hard photo edge. */
+    .dts-auth-promo::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: url('/static/images/auth-promo-figures.png');
+        background-size: auto 108%;
+        background-position: center top;
+        background-repeat: no-repeat;
+        opacity: 0.16;
+        -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 45%, rgba(0, 0, 0, 0) 82%);
+        mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 45%, rgba(0, 0, 0, 0) 82%);
+        pointer-events: none;
     }
     .dts-auth-promo::after {
         content: '';
