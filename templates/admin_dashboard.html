@@ -695,7 +695,10 @@
                         <h2 class="section-title">Lessons</h2>
                         <span id="scripts-progress-badge" style="display:none; padding:3px 10px; border-radius:50px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); font-size:0.7rem; font-weight:700; font-family:'JetBrains Mono', monospace;"></span>
                     </div>
-                    <button id="generate-all-scripts-btn" style="padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit;">✍️ Generate All Scripts</button>
+                    <div style="display:flex; gap:8px;">
+                        <button id="generate-all-scripts-btn" style="padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit;">✍️ Generate All Scripts</button>
+                        <button id="cancel-all-scripts-btn" style="display:none; padding:8px 14px; border-radius:8px; border:1px solid rgba(248,113,113,0.4); background:rgba(248,113,113,0.1); color:#f87171; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:inherit;">✕ Cancel</button>
+                    </div>
                 </div>
                 <p id="generate-all-scripts-status" style="font-size:0.74rem; color:var(--text-dim); margin:0 0 10px; min-height:1em;"></p>
                 <div id="course-lessons-wrap"></div>
@@ -1691,6 +1694,7 @@
         let currentCourseId = null;
         let currentSplitPreview = [];
         let currentCourseLessons = [];
+        let cancelBulkScriptGen = false;
 
         async function loadCourses() {
             try {
@@ -2078,8 +2082,15 @@
             if (!confirm(`Script නැති lessons ${pending.length}ක් තියෙනවා. හැම එකකටම AI script එකක් generate කරන්නද? (ලෙසියෙන්ම විනාඩි ගණනක් යන්න පුළුවන් — tab එක open තියාගන්න.)`)) return;
 
             btn.disabled = true;
-            let done = 0, failed = 0;
+            cancelBulkScriptGen = false;
+            const cancelBtn = document.getElementById('cancel-all-scripts-btn');
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = '✕ Cancel';
+            cancelBtn.style.display = 'inline-block';
+
+            let done = 0, failed = 0, cancelled = false;
             for (const lesson of pending) {
+                if (cancelBulkScriptGen) { cancelled = true; break; }
                 btn.textContent = `Generating ${done + failed}/${pending.length}...`;
                 statusEl.textContent = `Day ${lesson.day_number} ("${lesson.title}") script එක generate කරමින්... (${done + failed}/${pending.length})`;
                 try {
@@ -2108,7 +2119,16 @@
             }
             btn.disabled = false;
             btn.textContent = '✍️ Generate All Scripts';
-            statusEl.textContent = `✅ ${done} scripts generated${failed ? `, ❌ ${failed} failed (try those individually)` : ''}.`;
+            cancelBtn.style.display = 'none';
+            statusEl.textContent = cancelled
+                ? `⏹ නවත්තුවා — ${done} scripts generated${failed ? `, ${failed} failed` : ''}. ඉතුරු ${pending.length - done - failed}ක් තියෙනවා, "Generate All Scripts" ආයෙත් click කළොත් ඉතුරු ඒවා විතරක් continue වෙනවා.`
+                : `✅ ${done} scripts generated${failed ? `, ❌ ${failed} failed (try those individually)` : ''}.`;
+        });
+
+        document.getElementById('cancel-all-scripts-btn').addEventListener('click', function() {
+            cancelBulkScriptGen = true;
+            this.disabled = true;
+            this.textContent = 'Cancelling...';
         });
 
         async function generateLessonAudio(lessonId, btn) {
