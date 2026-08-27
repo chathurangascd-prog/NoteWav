@@ -4709,6 +4709,8 @@ document.addEventListener('DOMContentLoaded', function() {
             (coinsText && coinsText.textContent && coinsText.textContent !== 'Free')
                 ? `${coinsText.textContent} AI Credits` : 'Free AI Credits';
         hero.classList.remove('hidden');
+        const heroFigure = document.getElementById('dts-home-hero-figure');
+        if (heroFigure) heroFigure.classList.remove('hidden');
 
         try {
             const res = await fetch('/my-learning');

@@ -1601,6 +1601,15 @@ textarea:hover {
 /* Digital Tuition Sir home screen — deliberately white/orange, same
    independent palette as the auth modal, distinct from the app's dark
    theme tokens (matches the "DM Education"-style reference the user gave). */
+/* Wrapper exists purely so .dts-home-hero-figure can sit OUTSIDE the
+   card's own overflow:hidden (needed for its rounded corners/circuit
+   mask) — an element can't selectively escape its own parent's clip,
+   so the figure has to be a sibling, positioned relative to this. */
+.dts-home-hero-wrap {
+    position: relative;
+    margin-bottom: 16px;
+}
+
 .dts-home-hero {
     text-align: left;
     position: relative;
@@ -1610,7 +1619,25 @@ textarea:hover {
     background: linear-gradient(90deg, #e8560a 0%, #ff6a00 45%, #ff7d1f 82%, #ff9142 100%);
     color: #fff;
     box-shadow: 0 14px 34px rgba(255, 106, 0, 0.28);
-    margin-bottom: 16px;
+}
+
+/* The figure — bottom anchored within the card's footprint, top
+   overflowing above it (breaks the card's frame, a deliberate accent). */
+.dts-home-hero-figure {
+    position: absolute;
+    right: 28px;
+    bottom: 0;
+    height: 118%;
+    width: auto;
+    max-width: 46%;
+    object-fit: contain;
+    object-position: bottom center;
+    z-index: 2;
+    pointer-events: none;
+    filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.25));
+}
+@media (max-width: 640px) {
+    .dts-home-hero-figure { display: none; }
 }
 
 /* Decorative "digital wired light" — faint circuit traces with a bright
@@ -1669,6 +1696,11 @@ textarea:hover {
 .dts-home-hero-content {
     position: relative;
     z-index: 1;
+}
+@media (min-width: 641px) {
+    /* Leaves room for .dts-home-hero-figure on the right so the
+       greeting/pills never run underneath it. */
+    .dts-home-hero-content { max-width: 56%; }
 }
 
 .dts-home-portal-badge {

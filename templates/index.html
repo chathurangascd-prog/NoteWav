@@ -780,34 +780,44 @@
         <main class="app-main">
 
             <!-- ===== DIGITAL TUITION SIR — home screen ===== -->
-            <div id="dts-home-hero" class="dts-home-hero hidden">
-                <svg class="dts-home-hero-circuit" viewBox="0 0 800 260" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="dts-wire" d="M0,210 L120,210 L120,140 L260,140 L260,190 L430,190 L430,90 L620,90 L620,150 L800,150" />
-                    <path class="dts-wire" d="M0,60 L90,60 L90,110 L230,110 L230,40 L400,40 L400,100 L560,100 L560,30 L800,30" />
-                    <path class="dts-wire" d="M0,240 L200,240 L200,200 L340,200 L340,250 L520,250 L520,210 L680,210 L680,240 L800,240" />
-                    <path class="dts-wire-pulse" d="M0,210 L120,210 L120,140 L260,140 L260,190 L430,190 L430,90 L620,90 L620,150 L800,150" />
-                    <path class="dts-wire-pulse dts-wire-pulse-2" d="M0,60 L90,60 L90,110 L230,110 L230,40 L400,40 L400,100 L560,100 L560,30 L800,30" />
-                    <path class="dts-wire-pulse dts-wire-pulse-3" d="M0,240 L200,240 L200,200 L340,200 L340,250 L520,250 L520,210 L680,210 L680,240 L800,240" />
-                </svg>
-                <div class="dts-home-hero-content">
-                    <span class="dts-home-portal-badge"><i class="fas fa-circle-dot"></i> STUDENT PORTAL</span>
-                    <h2 id="dts-home-greeting" class="dts-home-greeting"></h2>
-                    <p class="dts-home-subgreeting">දිනපතා exam-focused පාඩම් වලින් ඉලක්කය කරා යමු</p>
-                    <div id="dts-home-credits-badge" class="dts-home-credits-badge">
-                        <i class="fas fa-coins"></i> <span id="dts-home-credits-text">Free coins</span>
-                    </div>
-                    <div class="dts-home-pill-row">
-                        <button type="button" id="dts-home-pill-courses" class="dts-home-pill">
-                            <i class="fas fa-book-open"></i> My Courses
-                        </button>
-                        <button type="button" id="dts-home-pill-tutor" class="dts-home-pill">
-                            <i class="fas fa-robot"></i> NoteWav AI
-                        </button>
-                        <button type="button" id="dts-home-pill-library" class="dts-home-pill">
-                            <i class="fas fa-layer-group"></i> My Library
-                        </button>
+            <div class="dts-home-hero-wrap">
+                <div id="dts-home-hero" class="dts-home-hero hidden">
+                    <svg class="dts-home-hero-circuit" viewBox="0 0 800 260" preserveAspectRatio="none" aria-hidden="true">
+                        <path class="dts-wire" d="M0,210 L120,210 L120,140 L260,140 L260,190 L430,190 L430,90 L620,90 L620,150 L800,150" />
+                        <path class="dts-wire" d="M0,60 L90,60 L90,110 L230,110 L230,40 L400,40 L400,100 L560,100 L560,30 L800,30" />
+                        <path class="dts-wire" d="M0,240 L200,240 L200,200 L340,200 L340,250 L520,250 L520,210 L680,210 L680,240 L800,240" />
+                        <path class="dts-wire-pulse" d="M0,210 L120,210 L120,140 L260,140 L260,190 L430,190 L430,90 L620,90 L620,150 L800,150" />
+                        <path class="dts-wire-pulse dts-wire-pulse-2" d="M0,60 L90,60 L90,110 L230,110 L230,40 L400,40 L400,100 L560,100 L560,30 L800,30" />
+                        <path class="dts-wire-pulse dts-wire-pulse-3" d="M0,240 L200,240 L200,200 L340,200 L340,250 L520,250 L520,210 L680,210 L680,240 L800,240" />
+                    </svg>
+                    <div class="dts-home-hero-content">
+                        <span class="dts-home-portal-badge"><i class="fas fa-circle-dot"></i> STUDENT PORTAL</span>
+                        <h2 id="dts-home-greeting" class="dts-home-greeting"></h2>
+                        <p class="dts-home-subgreeting">දිනපතා exam-focused පාඩම් වලින් ඉලක්කය කරා යමු</p>
+                        <div id="dts-home-credits-badge" class="dts-home-credits-badge">
+                            <i class="fas fa-coins"></i> <span id="dts-home-credits-text">Free coins</span>
+                        </div>
+                        <div class="dts-home-pill-row">
+                            <button type="button" id="dts-home-pill-courses" class="dts-home-pill">
+                                <i class="fas fa-book-open"></i> My Courses
+                            </button>
+                            <button type="button" id="dts-home-pill-tutor" class="dts-home-pill">
+                                <i class="fas fa-robot"></i> NoteWav AI
+                            </button>
+                            <button type="button" id="dts-home-pill-library" class="dts-home-pill">
+                                <i class="fas fa-layer-group"></i> My Library
+                            </button>
+                        </div>
                     </div>
                 </div>
+                <!-- Sits OUTSIDE #dts-home-hero (which has overflow:hidden
+                     for its rounded corners/circuit mask) so the top of
+                     the figure can break out above the card while the
+                     bottom stays anchored within it — an element can't
+                     selectively escape its own parent's overflow:hidden. -->
+                <img id="dts-home-hero-figure" class="dts-home-hero-figure hidden"
+                     src="{{ url_for('static', filename='images/auth-promo-figures.png') }}"
+                     alt="" aria-hidden="true">
             </div>
 
             <div id="dts-home-continue-section" class="dts-home-section hidden">
