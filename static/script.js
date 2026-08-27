@@ -102,7 +102,6 @@ async function checkGoogleAuthStatus() {
         const data = await res.json();
         notewavIsLoggedIn = !!data.logged_in;
 
-        const signinBtn = document.getElementById('google-signin-btn');
         const dtsAuthOpenBtn = document.getElementById('dts-auth-open-btn');
         const signedInInfo = document.getElementById('google-signed-in-info');
         const signedInName = document.getElementById('google-signed-in-name');
@@ -110,7 +109,6 @@ async function checkGoogleAuthStatus() {
         const changeAccountLink = document.getElementById('google-change-account-link');
 
         if (data.logged_in) {
-            if (signinBtn) signinBtn.classList.add('hidden');
             if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.add('hidden');
             if (signedInInfo) signedInInfo.classList.remove('hidden');
             if (signedInName) signedInName.textContent = data.name || 'Google User';
@@ -156,7 +154,6 @@ async function checkGoogleAuthStatus() {
             } catch (e) { /* ignore */ }
             if (typeof updateGreeting === 'function') updateGreeting();
         } else {
-            if (signinBtn) signinBtn.classList.remove('hidden');
             if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.remove('hidden');
             if (signedInInfo) signedInInfo.classList.add('hidden');
         }

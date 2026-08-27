@@ -2230,6 +2230,27 @@ textarea:hover {
     background: #f0ddc8;
 }
 
+.dts-auth-google-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1.5px solid #f0ddc8;
+    background: #fffaf5;
+    color: #4a3625;
+    font-size: 0.86rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+.dts-auth-google-btn i { color: #ff6a00; }
+.dts-auth-google-btn:hover { border-color: #ff9142; background: #fff; }
+
 .dts-auth-toggle-text {
     font-size: 0.82rem;
     color: #8a6f57;
