@@ -1585,77 +1585,232 @@ textarea:hover {
 /* ========================================
    DIGITAL TUITION SIR — home hero + course picker + lesson player
    ======================================== */
-.dts-hero {
-    text-align: center;
+/* Digital Tuition Sir home screen — deliberately white/orange, same
+   independent palette as the auth modal, distinct from the app's dark
+   theme tokens (matches the "DM Education"-style reference the user gave). */
+.dts-home-hero {
+    text-align: left;
     position: relative;
-    border: 1px solid var(--border-hover);
-    box-shadow: 0 0 40px rgba(139, 92, 246, 0.12);
+    border-radius: 20px;
+    padding: 22px 22px 20px;
+    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    color: #fff;
+    box-shadow: 0 14px 34px rgba(255, 106, 0, 0.28);
+    margin-bottom: 16px;
 }
 
-.dts-hero-badge {
+.dts-home-portal-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 14px;
+    padding: 5px 12px;
     border-radius: var(--radius-full);
-    background: var(--primary-grad);
+    background: rgba(255, 255, 255, 0.2);
     color: #fff;
     font-size: 0.62rem;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
 }
+.dts-home-portal-badge i { font-size: 0.5rem; }
 
-.dts-hero-title {
+.dts-home-greeting {
     font-family: 'Fraunces', serif;
-    font-size: 1.4rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 6px;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 4px;
     letter-spacing: -0.3px;
 }
 
-.dts-hero-subtitle {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    font-weight: 300;
-    margin: 0 0 20px;
+.dts-home-subgreeting {
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.86rem;
+    font-weight: 400;
+    margin: 0 0 14px;
     line-height: 1.5;
 }
 
-.dts-hero-progress-track {
-    height: 8px;
+.dts-home-credits-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
     border-radius: var(--radius-full);
-    background: var(--bg-input);
-    overflow: hidden;
-    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-bottom: 16px;
 }
 
-.dts-hero-progress-fill {
-    height: 100%;
-    width: 0%;
+.dts-home-pill-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dts-home-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
     border-radius: var(--radius-full);
-    background: var(--primary-grad);
-    transition: width 0.4s ease;
+    border: none;
+    background: rgba(255, 255, 255, 0.92);
+    color: #b7410e;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+.dts-home-pill:hover { background: #fff; transform: translateY(-1px); }
+
+.dts-home-section {
+    background: #fffaf5;
+    border: 1px solid #f5e2cf;
+    border-radius: 18px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
 }
 
-.dts-hero-progress-label {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    margin: 0 0 18px;
+.dts-home-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
-.dts-hero-link {
-    display: block;
+.dts-home-section-header h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #2b1c10;
+    margin: 0;
+}
+
+.dts-home-section-header p {
+    font-size: 0.74rem;
+    color: #a3785a;
+    margin: 2px 0 0;
+}
+
+.dts-home-view-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     background: none;
     border: none;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin: 12px auto 0;
+    color: #ff6a00;
+    font-size: 0.78rem;
+    font-weight: 700;
     cursor: pointer;
+    white-space: nowrap;
+}
+
+.dts-home-course-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 10px;
+    border: none;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #f0ddc8;
+    margin-bottom: 8px;
+    cursor: pointer;
+    text-align: left;
     font-family: inherit;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.dts-home-course-row:last-child { margin-bottom: 0; }
+.dts-home-course-row:hover { border-color: #ff9142; transform: translateY(-1px); }
+
+.dts-home-course-icon {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+}
+
+.dts-home-course-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dts-home-course-title {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: #2b1c10;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dts-home-course-meta {
+    font-size: 0.72rem;
+    color: #a3785a;
+}
+
+.dts-home-course-chevron {
+    flex-shrink: 0;
+    color: #d8b795;
+    font-size: 0.78rem;
+}
+
+.dts-home-empty-state {
+    text-align: center;
+    padding: 26px 18px;
+}
+
+.dts-home-empty-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+}
+
+.dts-home-empty-state h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #2b1c10;
+    margin: 0 0 6px;
+}
+
+.dts-home-empty-state p {
+    font-size: 0.84rem;
+    color: #a3785a;
+    margin: 0 0 16px;
+    line-height: 1.5;
+}
+
+#dts-explore-btn.btn-primary {
+    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    box-shadow: 0 8px 20px rgba(255, 106, 0, 0.3);
+    width: auto;
+    margin: 0 auto;
+    padding-left: 22px;
+    padding-right: 22px;
 }
 
 .dts-or-divider {
@@ -1900,6 +2055,18 @@ textarea:hover {
     font-size: 0.9rem;
     outline: none;
     transition: border-color 0.2s ease;
+}
+
+/* Chrome/Safari paint autofilled fields with their own yellow/green
+   tint via an internal shadow that background-color can't override —
+   this pushes the card's own cream background back in on top of it. */
+.dts-auth-field input:-webkit-autofill,
+.dts-auth-field input:-webkit-autofill:hover,
+.dts-auth-field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #2b1c10;
+    -webkit-box-shadow: 0 0 0 1000px #fffaf5 inset;
+    box-shadow: 0 0 0 1000px #fffaf5 inset;
+    transition: background-color 9999s ease-in-out 0s;
 }
 
 .dts-auth-field input:focus {

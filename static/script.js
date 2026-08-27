@@ -4646,36 +4646,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ---------------------------------------------------------------
-    // Home hero — "Continue Lesson" or "Explore Courses"
+    // Home screen — student portal hero + "Continue Learning" list
     // ---------------------------------------------------------------
+    function dtsGreetingPeriod() {
+        const hour = new Date().getHours();
+        if (hour >= 5 && hour < 12) return 'Good morning';
+        if (hour >= 12 && hour < 17) return 'Good afternoon';
+        if (hour >= 17 && hour < 21) return 'Good evening';
+        return 'Good night';
+    }
+
+    function dtsHomeGreetingName() {
+        try {
+            const profile = JSON.parse(localStorage.getItem('notewav_profile') || '{}');
+            if (profile.name) return profile.name.trim().split(' ')[0];
+        } catch (e) { /* ignore */ }
+        return 'Student';
+    }
+
     async function loadDtsHome() {
-        const continueCard = document.getElementById('dts-continue-card');
-        const exploreCard = document.getElementById('dts-explore-card');
+        const hero = document.getElementById('dts-home-hero');
+        const continueSection = document.getElementById('dts-home-continue-section');
+        const emptyState = document.getElementById('dts-home-empty-state');
         const orDivider = document.getElementById('dts-or-divider');
-        if (!continueCard || !exploreCard) return;
+        if (!hero) return;
+
+        document.getElementById('dts-home-greeting').textContent = `${dtsGreetingPeriod()}, ${dtsHomeGreetingName()}!`;
+        const coinsText = document.getElementById('coins-count');
+        document.getElementById('dts-home-credits-text').textContent =
+            (coinsText && coinsText.textContent && coinsText.textContent !== 'Free')
+                ? `${coinsText.textContent} AI Credits` : 'Free AI Credits';
+        hero.classList.remove('hidden');
 
         try {
             const res = await fetch('/my-learning');
             const data = await res.json();
-            const withCurrentLesson = (data.courses || []).find(c => c.current_lesson);
+            const courses = data.courses || [];
 
-            if (withCurrentLesson) {
-                const c = withCurrentLesson.course;
-                const lesson = withCurrentLesson.current_lesson;
-                document.getElementById('dts-continue-title').textContent = `${c.subject} — Day ${lesson.day_number}`;
-                document.getElementById('dts-continue-subtitle').textContent = lesson.title;
-                const pct = withCurrentLesson.total_lessons
-                    ? Math.round((withCurrentLesson.completed_lessons / withCurrentLesson.total_lessons) * 100)
-                    : 0;
-                document.getElementById('dts-continue-progress-fill').style.width = pct + '%';
-                document.getElementById('dts-continue-progress-label').textContent =
-                    `Day ${lesson.day_number} / ${withCurrentLesson.total_lessons}${c.exam_target ? ' · ' + c.exam_target : ''}`;
-                continueCard.dataset.lessonId = lesson.id;
-                continueCard.classList.remove('hidden');
-                exploreCard.classList.add('hidden');
+            if (courses.length) {
+                document.getElementById('dts-home-enrolled-count').textContent = `${courses.length} enrolled`;
+                document.getElementById('dts-home-course-list').innerHTML = courses.map(item => {
+                    const c = item.course;
+                    const lesson = item.current_lesson;
+                    const meta = lesson
+                        ? `Day ${lesson.day_number} · ${c.grade}${c.exam_target ? ' · ' + c.exam_target : ''}`
+                        : `සම්පූර්ණයි! · ${c.grade}${c.exam_target ? ' · ' + c.exam_target : ''}`;
+                    return `<button type="button" class="dts-home-course-row" data-course-id="${c.id}">
+                        <span class="dts-home-course-icon"><i class="fas fa-book-open"></i></span>
+                        <span class="dts-home-course-text">
+                            <span class="dts-home-course-title">${dtsEscapeHtml(c.subject)}${lesson ? ' — ' + dtsEscapeHtml(lesson.title) : ''}</span>
+                            <span class="dts-home-course-meta">${dtsEscapeHtml(meta)}</span>
+                        </span>
+                        <i class="fas fa-chevron-right dts-home-course-chevron"></i>
+                    </button>`;
+                }).join('');
+                document.getElementById('dts-home-course-list').querySelectorAll('.dts-home-course-row').forEach(row => {
+                    row.addEventListener('click', function() { openDtsCourseDetail(parseInt(this.dataset.courseId, 10)); });
+                });
+                continueSection.classList.remove('hidden');
+                emptyState.classList.add('hidden');
             } else {
-                continueCard.classList.add('hidden');
-                exploreCard.classList.remove('hidden');
+                continueSection.classList.add('hidden');
+                emptyState.classList.remove('hidden');
             }
             if (orDivider) orDivider.classList.remove('hidden');
         } catch (e) {
@@ -4684,17 +4716,30 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    const dtsContinueBtn = document.getElementById('dts-continue-btn');
-    if (dtsContinueBtn) {
-        dtsContinueBtn.addEventListener('click', function() {
-            const lessonId = document.getElementById('dts-continue-card').dataset.lessonId;
-            if (lessonId) openDtsLesson(parseInt(lessonId, 10));
+    const dtsExploreBtn = document.getElementById('dts-explore-btn');
+    if (dtsExploreBtn) dtsExploreBtn.addEventListener('click', openDtsCoursesModal);
+
+    const dtsHomeViewAllBtn = document.getElementById('dts-home-view-all-btn');
+    if (dtsHomeViewAllBtn) dtsHomeViewAllBtn.addEventListener('click', openDtsCoursesModal);
+
+    const dtsHomePillCourses = document.getElementById('dts-home-pill-courses');
+    if (dtsHomePillCourses) dtsHomePillCourses.addEventListener('click', openDtsCoursesModal);
+
+    const dtsHomePillTutor = document.getElementById('dts-home-pill-tutor');
+    if (dtsHomePillTutor) {
+        dtsHomePillTutor.addEventListener('click', function() {
+            const el = document.getElementById('note-tool-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     }
-    const dtsExploreBtn = document.getElementById('dts-explore-btn');
-    const dtsBrowseMoreBtn = document.getElementById('dts-browse-more-btn');
-    if (dtsExploreBtn) dtsExploreBtn.addEventListener('click', openDtsCoursesModal);
-    if (dtsBrowseMoreBtn) dtsBrowseMoreBtn.addEventListener('click', openDtsCoursesModal);
+
+    const dtsHomePillLibrary = document.getElementById('dts-home-pill-library');
+    if (dtsHomePillLibrary) {
+        dtsHomePillLibrary.addEventListener('click', function() {
+            const libraryBtn = document.getElementById('open-library-btn');
+            if (libraryBtn) libraryBtn.click();
+        });
+    }
 
     // ---------------------------------------------------------------
     // Course picker modal — grade tabs + subject grid
