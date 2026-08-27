@@ -96,6 +96,17 @@
         @keyframes miniWaveAnim { 0%, 100% { transform: scaleY(0.4); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
         .library-nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: var(--radius-full); border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
         .library-nav-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
+        .menu-section-switch { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+        .menu-section-switch-btn { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; text-decoration: none; transition: all 0.2s ease; }
+        .menu-section-switch-btn:hover { border-color: #6b30ff; color: #fff; }
+        .menu-section-switch-btn.active { background: var(--primary-grad); border-color: transparent; color: #fff; }
+        /* Two real, separately-navigated pages sharing this one template/JS
+           bundle (see app.py's '/' vs '/notewav' routes) — every element
+           always stays in the DOM either way, this just decides which
+           top-level block is visible, so nothing in script.js needs a
+           null-check added for the "other" page's elements missing. */
+        .page-tuition #notewav-header-block, .page-tuition #notewav-flow-section { display: none; }
+        .page-notewav #dts-home-hero, .page-notewav #dts-home-continue-section, .page-notewav #dts-home-empty-state { display: none; }
         .header-right-nav { position: absolute; top: 24px; right: 24px; display: flex; align-items: center; gap: 10px; }
         .notification-bell-btn { position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease, transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .notification-bell-btn:active { transform: scale(0.88); transition-duration: 0.08s; }
@@ -309,7 +320,7 @@
         .study-time-value { font-size: 0.9rem; font-weight: 700; color: #fb923c; white-space: nowrap; }
     </style>
 </head>
-<body>
+<body class="page-{{ page_mode|default('tuition') }}">
 
     <div id="splash-screen">
         <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="" class="splash-icon">
@@ -507,30 +518,32 @@
     <div class="app-container">
 
         <header class="app-header">
-            <div class="brand">
-                <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="NoteWav" class="logo-icon-img">
-                <h1>NoteWav <span class="badge">AI</span></h1>
-            </div>
-            <p data-i18n="header_tagline">Smart විදිහට පාඩම් අහන්න. NoteWav AI</p>
-            <div class="header-stats">
-                <span class="stat-badge"><i class="fas fa-language"></i> Sinhala OCR</span>
-                <span class="stat-badge"><i class="fas fa-podcast"></i> Podcast Narration</span>
-                <span class="stat-badge"><i class="fas fa-diagram-project"></i> Mind Maps</span>
-            </div>
-            <div class="greeting-row">
-                <p id="greeting-text" class="greeting-text hidden" style="margin-top: 0 !important; display: inline-block !important;"></p>
-                <div style="position: relative; display: inline-block;">
-                    <button type="button" id="level-badge" class="level-badge" style="cursor: pointer; font-family: inherit; outline: none;" aria-label="Level System ගැන">
-                        <span id="level-icon">🌱</span> <span id="level-title">Beginner</span>
-                    </button>
-                    <div id="level-info-popup" class="hidden" style="position: absolute; top: calc(100% + 8px); left: 0; z-index: 60; width: 260px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 14px;">
-                        <p style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;" id="level-popup-current"></p>
-                        <p style="font-size: 0.74rem; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.5;">Notes process කරන ගණන අනුව level up වෙනවා — Level up වුනාම 🪙 5 coins bonus එකක්!</p>
-                        <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0;" id="level-popup-next"></p>
-                    </div>
+            <div id="notewav-header-block">
+                <div class="brand">
+                    <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="NoteWav" class="logo-icon-img">
+                    <h1>NoteWav <span class="badge">AI</span></h1>
                 </div>
-                <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
-                    <i class="fas fa-coins"></i> <span id="coins-count">Free</span>
+                <p data-i18n="header_tagline">Smart විදිහට පාඩම් අහන්න. NoteWav AI</p>
+                <div class="header-stats">
+                    <span class="stat-badge"><i class="fas fa-language"></i> Sinhala OCR</span>
+                    <span class="stat-badge"><i class="fas fa-podcast"></i> Podcast Narration</span>
+                    <span class="stat-badge"><i class="fas fa-diagram-project"></i> Mind Maps</span>
+                </div>
+                <div class="greeting-row">
+                    <p id="greeting-text" class="greeting-text hidden" style="margin-top: 0 !important; display: inline-block !important;"></p>
+                    <div style="position: relative; display: inline-block;">
+                        <button type="button" id="level-badge" class="level-badge" style="cursor: pointer; font-family: inherit; outline: none;" aria-label="Level System ගැන">
+                            <span id="level-icon">🌱</span> <span id="level-title">Beginner</span>
+                        </button>
+                        <div id="level-info-popup" class="hidden" style="position: absolute; top: calc(100% + 8px); left: 0; z-index: 60; width: 260px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 14px;">
+                            <p style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;" id="level-popup-current"></p>
+                            <p style="font-size: 0.74rem; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.5;">Notes process කරන ගණන අනුව level up වෙනවා — Level up වුනාම 🪙 5 coins bonus එකක්!</p>
+                            <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0;" id="level-popup-next"></p>
+                        </div>
+                    </div>
+                    <div id="coins-badge" class="coins-badge" title="Free Coins (preview — future features)">
+                        <i class="fas fa-coins"></i> <span id="coins-count">Free</span>
+                    </div>
                 </div>
             </div>
             <button id="open-menu-btn" class="menu-nav-btn" aria-label="Menu">
@@ -605,7 +618,7 @@
                 </button>
             </div>
 
-            <div class="dts-or-divider hidden" id="dts-or-divider"><span>නැත්නම් Notes/Podcast tool එක පහළින්</span></div>
+            <div id="notewav-flow-section">
 
             <div id="note-tool-section" class="glass-card animate-fade card-step-1">
                 <div class="card-header">
@@ -946,6 +959,15 @@
                         </button>
                     </div>
                     <div class="menu-drawer-body">
+                        <div class="menu-section-switch">
+                            <a href="/" class="menu-section-switch-btn{{ ' active' if page_mode == 'tuition' or page_mode is not defined else '' }}">
+                                <i class="fas fa-graduation-cap"></i> Digital Tuition Sir
+                            </a>
+                            <a href="/notewav" class="menu-section-switch-btn{{ ' active' if page_mode == 'notewav' else '' }}">
+                                <i class="fas fa-microphone"></i> NoteWav AI (Notes Tool)
+                            </a>
+                        </div>
+                        <hr class="menu-divider">
                         <div class="profile-section">
                             <button type="button" id="profile-avatar-btn" class="profile-avatar-btn" aria-label="Change profile photo">
                                 <img id="profile-avatar-img" class="profile-avatar-img hidden" src="" alt="Profile">
@@ -1157,6 +1179,8 @@
                     <span id="status-text">Processing...</span>
                 </div>
             </div>
+
+            </div><!-- /#notewav-flow-section -->
 
         </main>
 

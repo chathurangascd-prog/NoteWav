@@ -4668,7 +4668,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const hero = document.getElementById('dts-home-hero');
         const continueSection = document.getElementById('dts-home-continue-section');
         const emptyState = document.getElementById('dts-home-empty-state');
-        const orDivider = document.getElementById('dts-or-divider');
         if (!hero) return;
 
         document.getElementById('dts-home-greeting').textContent = `${dtsGreetingPeriod()}, ${dtsHomeGreetingName()}!`;
@@ -4709,10 +4708,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 continueSection.classList.add('hidden');
                 emptyState.classList.remove('hidden');
             }
-            if (orDivider) orDivider.classList.remove('hidden');
         } catch (e) {
-            // Silent — the free note flow below still works fine even
-            // if this hero fails to load (e.g. offline first paint).
+            // Silent — the note tool lives on its own page now (/notewav),
+            // so a failed hero load here doesn't block anything else.
         }
     }
 
@@ -4727,10 +4725,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const dtsHomePillTutor = document.getElementById('dts-home-pill-tutor');
     if (dtsHomePillTutor) {
-        dtsHomePillTutor.addEventListener('click', function() {
-            const el = document.getElementById('note-tool-section');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
+        dtsHomePillTutor.addEventListener('click', function() { window.location.href = '/notewav'; });
     }
 
     const dtsHomePillLibrary = document.getElementById('dts-home-pill-library');

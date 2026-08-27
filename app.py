@@ -2410,7 +2410,17 @@ def text_to_speech():
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    return render_template('index.html', page_mode='tuition')
+
+
+@app.route('/notewav')
+def notewav_tool_page():
+    """The original NoteWav note/podcast/mind-map tool, moved off the
+    root URL now that Digital Tuition Sir is the home screen — reachable
+    from the ☰ menu. Same template/JS bundle as '/', just with the
+    opposite set of sections shown (see .page-tuition/.page-notewav in
+    styles.css) so nothing in the shared script.js has to change."""
+    return render_template('index.html', page_mode='notewav')
 
 
 @app.route('/.well-known/assetlinks.json')

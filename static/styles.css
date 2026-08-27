@@ -1813,23 +1813,6 @@ textarea:hover {
     padding-right: 22px;
 }
 
-.dts-or-divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 20px 0;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-}
-
-.dts-or-divider::before,
-.dts-or-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border-color);
-}
-
 .dts-grade-tabs {
     display: flex;
     gap: 8px;
