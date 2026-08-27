@@ -96,10 +96,16 @@
         @keyframes miniWaveAnim { 0%, 100% { transform: scaleY(0.4); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
         .library-nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: var(--radius-full); border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
         .library-nav-btn:hover { background: rgba(107, 48, 255, 0.15); border-color: #6b30ff; color: #fff; }
-        .menu-section-switch { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
-        .menu-section-switch-btn { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; text-decoration: none; transition: all 0.2s ease; }
-        .menu-section-switch-btn:hover { border-color: #6b30ff; color: #fff; }
-        .menu-section-switch-btn.active { background: var(--primary-grad); border-color: transparent; color: #fff; }
+        /* Left nav list inside the menu drawer — kept on the app's own
+           dark/light theme variables (so dark mode looks exactly like it
+           did before), with a Digital Tuition Sir orange accent for the
+           active/hover state instead of the app's purple. */
+        .dts-menu-nav { display: flex; flex-direction: column; gap: 3px; margin-bottom: 18px; }
+        .dts-menu-nav-item { display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: var(--radius-md); border: none; background: none; color: var(--text-secondary); font-size: 0.86rem; font-weight: 600; text-decoration: none; text-align: left; cursor: pointer; font-family: inherit; transition: all 0.15s ease; }
+        .dts-menu-nav-item:hover { background: rgba(255, 106, 0, 0.1); color: var(--text-primary); }
+        .dts-menu-nav-item.active { background: rgba(255, 106, 0, 0.12); color: #ff6a00; }
+        .dts-menu-nav-icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; font-size: 0.9rem; }
+        .dts-menu-nav-item.active .dts-menu-nav-icon { color: #ff6a00; }
         /* Two real, separately-navigated pages sharing this one template/JS
            bundle (see app.py's '/' vs '/notewav' routes) — every element
            always stays in the DOM either way, this just decides which
@@ -990,14 +996,23 @@
                         </button>
                     </div>
                     <div class="menu-drawer-body">
-                        <div class="menu-section-switch">
-                            <a href="/" class="menu-section-switch-btn{{ ' active' if page_mode == 'tuition' or page_mode is not defined else '' }}">
-                                <i class="fas fa-graduation-cap"></i> Digital Tuition Sir
+                        <nav class="dts-menu-nav">
+                            <a href="/" class="dts-menu-nav-item{{ ' active' if page_mode == 'tuition' or page_mode is not defined else '' }}">
+                                <span class="dts-menu-nav-icon"><i class="fas fa-house"></i></span> Home
                             </a>
-                            <a href="/notewav" class="menu-section-switch-btn{{ ' active' if page_mode == 'notewav' else '' }}">
-                                <i class="fas fa-microphone"></i> NoteWav AI (Notes Tool)
+                            <button type="button" id="menu-nav-my-courses" class="dts-menu-nav-item">
+                                <span class="dts-menu-nav-icon"><i class="fas fa-book-open"></i></span> My Courses
+                            </button>
+                            <a href="/notewav" class="dts-menu-nav-item{{ ' active' if page_mode == 'notewav' else '' }}">
+                                <span class="dts-menu-nav-icon"><i class="fas fa-microphone"></i></span> NoteWav AI
                             </a>
-                        </div>
+                            <button type="button" id="menu-nav-my-library" class="dts-menu-nav-item">
+                                <span class="dts-menu-nav-icon"><i class="fas fa-layer-group"></i></span> My Library
+                            </button>
+                            <button type="button" id="menu-nav-notices" class="dts-menu-nav-item">
+                                <span class="dts-menu-nav-icon"><i class="fas fa-bell"></i></span> Notices
+                            </button>
+                        </nav>
                         <hr class="menu-divider">
                         <div class="profile-section">
                             <button type="button" id="profile-avatar-btn" class="profile-avatar-btn" aria-label="Change profile photo">

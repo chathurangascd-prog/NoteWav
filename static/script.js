@@ -908,6 +908,27 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // "My Library" and "Notices" nav items in the drawer — close the
+    // drawer first, then trigger the existing button each already has.
+    // ("My Courses" is wired further down, in the same closure as
+    // openDtsCoursesModal — see the dts-namespaced DOMContentLoaded block.)
+    const menuNavMyLibrary = document.getElementById('menu-nav-my-library');
+    if (menuNavMyLibrary) {
+        menuNavMyLibrary.addEventListener('click', function() {
+            if (menuDrawerBackdrop) menuDrawerBackdrop.classList.remove('open');
+            const libraryBtn = document.getElementById('open-library-btn');
+            if (libraryBtn) libraryBtn.click();
+        });
+    }
+    const menuNavNotices = document.getElementById('menu-nav-notices');
+    if (menuNavNotices) {
+        menuNavNotices.addEventListener('click', function() {
+            if (menuDrawerBackdrop) menuDrawerBackdrop.classList.remove('open');
+            const bellBtn = document.getElementById('notification-bell-btn');
+            if (bellBtn) bellBtn.click();
+        });
+    }
+
     if (saveToLibraryBtn) {
         saveToLibraryBtn.addEventListener('click', async function() {
             const noteText = noteInput.value.trim();
@@ -4719,6 +4740,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const dtsHomePillCourses = document.getElementById('dts-home-pill-courses');
     if (dtsHomePillCourses) dtsHomePillCourses.addEventListener('click', openDtsCoursesModal);
+
+    const menuNavMyCourses = document.getElementById('menu-nav-my-courses');
+    if (menuNavMyCourses) {
+        menuNavMyCourses.addEventListener('click', function() {
+            const drawer = document.getElementById('menu-drawer-backdrop');
+            if (drawer) drawer.classList.remove('open');
+            openDtsCoursesModal();
+        });
+    }
 
     const dtsHomePillTutor = document.getElementById('dts-home-pill-tutor');
     if (dtsHomePillTutor) {
