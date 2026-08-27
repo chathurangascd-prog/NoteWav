@@ -4062,6 +4062,23 @@ def admin_list_courses():
     return jsonify({'status': 'success', 'courses': [dict(r) for r in rows]})
 
 
+@app.route('/admin/courses/<int:course_id>/publish', methods=['POST'])
+def admin_publish_course(course_id):
+    """Publishing lessons alone was never enough for a course to show
+    up to students — /courses/list and /courses/<id> also require the
+    COURSE itself to be status='published' (courses default to draft
+    on creation). This is that missing toggle."""
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    new_status = 'published' if data.get('publish') else 'draft'
+    conn = get_db()
+    conn.execute("UPDATE courses SET status = ? WHERE id = ?", (new_status, course_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success', 'course_status': new_status})
+
+
 @app.route('/admin/courses/<int:course_id>/delete', methods=['POST'])
 def admin_delete_course(course_id):
     if not _is_admin_logged_in():

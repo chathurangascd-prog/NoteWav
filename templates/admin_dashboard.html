@@ -1784,15 +1784,37 @@
             const course = allCourses.find(c => c.id === id);
             document.getElementById('courses-list-panel').style.display = 'none';
             document.getElementById('course-detail-panel').style.display = 'block';
-            document.getElementById('course-detail-header').innerHTML = `
-                <h2 style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; margin:0 0 4px;">${escapeHtml(course.title)}</h2>
-                <p style="font-size:0.82rem; color:var(--text-dim); margin:0;">${escapeHtml(course.grade)} · ${escapeHtml(course.subject)}${course.exam_target ? ' · ' + escapeHtml(course.exam_target) : ''} · ${statusBadge(course.status)}</p>
-            `;
+            renderCourseDetailHeader(course);
             document.getElementById('split-preview-wrap').innerHTML = '';
             document.getElementById('save-lessons-btn').style.display = 'none';
             document.getElementById('split-pdf-status').textContent = '';
             currentSplitPreview = [];
             loadCourseLessons();
+        }
+
+        function renderCourseDetailHeader(course) {
+            const isPublished = course.status === 'published';
+            document.getElementById('course-detail-header').innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                    <div>
+                        <h2 style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; margin:0 0 4px;">${escapeHtml(course.title)}</h2>
+                        <p style="font-size:0.82rem; color:var(--text-dim); margin:0;">${escapeHtml(course.grade)} · ${escapeHtml(course.subject)}${course.exam_target ? ' · ' + escapeHtml(course.exam_target) : ''} · ${statusBadge(course.status)}</p>
+                    </div>
+                    <button onclick="toggleCoursePublish(${course.id}, ${!isPublished})" style="padding:8px 16px; border-radius:8px; border:1px solid ${isPublished ? 'rgba(245,158,11,0.4)' : 'rgba(74,222,128,0.4)'}; background:${isPublished ? 'rgba(245,158,11,0.1)' : 'rgba(74,222,128,0.1)'}; color:${isPublished ? 'var(--amber)' : 'var(--green)'}; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap;">
+                        ${isPublished ? '⏸ Unpublish Course' : '🚀 Publish Course'}
+                    </button>
+                </div>
+                ${!isPublished ? '<p style="font-size:0.74rem; color:var(--amber); margin:8px 0 0;">⚠️ මේ course එක Draft — publish කරන්නම් student ලාට invisible (lessons publish කළත් course එකම publish වෙන්න ඕන).</p>' : ''}
+            `;
+        }
+
+        async function toggleCoursePublish(courseId, publish) {
+            await fetch(`/admin/courses/${courseId}/publish`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ publish })
+            });
+            await loadCourses();
+            const course = allCourses.find(c => c.id === courseId);
+            if (course) renderCourseDetailHeader(course);
         }
 
         document.getElementById('back-to-courses-link').addEventListener('click', function(e) {
