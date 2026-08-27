@@ -105,7 +105,7 @@
            always stays in the DOM either way, this just decides which
            top-level block is visible, so nothing in script.js needs a
            null-check added for the "other" page's elements missing. */
-        .page-tuition #notewav-header-block, .page-tuition #notewav-flow-section { display: none; }
+        .page-tuition #notewav-header-block, .page-tuition .notewav-only { display: none; }
         .page-notewav #dts-home-hero, .page-notewav #dts-home-continue-section, .page-notewav #dts-home-empty-state { display: none; }
         .header-right-nav { position: absolute; top: 24px; right: 24px; display: flex; align-items: center; gap: 10px; }
         .notification-bell-btn { position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(107, 48, 255, 0.45); background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease, transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -618,9 +618,7 @@
                 </button>
             </div>
 
-            <div id="notewav-flow-section">
-
-            <div id="note-tool-section" class="glass-card animate-fade card-step-1">
+            <div id="note-tool-section" class="glass-card animate-fade card-step-1 notewav-only">
                 <div class="card-header">
                     <span class="step-num">01</span>
                     <h2 data-i18n="card1_title">ඔබේ සටහන ඇතුළත් කරන්න</h2>
@@ -722,7 +720,7 @@
                 </button>
             </div>
 
-            <div id="safety-section" class="glass-card hidden animate-fade card-step-2">
+            <div id="safety-section" class="glass-card hidden animate-fade card-step-2 notewav-only">
                 <div class="card-header">
                     <span class="step-num">02</span>
                     <h2 data-i18n="safety_title">ආරක්ෂිත පරීක්ෂාව</h2>
@@ -802,7 +800,7 @@
                 <p id="audio-gen-status-text" class="hidden" style="font-size: 0.78rem; color: var(--text-secondary); margin: 8px 0 0; text-align: center; transition: opacity 0.3s ease;"></p>
             </div>
 
-            <div id="mindmap-section" class="glass-card hidden animate-fade card-step-2">
+            <div id="mindmap-section" class="glass-card hidden animate-fade card-step-2 notewav-only">
                 <div class="card-header">
                     <span class="step-num">🧠</span>
                     <h2>Smart Mind Map</h2>
@@ -817,7 +815,7 @@
                 </div>
             </div>
 
-            <div id="quiz-section" class="glass-card hidden animate-fade card-step-2">
+            <div id="quiz-section" class="glass-card hidden animate-fade card-step-2 notewav-only">
                 <div class="card-header">
                     <span class="step-num">📝</span>
                     <h2>Quiz</h2>
@@ -1080,7 +1078,7 @@
                 </div>
             </div>
 
-            <div id="audio-section" class="glass-card hidden animate-fade card-step-3">
+            <div id="audio-section" class="glass-card hidden animate-fade card-step-3 notewav-only">
                 <div class="card-header">
                     <span class="step-num">03</span>
                     <h2 data-i18n="audio_player_title">NoteWav වාදකය</h2>
@@ -1173,14 +1171,12 @@
                 </div>
             </div>
 
-            <div id="status-message" class="status-message hidden">
+            <div id="status-message" class="status-message hidden notewav-only">
                 <div class="status-content">
                     <i class="fas fa-spinner fa-spin"></i>
                     <span id="status-text">Processing...</span>
                 </div>
             </div>
-
-            </div><!-- /#notewav-flow-section -->
 
         </main>
 
