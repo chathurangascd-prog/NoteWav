@@ -1923,6 +1923,15 @@ textarea:hover {
 
 /* Digital Tuition Sir — mobile/email + password auth modal.
    Deliberately white/orange, independent of the app's dark theme tokens. */
+.dts-auth-shell {
+    display: flex;
+    width: 100%;
+}
+
+.dts-auth-promo {
+    display: none; /* shown only on wide/web viewports — see media query below */
+}
+
 .dts-auth-card {
     position: relative;
     background: #ffffff;
@@ -1935,6 +1944,106 @@ textarea:hover {
     padding: 30px 26px 26px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
     text-align: center;
+}
+
+/* Desktop/web: split into a branded promo panel + the form, mirroring
+   the reference login screen the user gave (left brand panel, right
+   form). Below this width it stays the single centered card. */
+@media (min-width: 860px) {
+    .dts-auth-shell {
+        max-width: 880px;
+        border-radius: 26px;
+        overflow: hidden;
+        box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45);
+    }
+
+    .dts-auth-promo {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        flex: 1 1 44%;
+        padding: 48px 42px;
+        background: linear-gradient(160deg, #ff9142, #ff6a00 55%, #d94e00);
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+        text-align: left;
+    }
+    .dts-auth-promo::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 85% 115%, rgba(255, 255, 255, 0.2), transparent 55%);
+        pointer-events: none;
+    }
+    .dts-auth-promo > * { position: relative; z-index: 1; }
+
+    .dts-auth-promo-logo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 0.88rem;
+        font-weight: 800;
+        margin-bottom: 42px;
+    }
+
+    .dts-auth-promo h2 {
+        font-family: 'Fraunces', serif;
+        font-size: 1.9rem;
+        line-height: 1.22;
+        font-weight: 700;
+        margin: 0 0 14px;
+    }
+
+    .dts-auth-promo-sub {
+        font-size: 0.88rem;
+        color: rgba(255, 255, 255, 0.9);
+        line-height: 1.6;
+        max-width: 300px;
+        margin: 0 0 34px;
+    }
+
+    .dts-auth-promo-feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+    .dts-auth-promo-feature:last-child { margin-bottom: 0; }
+
+    .dts-auth-promo-feature-icon {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.92rem;
+    }
+
+    .dts-auth-promo-feature-title {
+        display: block;
+        font-size: 0.86rem;
+        font-weight: 700;
+    }
+
+    .dts-auth-promo-feature-sub {
+        display: block;
+        font-size: 0.76rem;
+        color: rgba(255, 255, 255, 0.82);
+        margin-top: 1px;
+    }
+
+    .dts-auth-shell .dts-auth-card {
+        flex: 1 1 56%;
+        width: auto;
+        max-width: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 44px 46px;
+    }
 }
 
 .dts-auth-close {
