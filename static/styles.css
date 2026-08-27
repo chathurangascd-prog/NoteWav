@@ -1625,7 +1625,7 @@ textarea:hover {
    overflowing above it (breaks the card's frame, a deliberate accent). */
 .dts-home-hero-figure {
     position: absolute;
-    right: 28px;
+    right: 4px;
     bottom: 0;
     height: 118%;
     width: auto;
