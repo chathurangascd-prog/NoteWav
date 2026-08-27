@@ -693,6 +693,7 @@
                     <div style="display:flex; align-items:center; gap:10px;">
                         <div class="chip">📖</div>
                         <h2 class="section-title">Lessons</h2>
+                        <span id="scripts-progress-badge" style="display:none; padding:3px 10px; border-radius:50px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); font-size:0.7rem; font-weight:700; font-family:'JetBrains Mono', monospace;"></span>
                     </div>
                     <button id="generate-all-scripts-btn" style="padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit;">✍️ Generate All Scripts</button>
                 </div>
@@ -1978,6 +1979,21 @@
 
         function renderCourseLessons(lessons) {
             currentCourseLessons = lessons;
+
+            // Persists across reloads/tab-closes since it's derived from
+            // the DB state every time this renders — lets an admin check
+            // how far a long "Generate All Scripts" run got without
+            // needing to keep that tab open and watching it.
+            const badge = document.getElementById('scripts-progress-badge');
+            if (lessons.length) {
+                const scriptsDone = lessons.filter(l => l.script_text).length;
+                const audioDone = lessons.filter(l => l.ai_audio_url || l.manual_audio_url).length;
+                badge.textContent = `📝 ${scriptsDone}/${lessons.length} scripts · 🔊 ${audioDone}/${lessons.length} audio`;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+
             if (!lessons.length) {
                 document.getElementById('course-lessons-wrap').innerHTML = '<div class="empty-state">Lessons නෑ තවම — PDF එකක් upload කරලා split කරන්න.</div>';
                 return;
@@ -2069,7 +2085,23 @@
                 try {
                     const res = await fetch(`/admin/lessons/${lesson.id}/generate-script`, { method: 'POST' });
                     const data = await res.json();
-                    if (data.status === 'success') done++; else failed++;
+                    if (data.status === 'success') {
+                        done++;
+                        // Live update — reflect this one lesson's new script
+                        // in the on-page list + the scripts-done counter
+                        // right away, instead of only at the very end, so
+                        // the count/rows are accurate mid-run, not just
+                        // after the whole batch finishes.
+                        const cached = currentCourseLessons.find(l => l.id === lesson.id);
+                        if (cached) {
+                            cached.script_text = data.script_text;
+                            cached.mermaid_code_si = data.mermaid_code_si;
+                            cached.mermaid_code_en = data.mermaid_code_en;
+                        }
+                        renderCourseLessons(currentCourseLessons);
+                    } else {
+                        failed++;
+                    }
                 } catch (e) {
                     failed++;
                 }
@@ -2077,7 +2109,6 @@
             btn.disabled = false;
             btn.textContent = '✍️ Generate All Scripts';
             statusEl.textContent = `✅ ${done} scripts generated${failed ? `, ❌ ${failed} failed (try those individually)` : ''}.`;
-            loadCourseLessons();
         });
 
         async function generateLessonAudio(lessonId, btn) {
