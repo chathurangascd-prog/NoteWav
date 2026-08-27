@@ -133,6 +133,13 @@
             overflow-y: auto;
         }
         .page-tuition #open-menu-btn, .page-tuition .header-right-nav { display: none; }
+        /* Every visible child of .app-header is hidden on this page, but
+           the header itself still carried its own padding/margin-bottom
+           (~95px), pushing the hero card down with a big empty gap.
+           Collapsed to 0 here — can't display:none the header outright,
+           #notification-popup lives inside it and still needs to render
+           when the sidebar/bottom-nav "Notices" item triggers it. */
+        .page-tuition .app-header { margin-bottom: 0; padding: 0; }
         /* Base .app-container caps at max-width:820px with margin:0 auto —
            fine for the centered NoteWav page, but once the sidebar pins
            margin-left to 240px here, that same 820px cap left a large
