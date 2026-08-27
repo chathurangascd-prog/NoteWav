@@ -4787,6 +4787,27 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Mobile bottom tab bar (page-tuition, <860px) — same targets as the
+    // sidebar's own nav items above, just a separate set of DOM nodes.
+    const bottomNavMyCourses = document.getElementById('bottomnav-nav-my-courses');
+    if (bottomNavMyCourses) bottomNavMyCourses.addEventListener('click', openDtsCoursesModal);
+
+    const bottomNavMyLibrary = document.getElementById('bottomnav-nav-my-library');
+    if (bottomNavMyLibrary) {
+        bottomNavMyLibrary.addEventListener('click', function() {
+            const libraryBtn = document.getElementById('open-library-btn');
+            if (libraryBtn) libraryBtn.click();
+        });
+    }
+
+    const bottomNavNotices = document.getElementById('bottomnav-nav-notices');
+    if (bottomNavNotices) {
+        bottomNavNotices.addEventListener('click', function() {
+            const bellBtn = document.getElementById('notification-bell-btn');
+            if (bellBtn) bellBtn.click();
+        });
+    }
+
     const dtsHomePillTutor = document.getElementById('dts-home-pill-tutor');
     if (dtsHomePillTutor) {
         dtsHomePillTutor.addEventListener('click', function() { window.location.href = '/notewav'; });
