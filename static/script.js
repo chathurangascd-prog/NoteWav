@@ -103,15 +103,21 @@ async function checkGoogleAuthStatus() {
         notewavIsLoggedIn = !!data.logged_in;
 
         const signinBtn = document.getElementById('google-signin-btn');
+        const dtsAuthOpenBtn = document.getElementById('dts-auth-open-btn');
         const signedInInfo = document.getElementById('google-signed-in-info');
         const signedInName = document.getElementById('google-signed-in-name');
         const signedInEmail = document.getElementById('google-signed-in-email');
+        const changeAccountLink = document.getElementById('google-change-account-link');
 
         if (data.logged_in) {
             if (signinBtn) signinBtn.classList.add('hidden');
+            if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.add('hidden');
             if (signedInInfo) signedInInfo.classList.remove('hidden');
             if (signedInName) signedInName.textContent = data.name || 'Google User';
-            if (signedInEmail) signedInEmail.textContent = data.email || '';
+            if (signedInEmail) signedInEmail.textContent = data.email || data.phone || '';
+            // "Change account" only makes sense for Google — a local
+            // (mobile/email+password) account has no account picker to change to.
+            if (changeAccountLink) changeAccountLink.classList.toggle('hidden', data.auth_provider === 'local');
 
             // Server is now the source of truth for coins/streak — pull
             // the account's saved values down and overwrite whatever
@@ -151,6 +157,7 @@ async function checkGoogleAuthStatus() {
             if (typeof updateGreeting === 'function') updateGreeting();
         } else {
             if (signinBtn) signinBtn.classList.remove('hidden');
+            if (dtsAuthOpenBtn) dtsAuthOpenBtn.classList.remove('hidden');
             if (signedInInfo) signedInInfo.classList.add('hidden');
         }
     } catch (e) {
@@ -5140,6 +5147,152 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadDtsHome();
             } finally {
                 this.disabled = false;
+            }
+        });
+    }
+
+    // ---- Digital Tuition Sir: mobile/email + password auth modal ----
+    // Additive to Google login (see checkGoogleAuthStatus above) — a local
+    // account signs in through here and lands on the SAME /auth/me-driven
+    // signed-in state, since the backend stores it under the same
+    // session['user_id']/google_id shape either way.
+    let dtsAuthMode = 'login'; // 'login' | 'signup'
+    let dtsAuthIdType = 'phone'; // 'phone' | 'email'
+
+    function dtsAuthSetIdType(type) {
+        dtsAuthIdType = type;
+        document.querySelectorAll('#dts-auth-id-tabs .dts-auth-tab').forEach(function(tab) {
+            tab.classList.toggle('active', tab.dataset.idtype === type);
+        });
+        const phoneField = document.getElementById('dts-auth-phone-field');
+        const emailField = document.getElementById('dts-auth-email-field');
+        if (phoneField) phoneField.classList.toggle('hidden', type !== 'phone');
+        if (emailField) emailField.classList.toggle('hidden', type !== 'email');
+    }
+
+    function dtsAuthSetMode(mode) {
+        dtsAuthMode = mode;
+        const isSignup = mode === 'signup';
+        const nameField = document.getElementById('dts-auth-name-field');
+        const subtitle = document.getElementById('dts-auth-mode-subtitle');
+        const submitBtn = document.getElementById('dts-auth-submit-btn');
+        const toggleQuestion = document.getElementById('dts-auth-toggle-question');
+        const toggleBtn = document.getElementById('dts-auth-toggle-btn');
+        const forgotBtn = document.getElementById('dts-auth-forgot-btn');
+        if (nameField) nameField.classList.toggle('hidden', !isSignup);
+        if (subtitle) subtitle.textContent = isSignup ? 'අලුත් ගිණුමක් හදාගන්න' : 'ඔබේ ගිණුමට Sign In වෙන්න';
+        if (submitBtn) submitBtn.textContent = isSignup ? 'Sign Up' : 'Sign In';
+        if (toggleQuestion) toggleQuestion.textContent = isSignup ? 'දැනටමත් ගිණුමක් තියෙනවද?' : 'ගිණුමක් නැද්ද?';
+        if (toggleBtn) toggleBtn.textContent = isSignup ? 'Sign In වෙන්න' : 'ගිණුමක් හදාගන්න';
+        if (forgotBtn) forgotBtn.classList.toggle('hidden', isSignup);
+        document.getElementById('dts-auth-forgot-msg').classList.add('hidden');
+        dtsAuthHideError();
+    }
+
+    function dtsAuthHideError() {
+        const errEl = document.getElementById('dts-auth-error');
+        if (errEl) { errEl.classList.add('hidden'); errEl.textContent = ''; }
+    }
+
+    function dtsAuthShowError(msg) {
+        const errEl = document.getElementById('dts-auth-error');
+        if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+    }
+
+    const dtsAuthOpenBtn = document.getElementById('dts-auth-open-btn');
+    if (dtsAuthOpenBtn) {
+        dtsAuthOpenBtn.addEventListener('click', function() {
+            dtsAuthSetMode('login');
+            dtsAuthSetIdType('phone');
+            document.getElementById('dts-auth-form').reset();
+            document.getElementById('dts-auth-modal-backdrop').classList.remove('hidden');
+        });
+    }
+
+    const dtsAuthCloseBtn = document.getElementById('dts-auth-close-btn');
+    if (dtsAuthCloseBtn) {
+        dtsAuthCloseBtn.addEventListener('click', function() {
+            document.getElementById('dts-auth-modal-backdrop').classList.add('hidden');
+        });
+    }
+    const dtsAuthModalBackdrop = document.getElementById('dts-auth-modal-backdrop');
+    if (dtsAuthModalBackdrop) {
+        dtsAuthModalBackdrop.addEventListener('click', function(e) {
+            if (e.target === this) this.classList.add('hidden');
+        });
+    }
+
+    document.querySelectorAll('#dts-auth-id-tabs .dts-auth-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() { dtsAuthSetIdType(this.dataset.idtype); });
+    });
+
+    const dtsAuthToggleBtn = document.getElementById('dts-auth-toggle-btn');
+    if (dtsAuthToggleBtn) {
+        dtsAuthToggleBtn.addEventListener('click', function() {
+            dtsAuthSetMode(dtsAuthMode === 'login' ? 'signup' : 'login');
+        });
+    }
+
+    const dtsAuthForgotBtn = document.getElementById('dts-auth-forgot-btn');
+    if (dtsAuthForgotBtn) {
+        dtsAuthForgotBtn.addEventListener('click', function() {
+            document.getElementById('dts-auth-forgot-msg').classList.remove('hidden');
+        });
+    }
+
+    const dtsAuthForm = document.getElementById('dts-auth-form');
+    if (dtsAuthForm) {
+        dtsAuthForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            dtsAuthHideError();
+            const identifier = (dtsAuthIdType === 'phone'
+                ? document.getElementById('dts-auth-phone-input').value
+                : document.getElementById('dts-auth-email-input').value).trim();
+            const password = document.getElementById('dts-auth-password-input').value;
+            const submitBtn = document.getElementById('dts-auth-submit-btn');
+
+            if (!identifier) {
+                dtsAuthShowError(dtsAuthIdType === 'phone' ? 'Mobile number එකක් දෙන්න.' : 'Email එකක් දෙන්න.');
+                return;
+            }
+            if (!password) {
+                dtsAuthShowError('Password එකක් දෙන්න.');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            try {
+                let res, data;
+                if (dtsAuthMode === 'signup') {
+                    const name = document.getElementById('dts-auth-name-input').value.trim();
+                    if (!name) { dtsAuthShowError('නම දෙන්න.'); submitBtn.disabled = false; return; }
+                    const body = { name: name, password: password };
+                    if (dtsAuthIdType === 'phone') body.phone = identifier; else body.email = identifier;
+                    res = await fetch('/auth/local/signup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                } else {
+                    res = await fetch('/auth/local/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ identifier: identifier, password: password }),
+                    });
+                }
+                data = await res.json();
+                if (!res.ok) {
+                    dtsAuthShowError(data.error || 'Something went wrong — try again.');
+                    submitBtn.disabled = false;
+                    return;
+                }
+                document.getElementById('dts-auth-modal-backdrop').classList.add('hidden');
+                if (typeof checkGoogleAuthStatus === 'function') checkGoogleAuthStatus();
+                if (typeof loadDtsHome === 'function') loadDtsHome();
+            } catch (err) {
+                dtsAuthShowError('Network error — try again.');
+            } finally {
+                submitBtn.disabled = false;
             }
         });
     }

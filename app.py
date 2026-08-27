@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
+from werkzeug.security import generate_password_hash, check_password_hash
 from google import genai
 from google.genai import types
 from gtts import gTTS
@@ -115,6 +116,12 @@ GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 GOOGLE_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
 GOOGLE_LOGIN_CONFIGURED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 print("✅ Google Sign-In is configured!" if GOOGLE_LOGIN_CONFIGURED else "⚠️ Google Sign-In not configured (missing GOOGLE_CLIENT_ID/SECRET)")
+
+# Digital Tuition Sir — local (mobile/email + password) accounts get a
+# synthetic id in this format, stored in the SAME google_id column Google
+# accounts use, so every existing "session['user_id'] == users.google_id"
+# lookup in the app keeps working unchanged for both account types.
+LOCAL_USER_ID_PREFIX = 'local:'
 
 # ========================================
 # NOTES LIBRARY (SQLite — save/organize notes by subject)
@@ -304,6 +311,21 @@ def init_db():
             last_login TEXT
         )
     """)
+    # Digital Tuition Sir — mobile/email + password login, alongside
+    # (not replacing) Google. Every place in this codebase that treats
+    # session['user_id'] as an opaque "google_id" string keeps working
+    # unchanged: a local-signup account just gets a synthetic id here
+    # (see LOCAL_USER_ID_PREFIX) stored in the SAME google_id column,
+    # instead of a real Google id — avoids a primary-key migration.
+    for column_def in [
+        "phone TEXT",
+        "password_hash TEXT",
+        "auth_provider TEXT DEFAULT 'google'",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {column_def}")
+        except Exception:
+            pass  # column already exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS gemini_calls (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2521,6 +2543,85 @@ def auth_logout():
     return redirect(url_for('home'))
 
 
+def _establish_local_session(row):
+    session.permanent = True
+    session['user_id'] = row['google_id']
+    session['user_name'] = row['name']
+    session['user_email'] = row['email']
+    session['user_picture'] = row['picture']
+
+
+@app.route('/auth/local/signup', methods=['POST'])
+def auth_local_signup():
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()[:60]
+    phone = (data.get('phone') or '').strip()[:20]
+    email = (data.get('email') or '').strip().lower()[:120]
+    password = data.get('password') or ''
+
+    if not name:
+        return jsonify({'error': 'Please enter your name.'}), 400
+    if not phone and not email:
+        return jsonify({'error': 'Please enter a mobile number or email.'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+
+    conn = get_db()
+    try:
+        if phone:
+            existing = conn.execute("SELECT google_id FROM users WHERE phone = ?", (phone,)).fetchone()
+            if existing:
+                conn.close()
+                return jsonify({'error': 'An account with this mobile number already exists.'}), 400
+        if email:
+            existing = conn.execute("SELECT google_id FROM users WHERE email = ?", (email,)).fetchone()
+            if existing:
+                conn.close()
+                return jsonify({'error': 'An account with this email already exists.'}), 400
+
+        local_id = f"{LOCAL_USER_ID_PREFIX}{uuid.uuid4().hex}"
+        now_iso = datetime.now(timezone.utc).isoformat()
+        password_hash = generate_password_hash(password)
+        conn.execute(
+            """INSERT INTO users (google_id, email, name, picture, coins, streak, last_streak_date,
+                                   created_at, last_login, phone, password_hash, auth_provider)
+               VALUES (?, ?, ?, '', 100, 0, NULL, ?, ?, ?, ?, 'local')""",
+            (local_id, email, name, now_iso, now_iso, phone or None, password_hash)
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM users WHERE google_id = ?", (local_id,)).fetchone()
+        conn.close()
+    except Exception as e:
+        conn.close()
+        print(f"❌ Local signup failed: {e}")
+        return jsonify({'error': 'Signup failed — please try again.'}), 500
+
+    _establish_local_session(row)
+    return jsonify({'status': 'ok', 'name': row['name']})
+
+
+@app.route('/auth/local/login', methods=['POST'])
+def auth_local_login():
+    data = request.get_json(silent=True) or {}
+    identifier = (data.get('identifier') or '').strip()
+    password = data.get('password') or ''
+    if not identifier or not password:
+        return jsonify({'error': 'Please enter your mobile number/email and password.'}), 400
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM users WHERE (phone = ? OR email = ?) AND auth_provider = 'local'",
+        (identifier, identifier.lower())
+    ).fetchone()
+    conn.close()
+
+    if not row or not row['password_hash'] or not check_password_hash(row['password_hash'], password):
+        return jsonify({'error': 'Incorrect mobile number/email or password.'}), 401
+
+    _establish_local_session(row)
+    return jsonify({'status': 'ok', 'name': row['name']})
+
+
 @app.route('/auth/me')
 def auth_me():
     user_id = session.get('user_id')
@@ -2541,6 +2642,8 @@ def auth_me():
             'coins': row['coins'],
             'streak': row['streak'],
             'last_streak_date': row['last_streak_date'],
+            'auth_provider': row['auth_provider'] or 'google',
+            'phone': row['phone'],
         })
     except Exception as e:
         print(f"❌ /auth/me error: {e}")
@@ -3384,6 +3487,41 @@ def admin_add_coins():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/admin/users/reset-password', methods=['POST'])
+def admin_reset_local_password():
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    try:
+        data = request.get_json(silent=True) or {}
+        identifier = (data.get('identifier') or '').strip()
+        new_password = data.get('new_password') or ''
+
+        if not identifier:
+            return jsonify({'status': 'error', 'message': 'Mobile number හෝ email එකක් දෙන්න.'}), 400
+        if len(new_password) < 6:
+            return jsonify({'status': 'error', 'message': 'Password අකුරු 6ට වඩා දිග විය යුතුයි.'}), 400
+
+        conn = get_db()
+        row = conn.execute(
+            "SELECT google_id FROM users WHERE (phone = ? OR email = ?) AND auth_provider = 'local'",
+            (identifier, identifier.lower())
+        ).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'මේ identifier එකෙන් local account එකක් හම්බුනේ නෑ.'}), 404
+
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE google_id = ?",
+            (generate_password_hash(new_password), row['google_id'])
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"❌ Admin reset-password error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/admin/user-timeline/<anon_id>')
 def admin_user_timeline(anon_id):
     if not _is_admin_logged_in():
@@ -4099,6 +4237,43 @@ def admin_list_courses():
     """).fetchall()
     conn.close()
     return jsonify({'status': 'success', 'courses': [dict(r) for r in rows]})
+
+
+@app.route('/admin/courses/<int:course_id>/update', methods=['POST'])
+def admin_update_course(course_id):
+    if not _is_admin_logged_in():
+        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    grade = (data.get('grade') or '').strip()
+    subject = (data.get('subject') or '').strip()
+    title = (data.get('title') or '').strip()
+    if not grade or not subject or not title:
+        return jsonify({'status': 'error', 'message': 'Grade, subject, title තුනම ඕන.'}), 400
+
+    exam_target = (data.get('exam_target') or '').strip() or None
+    price_lkr = data.get('price_lkr')
+    try:
+        price_lkr = int(price_lkr) if price_lkr not in (None, '') else None
+    except (TypeError, ValueError):
+        price_lkr = None
+    try:
+        free_trial_days = int(data.get('free_trial_days') or 0)
+    except (TypeError, ValueError):
+        free_trial_days = 0
+
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM courses WHERE id = ?", (course_id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Course එක හම්බුනේ නෑ.'}), 404
+    conn.execute(
+        """UPDATE courses SET grade = ?, subject = ?, title = ?, exam_target = ?,
+                              price_lkr = ?, free_trial_days = ? WHERE id = ?""",
+        (grade, subject, title, exam_target, price_lkr, free_trial_days, course_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
 
 
 @app.route('/admin/courses/<int:course_id>/publish', methods=['POST'])

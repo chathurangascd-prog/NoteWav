@@ -1782,3 +1782,208 @@ textarea:hover {
     font-weight: 700;
     color: var(--text-muted);
 }
+
+/* Digital Tuition Sir — mobile/email + password auth modal.
+   Deliberately white/orange, independent of the app's dark theme tokens. */
+.dts-auth-card {
+    position: relative;
+    background: #ffffff;
+    color: #4a3625;
+    border-radius: 22px;
+    width: 380px;
+    max-width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 30px 26px 26px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    text-align: center;
+}
+
+.dts-auth-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: #fdece0;
+    color: #b45309;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+.dts-auth-close:hover { background: #fbd8bd; }
+
+.dts-auth-logo {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(255, 106, 0, 0.35);
+}
+
+.dts-auth-title {
+    font-family: var(--font-display, inherit);
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #2b1c10;
+    margin-bottom: 4px;
+}
+
+.dts-auth-subtitle {
+    font-size: 0.82rem;
+    color: #8a6f57;
+    margin-bottom: 18px;
+}
+
+.dts-auth-tabs {
+    display: flex;
+    background: #fdf2e9;
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+    margin-bottom: 16px;
+}
+
+.dts-auth-tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 9px 6px;
+    border-radius: 9px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #b8896a;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dts-auth-tab.active {
+    background: #ff6a00;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(255, 106, 0, 0.3);
+}
+
+.dts-auth-field {
+    text-align: left;
+    margin-bottom: 12px;
+}
+
+.dts-auth-field label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #a3785a;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.dts-auth-field input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1.5px solid #f0ddc8;
+    background: #fffaf5;
+    color: #2b1c10;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.dts-auth-field input:focus {
+    border-color: #ff8a3d;
+}
+
+.dts-auth-error {
+    background: #fef0ef;
+    border: 1px solid #f9c8c4;
+    color: #c0392b;
+    font-size: 0.78rem;
+    padding: 8px 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    text-align: left;
+}
+
+.dts-auth-submit-btn {
+    width: 100%;
+    border: none;
+    padding: 13px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ff9142, #ff6a00);
+    color: #fff;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(255, 106, 0, 0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.dts-auth-submit-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(255, 106, 0, 0.4); }
+.dts-auth-submit-btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+.dts-auth-link-btn {
+    display: block;
+    margin: 14px auto 0;
+    background: none;
+    border: none;
+    color: #ff6a00;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.dts-auth-link-btn:hover { text-decoration: underline; }
+
+.dts-auth-forgot-msg {
+    font-size: 0.76rem;
+    color: #8a6f57;
+    background: #fdf2e9;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-top: 8px;
+}
+
+.dts-auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 18px 0 12px;
+    color: #cdb69e;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.dts-auth-divider::before, .dts-auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #f0ddc8;
+}
+
+.dts-auth-toggle-text {
+    font-size: 0.82rem;
+    color: #8a6f57;
+}
+
+.dts-auth-toggle-text button {
+    background: none;
+    border: none;
+    color: #ff6a00;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.82rem;
+    padding: 0;
+    margin-left: 4px;
+}
+.dts-auth-toggle-text button:hover { text-decoration: underline; }

@@ -1798,14 +1798,74 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
                     <div>
                         <h2 style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; margin:0 0 4px;">${escapeHtml(course.title)}</h2>
-                        <p style="font-size:0.82rem; color:var(--text-dim); margin:0;">${escapeHtml(course.grade)} · ${escapeHtml(course.subject)}${course.exam_target ? ' · ' + escapeHtml(course.exam_target) : ''} · ${statusBadge(course.status)}</p>
+                        <p style="font-size:0.82rem; color:var(--text-dim); margin:0;">${escapeHtml(course.grade)} · ${escapeHtml(course.subject)}${course.exam_target ? ' · ' + escapeHtml(course.exam_target) : ''} · ${statusBadge(course.status)}${course.price_lkr ? ' · Rs ' + course.price_lkr + '/month' : ''}</p>
                     </div>
-                    <button onclick="toggleCoursePublish(${course.id}, ${!isPublished})" style="padding:8px 16px; border-radius:8px; border:1px solid ${isPublished ? 'rgba(245,158,11,0.4)' : 'rgba(74,222,128,0.4)'}; background:${isPublished ? 'rgba(245,158,11,0.1)' : 'rgba(74,222,128,0.1)'}; color:${isPublished ? 'var(--amber)' : 'var(--green)'}; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap;">
-                        ${isPublished ? '⏸ Unpublish Course' : '🚀 Publish Course'}
-                    </button>
+                    <div style="display:flex; gap:8px; flex-shrink:0;">
+                        <button onclick="openEditCourseForm(${course.id})" style="padding:8px 16px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.8rem; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap;">✏️ Edit</button>
+                        <button onclick="toggleCoursePublish(${course.id}, ${!isPublished})" style="padding:8px 16px; border-radius:8px; border:1px solid ${isPublished ? 'rgba(245,158,11,0.4)' : 'rgba(74,222,128,0.4)'}; background:${isPublished ? 'rgba(245,158,11,0.1)' : 'rgba(74,222,128,0.1)'}; color:${isPublished ? 'var(--amber)' : 'var(--green)'}; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap;">
+                            ${isPublished ? '⏸ Unpublish Course' : '🚀 Publish Course'}
+                        </button>
+                    </div>
                 </div>
                 ${!isPublished ? '<p style="font-size:0.74rem; color:var(--amber); margin:8px 0 0;">⚠️ මේ course එක Draft — publish කරන්නම් student ලාට invisible (lessons publish කළත් course එකම publish වෙන්න ඕන).</p>' : ''}
+                <div id="edit-course-form-wrap"></div>
             `;
+        }
+
+        function openEditCourseForm(courseId) {
+            const course = allCourses.find(c => c.id === courseId);
+            if (!course) return;
+            const fieldStyle = "padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.84rem; font-family:inherit;";
+            document.getElementById('edit-course-form-wrap').innerHTML = `
+                <div style="margin-top:14px; padding:16px; border-radius:10px; border:1px solid var(--border); background:var(--surface);">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                        <input type="text" id="edit-course-grade" value="${escapeHtml(course.grade)}" placeholder="Grade" style="${fieldStyle}">
+                        <input type="text" id="edit-course-subject" value="${escapeHtml(course.subject)}" placeholder="Subject" style="${fieldStyle}">
+                        <input type="text" id="edit-course-title" value="${escapeHtml(course.title)}" placeholder="Course Title" style="${fieldStyle} grid-column:1 / -1;">
+                        <input type="text" id="edit-course-exam-target" value="${escapeHtml(course.exam_target || '')}" placeholder="Exam target — optional" style="${fieldStyle} grid-column:1 / -1;">
+                        <input type="number" id="edit-course-price" value="${course.price_lkr || ''}" placeholder="Price (LKR/month)" style="${fieldStyle}">
+                        <input type="number" id="edit-course-trial" value="${course.free_trial_days || 0}" placeholder="Free trial days" style="${fieldStyle}">
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button onclick="saveEditCourseForm(${course.id})" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-grad); color:#fff; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:inherit;">Save Changes</button>
+                        <button onclick="document.getElementById('edit-course-form-wrap').innerHTML=''" style="padding:9px 18px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text-dim); font-size:0.8rem; font-weight:600; cursor:pointer; font-family:inherit;">Cancel</button>
+                        <span id="edit-course-status" style="font-size:0.76rem; font-weight:600;"></span>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function saveEditCourseForm(courseId) {
+            const grade = document.getElementById('edit-course-grade').value.trim();
+            const subject = document.getElementById('edit-course-subject').value.trim();
+            const title = document.getElementById('edit-course-title').value.trim();
+            const exam_target = document.getElementById('edit-course-exam-target').value.trim();
+            const price_lkr = document.getElementById('edit-course-price').value;
+            const free_trial_days = document.getElementById('edit-course-trial').value;
+            const statusEl = document.getElementById('edit-course-status');
+            if (!grade || !subject || !title) {
+                statusEl.style.color = 'var(--red)';
+                statusEl.textContent = 'Grade, subject, title තුනම ඕන.';
+                return;
+            }
+            try {
+                const res = await fetch(`/admin/courses/${courseId}/update`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ grade, subject, title, exam_target, price_lkr: price_lkr || null, free_trial_days: free_trial_days || 0 })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    await loadCourses();
+                    const course = allCourses.find(c => c.id === courseId);
+                    if (course) renderCourseDetailHeader(course);
+                } else {
+                    statusEl.style.color = 'var(--red)';
+                    statusEl.textContent = data.message || 'Failed.';
+                }
+            } catch (e) {
+                statusEl.style.color = 'var(--red)';
+                statusEl.textContent = 'Failed.';
+            }
         }
 
         async function toggleCoursePublish(courseId, publish) {

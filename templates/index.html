@@ -343,6 +343,61 @@
         </div>
     </div>
 
+    <div id="dts-auth-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Digital Tuition Sir Sign In">
+        <div class="dts-auth-card">
+            <button type="button" id="dts-auth-close-btn" class="dts-auth-close" aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="dts-auth-logo">
+                <i class="fas fa-graduation-cap"></i>
+            </div>
+            <h3 class="dts-auth-title">Digital Tuition Sir</h3>
+            <p class="dts-auth-subtitle" id="dts-auth-mode-subtitle">ඔබේ ගිණුමට Sign In වෙන්න</p>
+
+            <div class="dts-auth-tabs" id="dts-auth-id-tabs">
+                <button type="button" class="dts-auth-tab active" data-idtype="phone">Mobile Number</button>
+                <button type="button" class="dts-auth-tab" data-idtype="email">Email</button>
+            </div>
+
+            <form id="dts-auth-form" autocomplete="off">
+                <div id="dts-auth-name-field" class="dts-auth-field hidden">
+                    <label for="dts-auth-name-input">Full Name</label>
+                    <input type="text" id="dts-auth-name-input" placeholder="ඔබේ නම" maxlength="60">
+                </div>
+
+                <div class="dts-auth-field" id="dts-auth-phone-field">
+                    <label for="dts-auth-phone-input">Mobile Number</label>
+                    <input type="tel" id="dts-auth-phone-input" placeholder="07XXXXXXXX" maxlength="20">
+                </div>
+
+                <div class="dts-auth-field hidden" id="dts-auth-email-field">
+                    <label for="dts-auth-email-input">Email</label>
+                    <input type="email" id="dts-auth-email-input" placeholder="you@example.com" maxlength="120">
+                </div>
+
+                <div class="dts-auth-field">
+                    <label for="dts-auth-password-input">Password</label>
+                    <input type="password" id="dts-auth-password-input" placeholder="••••••••" maxlength="100">
+                </div>
+
+                <p id="dts-auth-error" class="dts-auth-error hidden"></p>
+
+                <button type="submit" id="dts-auth-submit-btn" class="dts-auth-submit-btn">Sign In</button>
+            </form>
+
+            <button type="button" id="dts-auth-forgot-btn" class="dts-auth-link-btn">Forgot password?</button>
+            <p id="dts-auth-forgot-msg" class="dts-auth-forgot-msg hidden">Password එක reset කරගන්න admin ව WhatsApp/Call කරන්න.</p>
+
+            <div class="dts-auth-divider"><span>or</span></div>
+
+            <p class="dts-auth-toggle-text">
+                <span id="dts-auth-toggle-question">ගිණුමක් නැද්ද?</span>
+                <button type="button" id="dts-auth-toggle-btn">ගිණුමක් හදාගන්න</button>
+            </p>
+        </div>
+    </div>
+
     <div id="welcome-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Welcome">
         <div class="mindmap-modal-card welcome-modal-card">
             <div class="welcome-modal-body">
@@ -903,15 +958,18 @@
                             </div>
                         </div>
                         <hr class="menu-divider">
-                        <div id="google-auth-section">
+        <div id="google-auth-section">
                             <a href="/auth/google/login" id="google-signin-btn" class="library-nav-btn" style="width: 100%; justify-content: center; box-sizing: border-box; text-decoration: none;">
                                 <i class="fab fa-google"></i> Sign in with Google
                             </a>
+                            <button type="button" id="dts-auth-open-btn" class="library-nav-btn" style="width: 100%; justify-content: center; box-sizing: border-box; margin-top: 8px;">
+                                <i class="fas fa-graduation-cap"></i> Digital Tuition Sir සමඟ Sign In
+                            </button>
                             <div id="google-signed-in-info" class="hidden" style="display: flex; flex-direction: column; gap: 4px; padding: 8px 0;">
                                 <span style="font-size: 0.85rem; color: var(--text-primary); font-weight: 600;" id="google-signed-in-name"></span>
                                 <span style="font-size: 0.78rem; color: var(--text-secondary);" id="google-signed-in-email"></span>
                                 <div style="display: flex; gap: 8px; margin-top: 8px;">
-                                    <a href="/auth/google/login" style="flex: 1; text-align: center; font-size: 0.76rem; font-weight: 600; color: #a78bfa; text-decoration: none; padding: 8px 10px; border-radius: var(--radius-full); border: 1px solid rgba(167, 139, 250, 0.35); background: rgba(167, 139, 250, 0.08);">Change account</a>
+                                    <a href="/auth/google/login" id="google-change-account-link" style="flex: 1; text-align: center; font-size: 0.76rem; font-weight: 600; color: #a78bfa; text-decoration: none; padding: 8px 10px; border-radius: var(--radius-full); border: 1px solid rgba(167, 139, 250, 0.35); background: rgba(167, 139, 250, 0.08);">Change account</a>
                                     <a href="/auth/logout" style="flex: 1; text-align: center; font-size: 0.76rem; font-weight: 600; color: #f87171; text-decoration: none; padding: 8px 10px; border-radius: var(--radius-full); border: 1px solid rgba(248, 113, 113, 0.35); background: rgba(248, 113, 113, 0.08);">Sign out</a>
                                 </div>
                             </div>
