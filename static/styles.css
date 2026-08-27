@@ -1969,8 +1969,8 @@ textarea:hover {
         justify-content: center;
         flex: 1 1 44%;
         padding: 48px 42px;
-        background-image: linear-gradient(160deg, #ff9142, #ff6a00 55%, #d94e00), url('/static/images/auth-promo-figures.png');
-        background-size: cover, auto 82%;
+        background-image: url('/static/images/auth-promo-figures.png'), linear-gradient(160deg, #ff9142, #ff6a00 55%, #d94e00);
+        background-size: auto 82%, cover;
         background-position: center, center;
         background-repeat: no-repeat, no-repeat;
         color: #fff;
