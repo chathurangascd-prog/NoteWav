@@ -1719,6 +1719,15 @@ textarea:hover {
 }
 .dts-home-portal-badge i { font-size: 0.5rem; }
 
+.dts-home-brand-title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #fff;
+    margin: 0 0 6px;
+    letter-spacing: -0.3px;
+}
+
 .dts-home-greeting {
     font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 1.5rem;
