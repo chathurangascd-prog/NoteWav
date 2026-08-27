@@ -193,11 +193,18 @@ body::after {
 }
 
 /* ===== APP CONTAINER ===== */
+/* z-index: 200 (not 1) — position+z-index together make this a stacking
+   context, which traps every descendant's z-index (including modals up
+   to 3000) as purely LOCAL comparisons. At z-index:1 the whole
+   app-container subtree — modals included — rendered BELOW the
+   Digital Tuition Sir sidebar (z-index:150, a sibling outside this
+   container), since 1 < 150 at the top level regardless of what a
+   descendant modal's own z-index said. 200 clears that. */
 .app-container {
     max-width: 820px;
     margin: 0 auto;
     position: relative;
-    z-index: 1;
+    z-index: 200;
 }
 
 /* ========================================
