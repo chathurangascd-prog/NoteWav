@@ -4787,29 +4787,53 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const c = data.course;
             document.getElementById('dts-course-detail-title').textContent = `${c.subject} — Grade ${c.grade}`;
-            const previewLessons = data.lessons.slice(0, 5);
-            const lessonsHtml = previewLessons.map(l =>
-                `<div class="dts-lesson-list-item"><span class="dts-day-badge">${l.day_number}</span> ${dtsEscapeHtml(l.title)}</div>`
-            ).join('') + (data.lessons.length > 5
-                ? `<p style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;">+ තවත් lessons ${data.lessons.length - 5}ක්...</p>`
-                : '');
-            body.innerHTML = `
-                <p style="color:var(--text-secondary);font-size:0.88rem;margin:0 0 4px;">${c.exam_target ? dtsEscapeHtml(c.exam_target) : ''}</p>
-                <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 16px;">${data.lessons.length} lessons</p>
-                ${lessonsHtml}
-                <button id="dts-enroll-btn" class="btn-primary" style="margin-top:18px;">
-                    ${data.enrolled ? '✅ දැනටමත් Enroll වෙලා — දිගටම කරමු' : 'Enroll වෙන්න'}
-                </button>
-            `;
-            document.getElementById('dts-enroll-btn').addEventListener('click', function() {
-                if (data.enrolled) {
-                    backdrop.classList.add('hidden');
-                    document.getElementById('dts-courses-modal-backdrop').classList.add('hidden');
-                    goToCourseLesson(c.id);
-                } else {
+
+            if (data.enrolled) {
+                // Full, interactive lesson list — replay anything already
+                // completed, jump into the current one, locked lessons
+                // shown but not clickable (mirrors the server-side check
+                // in /lessons/<id>/content, this is just the UI reflection
+                // of it).
+                const lessonsHtml = data.lessons.map(l => {
+                    if (l.unlocked) {
+                        const icon = l.completed ? '✅' : '▶️';
+                        return `<button type="button" class="dts-lesson-list-item dts-lesson-list-item-clickable" data-lesson-id="${l.id}" style="width:100%; text-align:left; border:none; cursor:pointer; font-family:inherit;">
+                            <span class="dts-day-badge">${l.day_number}</span> ${icon} ${dtsEscapeHtml(l.title)}
+                        </button>`;
+                    }
+                    return `<div class="dts-lesson-list-item" style="opacity:0.5;">
+                        <span class="dts-day-badge">${l.day_number}</span> 🔒 ${dtsEscapeHtml(l.title)}
+                    </div>`;
+                }).join('');
+                body.innerHTML = `
+                    <p style="color:var(--text-secondary);font-size:0.88rem;margin:0 0 4px;">${c.exam_target ? dtsEscapeHtml(c.exam_target) : ''}</p>
+                    <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 16px;">${data.lessons.length} lessons — ඉවර කරපු ඕනෑම lesson එකක් ආපහු listen කරන්න පුළුවන්</p>
+                    ${lessonsHtml}
+                `;
+                body.querySelectorAll('.dts-lesson-list-item-clickable').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        backdrop.classList.add('hidden');
+                        document.getElementById('dts-courses-modal-backdrop').classList.add('hidden');
+                        openDtsLesson(parseInt(this.dataset.lessonId, 10));
+                    });
+                });
+            } else {
+                const previewLessons = data.lessons.slice(0, 5);
+                const lessonsHtml = previewLessons.map(l =>
+                    `<div class="dts-lesson-list-item"><span class="dts-day-badge">${l.day_number}</span> ${dtsEscapeHtml(l.title)}</div>`
+                ).join('') + (data.lessons.length > 5
+                    ? `<p style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;">+ තවත් lessons ${data.lessons.length - 5}ක්...</p>`
+                    : '');
+                body.innerHTML = `
+                    <p style="color:var(--text-secondary);font-size:0.88rem;margin:0 0 4px;">${c.exam_target ? dtsEscapeHtml(c.exam_target) : ''}</p>
+                    <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 16px;">${data.lessons.length} lessons</p>
+                    ${lessonsHtml}
+                    <button id="dts-enroll-btn" class="btn-primary" style="margin-top:18px;">Enroll වෙන්න</button>
+                `;
+                document.getElementById('dts-enroll-btn').addEventListener('click', function() {
                     enrollDtsCourse(c.id);
-                }
-            });
+                });
+            }
         } catch (e) {
             body.innerHTML = '<p class="mindmap-empty">Load කරගන්න බැරි උනා.</p>';
         }

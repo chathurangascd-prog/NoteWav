@@ -3839,6 +3839,7 @@ def student_course_detail(course_id):
     ).fetchall()
 
     enrolled = False
+    completed_ids = set()
     user_id = session.get('user_id')
     if user_id:
         enrollment = conn.execute(
@@ -3846,12 +3847,34 @@ def student_course_detail(course_id):
             (user_id, course_id)
         ).fetchone()
         enrolled = enrollment is not None
+        if enrolled:
+            completed_ids = {
+                r['lesson_id'] for r in conn.execute(
+                    """SELECT lesson_id FROM user_lesson_progress
+                       WHERE user_google_id = ? AND lesson_id IN (SELECT id FROM course_lessons WHERE course_id = ?)""",
+                    (user_id, course_id)
+                ).fetchall()
+            }
     conn.close()
+
+    # "unlocked" = already completed, OR the next lesson in line after
+    # the furthest completed one — lets a student replay anything
+    # they've already reached, without letting them skip ahead to
+    # content they haven't earned yet.
+    lessons_out = []
+    unlocked_so_far = True
+    for l in lessons:
+        l = dict(l)
+        l['completed'] = l['id'] in completed_ids
+        l['unlocked'] = enrolled and unlocked_so_far
+        if not l['completed']:
+            unlocked_so_far = False  # next lesson after this one stays locked until this completes
+        lessons_out.append(l)
 
     return jsonify({
         'status': 'success',
         'course': dict(course),
-        'lessons': [dict(l) for l in lessons],
+        'lessons': lessons_out,
         'enrolled': enrolled,
     })
 
@@ -3948,6 +3971,22 @@ def student_lesson_content(lesson_id):
         "SELECT id FROM user_lesson_progress WHERE user_google_id = ? AND lesson_id = ?",
         (user_id, lesson_id)
     ).fetchone() is not None
+
+    # Replaying anything already completed is always fine; skipping
+    # ahead past the first not-yet-completed lesson is not — mirrors
+    # the "unlocked" logic in student_course_detail.
+    if not completed:
+        earlier_incomplete = conn.execute(
+            """SELECT cl.id FROM course_lessons cl
+               WHERE cl.course_id = ? AND cl.status = 'published' AND cl.day_number < ?
+                 AND cl.id NOT IN (SELECT lesson_id FROM user_lesson_progress WHERE user_google_id = ?)
+               LIMIT 1""",
+            (lesson['course_id'], lesson['day_number'], user_id)
+        ).fetchone()
+        if earlier_incomplete:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'මේ lesson එකට යන්න කලින් lessons ඉවර කරන්න ඕන.'}), 403
+
     conn.close()
 
     is_manual = lesson['active_audio_source'] == 'manual'
