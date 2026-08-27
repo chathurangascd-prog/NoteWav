@@ -63,8 +63,14 @@
    this single block covers the vast majority of surfaces. A few
    hardcoded-color exceptions (badge, splash screen) get their own
    targeted overrides below.
+
+   Also applied to body.page-tuition (the Digital Tuition Sir home
+   page) UNCONDITIONALLY, regardless of the user's saved dark/light
+   preference — that page is meant to always read white/orange
+   branded, like the reference the user gave. The dark/light toggle
+   still applies normally on the /notewav tool page.
    ======================================== */
-body.light-theme {
+body.light-theme, body.page-tuition {
     color-scheme: light;
     --bg-primary: #f6f5fb;
     --bg-secondary: #ffffff;
@@ -92,7 +98,7 @@ body.light-theme .badge {
 /* The faint dot-pattern overlay is barely visible either way (very low
    opacity), dim it slightly further so it doesn't read as "dirty"
    against a light background. */
-body.light-theme::after {
+body.light-theme::after, body.page-tuition::after {
     opacity: 0.3;
 }
 
