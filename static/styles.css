@@ -1720,12 +1720,12 @@ textarea:hover {
 .dts-home-portal-badge i { font-size: 0.5rem; }
 
 .dts-home-greeting {
-    font-family: 'Fraunces', serif;
-    font-size: 1.65rem;
-    font-weight: 900;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
     color: #fff;
     margin: 0 0 4px;
-    letter-spacing: -0.4px;
+    letter-spacing: -0.2px;
 }
 
 .dts-home-subgreeting {
@@ -2104,9 +2104,9 @@ textarea:hover {
         display: flex;
         align-items: center;
         gap: 9px;
-        font-family: 'Fraunces', serif;
-        font-size: 0.95rem;
-        font-weight: 900;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 0.9rem;
+        font-weight: 700;
         margin-bottom: 42px;
     }
 
@@ -2203,12 +2203,11 @@ textarea:hover {
 }
 
 .dts-auth-title {
-    font-family: 'Fraunces', serif;
-    font-size: 1.35rem;
-    font-weight: 900;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
     color: #2b1c10;
     margin-bottom: 4px;
-    letter-spacing: -0.2px;
 }
 
 .dts-auth-subtitle {
