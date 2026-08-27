@@ -391,6 +391,15 @@ def init_db():
             UNIQUE(course_id, day_number)
         )
     """)
+    # Sentence-level timings for the student player's word-by-word
+    # highlight (same feature the quick-note flow already has) — only
+    # meaningful for ai_audio_url (TTS knows its own timing); a manual
+    # upload has no timing data, so this stays NULL for those and the
+    # player falls back to plain (unhighlighted) text.
+    try:
+        conn.execute("ALTER TABLE course_lessons ADD COLUMN ai_audio_timings TEXT")
+    except Exception:
+        pass  # column already exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS user_course_enrollments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2015,27 +2024,29 @@ def generate_lesson_audio(script_text):
     2.5 (already Gemini's own internal fallback inside
     synthesize_gemini_tts) -> OpenAI 2.1 -> gTTS. A lesson's audio
     should never be blocked entirely by one provider being down.
-    Returns (audio_segment, engine_used)."""
+    Returns (audio_segment, engine_used, sentence_timings) — timings
+    power the student player's word-by-word highlight (same feature
+    the quick-note flow already has)."""
     formatted = format_for_podcast(script_text)
     lang = detect_language(formatted)
     gtts_lang = {'Sinhala': 'si', 'Tamil': 'ta', 'English': 'en'}.get(lang, 'si')
 
     if client:
         try:
-            audio_segment, _, actual_model_used = synthesize_gemini_tts(formatted, lang=gtts_lang, model_version='v31')
-            return audio_segment, f'gemini-{actual_model_used}'
+            audio_segment, timings, actual_model_used = synthesize_gemini_tts(formatted, lang=gtts_lang, model_version='v31')
+            return audio_segment, f'gemini-{actual_model_used}', timings
         except Exception as e:
             print(f"⚠️ Lesson audio: Gemini TTS unavailable, trying OpenAI: {e}")
 
     if openai_client:
         try:
-            audio_segment, _ = synthesize_openai_tts(formatted, voice_name='nova')
-            return audio_segment, 'openai-v21'
+            audio_segment, timings = synthesize_openai_tts(formatted, voice_name='nova')
+            return audio_segment, 'openai-v21', timings
         except Exception as e:
             print(f"⚠️ Lesson audio: OpenAI TTS unavailable, falling back to gTTS: {e}")
 
-    audio_segment, _ = synthesize_gtts_natural(formatted, lang=gtts_lang)
-    return audio_segment, 'gtts'
+    audio_segment, timings = synthesize_gtts_natural(formatted, lang=gtts_lang)
+    return audio_segment, 'gtts', timings
 
 
 def _ocr_pdf_pages_to_text(pdf_bytes, start_page=0, max_pages=80):
@@ -3791,6 +3802,205 @@ def announcements_latest():
 
 
 # ========================================
+# DIGITAL TUITION SIR — student-facing course routes
+# ========================================
+
+@app.route('/courses/list', methods=['GET'])
+def student_list_courses():
+    """Public — browsable without logging in (matches the free note
+    flow's own no-login-required browsing), only login-gated at
+    Enroll. Only published courses; lesson_count only counts published
+    lessons so a course with lessons still mid-authoring doesn't show
+    an inflated/misleading count to students."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT c.id, c.grade, c.subject, c.title, c.exam_target, c.price_lkr, c.free_trial_days,
+               COUNT(l.id) AS lesson_count
+        FROM courses c
+        LEFT JOIN course_lessons l ON l.course_id = c.id AND l.status = 'published'
+        WHERE c.status = 'published'
+        GROUP BY c.id
+        ORDER BY c.grade, c.subject
+    """).fetchall()
+    conn.close()
+    return jsonify({'status': 'success', 'courses': [dict(r) for r in rows]})
+
+
+@app.route('/courses/<int:course_id>', methods=['GET'])
+def student_course_detail(course_id):
+    conn = get_db()
+    course = conn.execute("SELECT * FROM courses WHERE id = ? AND status = 'published'", (course_id,)).fetchone()
+    if not course:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Course එක හම්බුනේ නෑ.'}), 404
+    lessons = conn.execute(
+        "SELECT id, day_number, title FROM course_lessons WHERE course_id = ? AND status = 'published' ORDER BY day_number ASC",
+        (course_id,)
+    ).fetchall()
+
+    enrolled = False
+    user_id = session.get('user_id')
+    if user_id:
+        enrollment = conn.execute(
+            "SELECT id FROM user_course_enrollments WHERE user_google_id = ? AND course_id = ?",
+            (user_id, course_id)
+        ).fetchone()
+        enrolled = enrollment is not None
+    conn.close()
+
+    return jsonify({
+        'status': 'success',
+        'course': dict(course),
+        'lessons': [dict(l) for l in lessons],
+        'enrolled': enrolled,
+    })
+
+
+@app.route('/courses/<int:course_id>/enroll', methods=['POST'])
+def student_enroll_course(course_id):
+    if not session.get('user_id'):
+        return jsonify({'status': 'error', 'message': 'Enroll වෙන්න Google account එකකින් login වෙන්න ඕන.', 'login_required': True}), 401
+
+    conn = get_db()
+    course = conn.execute("SELECT id FROM courses WHERE id = ? AND status = 'published'", (course_id,)).fetchone()
+    if not course:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Course එක හම්බුනේ නෑ.'}), 404
+
+    conn.execute(
+        """INSERT INTO user_course_enrollments (user_google_id, course_id, enrolled_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(user_google_id, course_id) DO NOTHING""",
+        (session['user_id'], course_id, datetime.now(timezone.utc).isoformat())
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/my-learning', methods=['GET'])
+def student_my_learning():
+    """For each course the student is enrolled in: the course info plus
+    their 'current' lesson — the first published lesson (by day_number)
+    they haven't completed yet, or None if they've finished every
+    published lesson so far (more may get published later)."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'success', 'courses': []})
+
+    conn = get_db()
+    enrollments = conn.execute(
+        """SELECT c.* FROM user_course_enrollments e
+           JOIN courses c ON c.id = e.course_id
+           WHERE e.user_google_id = ?
+           ORDER BY e.enrolled_at DESC""",
+        (user_id,)
+    ).fetchall()
+
+    result = []
+    for course in enrollments:
+        course = dict(course)
+        lessons = conn.execute(
+            "SELECT id, day_number, title FROM course_lessons WHERE course_id = ? AND status = 'published' ORDER BY day_number ASC",
+            (course['id'],)
+        ).fetchall()
+        completed_ids = {
+            r['lesson_id'] for r in conn.execute(
+                """SELECT lesson_id FROM user_lesson_progress
+                   WHERE user_google_id = ? AND lesson_id IN (SELECT id FROM course_lessons WHERE course_id = ?)""",
+                (user_id, course['id'])
+            ).fetchall()
+        }
+        current_lesson = next((dict(l) for l in lessons if l['id'] not in completed_ids), None)
+        result.append({
+            'course': course,
+            'total_lessons': len(lessons),
+            'completed_lessons': len(completed_ids),
+            'current_lesson': current_lesson,
+        })
+    conn.close()
+    return jsonify({'status': 'success', 'courses': result})
+
+
+@app.route('/lessons/<int:lesson_id>/content', methods=['GET'])
+def student_lesson_content(lesson_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'Login වෙන්න ඕන.', 'login_required': True}), 401
+
+    conn = get_db()
+    lesson = conn.execute("SELECT * FROM course_lessons WHERE id = ? AND status = 'published'", (lesson_id,)).fetchone()
+    if not lesson:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Lesson එක හම්බුනේ නෑ.'}), 404
+    lesson = dict(lesson)
+
+    enrollment = conn.execute(
+        "SELECT id FROM user_course_enrollments WHERE user_google_id = ? AND course_id = ?",
+        (user_id, lesson['course_id'])
+    ).fetchone()
+    if not enrollment:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'මේ course එකට enroll වෙලා නෑ.', 'enroll_required': True}), 403
+
+    course = conn.execute("SELECT * FROM courses WHERE id = ?", (lesson['course_id'],)).fetchone()
+    completed = conn.execute(
+        "SELECT id FROM user_lesson_progress WHERE user_google_id = ? AND lesson_id = ?",
+        (user_id, lesson_id)
+    ).fetchone() is not None
+    conn.close()
+
+    is_manual = lesson['active_audio_source'] == 'manual'
+    audio_url = lesson['manual_audio_url'] if is_manual else lesson['ai_audio_url']
+    # A manual recording has no per-sentence timing data (nothing
+    # generated it) — the player falls back to plain, unhighlighted
+    # text for those, same as the quick-note flow does when timings
+    # are missing.
+    sentence_timings = None if is_manual else json.loads(lesson['ai_audio_timings'] or 'null')
+    return jsonify({
+        'status': 'success',
+        'lesson': {
+            'id': lesson['id'], 'day_number': lesson['day_number'], 'title': lesson['title'],
+            'script_text': lesson['script_text'], 'mermaid_code_si': lesson['mermaid_code_si'],
+            'mermaid_code_en': lesson['mermaid_code_en'], 'audio_url': audio_url,
+            'sentence_timings': sentence_timings,
+            'completed': completed,
+        },
+        'course': dict(course),
+    })
+
+
+@app.route('/lessons/<int:lesson_id>/complete', methods=['POST'])
+def student_complete_lesson(lesson_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'Login වෙන්න ඕන.'}), 401
+
+    conn = get_db()
+    lesson = conn.execute("SELECT * FROM course_lessons WHERE id = ?", (lesson_id,)).fetchone()
+    if not lesson:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Lesson එක හම්බුනේ නෑ.'}), 404
+
+    conn.execute(
+        """INSERT INTO user_lesson_progress (user_google_id, lesson_id, completed_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(user_google_id, lesson_id) DO NOTHING""",
+        (user_id, lesson_id, datetime.now(timezone.utc).isoformat())
+    )
+    conn.commit()
+
+    next_lesson = conn.execute(
+        """SELECT id, day_number, title FROM course_lessons
+           WHERE course_id = ? AND status = 'published' AND day_number > ?
+           ORDER BY day_number ASC LIMIT 1""",
+        (lesson['course_id'], lesson['day_number'])
+    ).fetchone()
+    conn.close()
+    return jsonify({'status': 'success', 'next_lesson': dict(next_lesson) if next_lesson else None})
+
+
+# ========================================
 # DIGITAL TUITION SIR — admin course management
 # ========================================
 
@@ -4140,7 +4350,7 @@ def admin_generate_lesson_audio(lesson_id):
         return jsonify({'status': 'error', 'message': 'මුලින්ම script එක generate කරන්න ඕන.'}), 400
 
     try:
-        audio_segment, engine_used = generate_lesson_audio(lesson['script_text'])
+        audio_segment, engine_used, sentence_timings = generate_lesson_audio(lesson['script_text'])
     except Exception as e:
         conn.close()
         return jsonify({'status': 'error', 'message': f'Audio generate කිරීම අසාර්ථක විය: {e}'}), 500
@@ -4154,8 +4364,8 @@ def admin_generate_lesson_audio(lesson_id):
         return jsonify({'status': 'error', 'message': f'Audio upload අසාර්ථක විය: {e}'}), 500
 
     conn.execute(
-        "UPDATE course_lessons SET ai_audio_url = ?, ai_audio_engine = ? WHERE id = ?",
-        (audio_url, engine_used, lesson_id)
+        "UPDATE course_lessons SET ai_audio_url = ?, ai_audio_engine = ?, ai_audio_timings = ? WHERE id = ?",
+        (audio_url, engine_used, json.dumps(sentence_timings, ensure_ascii=False), lesson_id)
     )
     conn.commit()
     conn.close()
