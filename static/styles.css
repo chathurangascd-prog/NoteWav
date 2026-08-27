@@ -2072,8 +2072,9 @@ textarea:hover {
         display: flex;
         align-items: center;
         gap: 9px;
-        font-size: 0.88rem;
-        font-weight: 800;
+        font-family: 'Fraunces', serif;
+        font-size: 0.92rem;
+        font-weight: 700;
         margin-bottom: 42px;
     }
 
@@ -2170,9 +2171,9 @@ textarea:hover {
 }
 
 .dts-auth-title {
-    font-family: var(--font-display, inherit);
+    font-family: 'Fraunces', serif;
     font-size: 1.3rem;
-    font-weight: 800;
+    font-weight: 700;
     color: #2b1c10;
     margin-bottom: 4px;
 }
