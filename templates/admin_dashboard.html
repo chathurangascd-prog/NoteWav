@@ -689,10 +689,14 @@
             </div>
 
             <div class="section-card">
-                <div class="section-head">
-                    <div class="chip">📖</div>
-                    <h2 class="section-title">Lessons</h2>
+                <div class="section-head" style="justify-content:space-between;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div class="chip">📖</div>
+                        <h2 class="section-title">Lessons</h2>
+                    </div>
+                    <button id="generate-all-scripts-btn" style="padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit;">✍️ Generate All Scripts</button>
                 </div>
+                <p id="generate-all-scripts-status" style="font-size:0.74rem; color:var(--text-dim); margin:0 0 10px; min-height:1em;"></p>
                 <div id="course-lessons-wrap"></div>
             </div>
         </div>
@@ -1685,6 +1689,7 @@
         let allCourses = [];
         let currentCourseId = null;
         let currentSplitPreview = [];
+        let currentCourseLessons = [];
 
         async function loadCourses() {
             try {
@@ -1972,6 +1977,7 @@
         }
 
         function renderCourseLessons(lessons) {
+            currentCourseLessons = lessons;
             if (!lessons.length) {
                 document.getElementById('course-lessons-wrap').innerHTML = '<div class="empty-state">Lessons නෑ තවම — PDF එකක් upload කරලා split කරන්න.</div>';
                 return;
@@ -1991,6 +1997,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">
                         <button onclick="generateLessonScript(${l.id}, this)" style="padding:7px 12px; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.74rem; font-weight:600; cursor:pointer; font-family:inherit;">${l.script_text ? '🔄 Regenerate Script' : '✍️ Generate Script'}</button>
                         ${l.script_text ? `<button onclick="viewLessonScript(${l.id})" style="padding:7px 12px; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.74rem; font-weight:600; cursor:pointer; font-family:inherit;">👁️ View Script</button>` : ''}
+                        ${l.script_text ? `<button onclick="copyLessonScript(${l.id}, this)" style="padding:7px 12px; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.74rem; font-weight:600; cursor:pointer; font-family:inherit;">📋 Copy Script</button>` : ''}
                         <button onclick="generateLessonAudio(${l.id}, this)" ${l.script_text ? '' : 'disabled title="Generate script first"'} style="padding:7px 12px; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); color:${l.script_text ? 'var(--text)' : 'var(--text-faint)'}; font-size:0.74rem; font-weight:600; cursor:${l.script_text ? 'pointer' : 'not-allowed'}; font-family:inherit;">🤖 Generate AI Audio</button>
                         <label style="padding:7px 12px; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:0.74rem; font-weight:600; cursor:pointer; font-family:inherit;">
                             🎙️ Upload Audio
@@ -2030,6 +2037,48 @@
                 document.getElementById('lesson-modal').classList.add('open');
             });
         }
+
+        async function copyLessonScript(lessonId, btn) {
+            const lesson = currentCourseLessons.find(l => l.id === lessonId);
+            if (!lesson || !lesson.script_text) return;
+            try {
+                await navigator.clipboard.writeText(lesson.script_text);
+                const original = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => { btn.textContent = original; }, 1500);
+            } catch (e) {
+                alert('Copy failed — clipboard access blocked. Select the text in "View Script" instead.');
+            }
+        }
+
+        document.getElementById('generate-all-scripts-btn').addEventListener('click', async function() {
+            const btn = this;
+            const statusEl = document.getElementById('generate-all-scripts-status');
+            const pending = currentCourseLessons.filter(l => !l.script_text);
+            if (!pending.length) {
+                statusEl.textContent = 'ලියලා ඉවර නැති scripts නෑ — lessons ම already script සහිතයි.';
+                return;
+            }
+            if (!confirm(`Script නැති lessons ${pending.length}ක් තියෙනවා. හැම එකකටම AI script එකක් generate කරන්නද? (ලෙසියෙන්ම විනාඩි ගණනක් යන්න පුළුවන් — tab එක open තියාගන්න.)`)) return;
+
+            btn.disabled = true;
+            let done = 0, failed = 0;
+            for (const lesson of pending) {
+                btn.textContent = `Generating ${done + failed}/${pending.length}...`;
+                statusEl.textContent = `Day ${lesson.day_number} ("${lesson.title}") script එක generate කරමින්... (${done + failed}/${pending.length})`;
+                try {
+                    const res = await fetch(`/admin/lessons/${lesson.id}/generate-script`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'success') done++; else failed++;
+                } catch (e) {
+                    failed++;
+                }
+            }
+            btn.disabled = false;
+            btn.textContent = '✍️ Generate All Scripts';
+            statusEl.textContent = `✅ ${done} scripts generated${failed ? `, ❌ ${failed} failed (try those individually)` : ''}.`;
+            loadCourseLessons();
+        });
 
         async function generateLessonAudio(lessonId, btn) {
             btn.disabled = true;
