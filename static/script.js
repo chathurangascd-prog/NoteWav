@@ -3630,12 +3630,12 @@ function applyTheme(theme) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    let savedTheme = 'dark';
+    let savedTheme = 'light';
     try {
         const stored = localStorage.getItem('notewav_theme');
         if (stored === 'light' || stored === 'dark') savedTheme = stored;
     } catch (e) {
-        // ignore, default to dark
+        // ignore, default to light
     }
     applyTheme(savedTheme);
 
