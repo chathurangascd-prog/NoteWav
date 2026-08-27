@@ -509,6 +509,30 @@
 
         <main class="app-main">
 
+            <!-- ===== DIGITAL TUITION SIR — hero entry point ===== -->
+            <div id="dts-continue-card" class="glass-card animate-fade dts-hero hidden">
+                <span class="dts-hero-badge"><i class="fas fa-graduation-cap"></i> DIGITAL TUITION SIR</span>
+                <h3 id="dts-continue-title" class="dts-hero-title"></h3>
+                <p id="dts-continue-subtitle" class="dts-hero-subtitle"></p>
+                <div class="dts-hero-progress-track"><div id="dts-continue-progress-fill" class="dts-hero-progress-fill"></div></div>
+                <p id="dts-continue-progress-label" class="dts-hero-progress-label"></p>
+                <button id="dts-continue-btn" class="btn-primary">
+                    <span id="dts-continue-btn-text">පාඩම දිගටම කරමු</span> <i class="fas fa-arrow-right"></i>
+                </button>
+                <button id="dts-browse-more-btn" class="dts-hero-link">වෙනත් විෂයයක් එකතු කරන්න</button>
+            </div>
+
+            <div id="dts-explore-card" class="glass-card animate-fade dts-hero hidden">
+                <span class="dts-hero-badge"><i class="fas fa-graduation-cap"></i> DIGITAL TUITION SIR</span>
+                <h3 class="dts-hero-title">ඔබේ Digital Tuition Sir එක සකසමු</h3>
+                <p class="dts-hero-subtitle">Grade එක සහ Subject එක තෝරලා, දිනපතා exam-focused පාඩම් ලබාගන්න</p>
+                <button id="dts-explore-btn" class="btn-primary">
+                    Course එකක් තෝරමු <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <div class="dts-or-divider hidden" id="dts-or-divider"><span>නැත්නම්</span></div>
+
             <div class="glass-card animate-fade card-step-1">
                 <div class="card-header">
                     <span class="step-num">01</span>
@@ -758,6 +782,83 @@
                     </div>
                     <div id="library-modal-body" class="library-modal-body">
                         <p class="mindmap-empty">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== DIGITAL TUITION SIR — course picker modal ===== -->
+            <div id="dts-courses-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Choose a course">
+                <div class="mindmap-modal-card library-modal-card">
+                    <div class="mindmap-modal-header">
+                        <h3><i class="fas fa-graduation-cap"></i> Course එකක් තෝරන්න</h3>
+                        <button id="dts-courses-modal-close" class="mindmap-modal-close" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="dts-grade-tabs" class="dts-grade-tabs"></div>
+                    <div id="dts-courses-list-body" class="library-modal-body">
+                        <p class="mindmap-empty">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== DIGITAL TUITION SIR — course detail + enroll modal ===== -->
+            <div id="dts-course-detail-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Course details">
+                <div class="mindmap-modal-card">
+                    <div class="mindmap-modal-header">
+                        <h3 id="dts-course-detail-title">Course</h3>
+                        <button id="dts-course-detail-modal-close" class="mindmap-modal-close" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="dts-course-detail-body" class="library-modal-body"></div>
+                </div>
+            </div>
+
+            <!-- ===== DIGITAL TUITION SIR — lesson player modal ===== -->
+            <div id="dts-lesson-modal-backdrop" class="mindmap-modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Lesson">
+                <div class="mindmap-modal-card library-modal-card">
+                    <div class="mindmap-modal-header">
+                        <h3 id="dts-lesson-title">Lesson</h3>
+                        <button id="dts-lesson-modal-close" class="mindmap-modal-close" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="library-modal-body" style="padding: 20px 24px;">
+                        <p id="dts-lesson-audio-warning" class="hidden" style="font-size: 0.8rem; color: var(--text-muted); margin: 0 0 14px; line-height: 1.5;">
+                            🎙️ මේ lesson එකට තවම audio එකක් නෑ — script එක කියවලා ඉගෙන ගන්න.
+                        </p>
+                        <audio id="dts-lesson-audio" style="display:none;"></audio>
+                        <div id="dts-lesson-player-container" class="player-container hidden">
+                            <div class="player-primary-controls">
+                                <button id="dts-skip-back-btn" class="control-btn-icon" aria-label="10 seconds ආපහු">
+                                    <i class="fas fa-rotate-left"></i><span class="skip-btn-label">10</span>
+                                </button>
+                                <button id="dts-play-pause-btn" class="control-btn-circular" aria-label="Play">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button id="dts-skip-forward-btn" class="control-btn-icon" aria-label="10 seconds ඉදිරියට">
+                                    <i class="fas fa-rotate-right"></i><span class="skip-btn-label">10</span>
+                                </button>
+                            </div>
+                            <div class="player-progress">
+                                <span id="dts-current-time">0:00</span>
+                                <div class="progress-bar" id="dts-progress-bar" tabindex="0" role="slider" aria-label="Playback position">
+                                    <div id="dts-progress-fill" class="progress-fill"></div>
+                                </div>
+                                <span id="dts-total-time">0:00</span>
+                            </div>
+                        </div>
+                        <div class="lyrics-container" style="margin-top: 16px;">
+                            <p id="dts-highlight-text-container"></p>
+                        </div>
+                        <button id="dts-view-mindmap-btn" class="btn-secondary" style="margin-top: 14px;">
+                            <i class="fas fa-diagram-project"></i> Mind Map එක බලන්න
+                        </button>
+                        <div id="dts-mindmap-wrap" class="hidden" style="margin-top: 12px; background: var(--bg-input); border-radius: var(--radius-md); padding: 12px; overflow:auto; max-height: 300px;"></div>
+                        <button id="dts-complete-lesson-btn" class="btn-primary" style="margin-top: 18px;">
+                            <span id="dts-complete-btn-text">✅ Lesson එක ඉවර, ඊළඟට යමු</span> <i class="fas fa-arrow-right"></i>
+                        </button>
                     </div>
                 </div>
             </div>

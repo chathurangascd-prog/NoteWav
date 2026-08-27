@@ -4609,3 +4609,516 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     window.addEventListener('focus', checkForAnnouncement);
 });
+
+// ========================================
+// DIGITAL TUITION SIR — student-facing course flow
+// Deliberately its own DOMContentLoaded block (a pattern already used
+// several times in this file) with its own namespaced (dts*) state,
+// rather than reaching into the huge note-processing closure above —
+// keeps this feature fully isolated from that flow's own audio
+// player/mind-map state so the two can never interfere with each other.
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+
+    function dtsFormatTime(seconds) {
+        if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function dtsEscapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function dtsShowLoginRequired() {
+        const loginModal = document.getElementById('login-required-modal-backdrop');
+        if (loginModal) loginModal.classList.remove('hidden');
+    }
+
+    // ---------------------------------------------------------------
+    // Home hero — "Continue Lesson" or "Explore Courses"
+    // ---------------------------------------------------------------
+    async function loadDtsHome() {
+        const continueCard = document.getElementById('dts-continue-card');
+        const exploreCard = document.getElementById('dts-explore-card');
+        const orDivider = document.getElementById('dts-or-divider');
+        if (!continueCard || !exploreCard) return;
+
+        try {
+            const res = await fetch('/my-learning');
+            const data = await res.json();
+            const withCurrentLesson = (data.courses || []).find(c => c.current_lesson);
+
+            if (withCurrentLesson) {
+                const c = withCurrentLesson.course;
+                const lesson = withCurrentLesson.current_lesson;
+                document.getElementById('dts-continue-title').textContent = `${c.subject} — Day ${lesson.day_number}`;
+                document.getElementById('dts-continue-subtitle').textContent = lesson.title;
+                const pct = withCurrentLesson.total_lessons
+                    ? Math.round((withCurrentLesson.completed_lessons / withCurrentLesson.total_lessons) * 100)
+                    : 0;
+                document.getElementById('dts-continue-progress-fill').style.width = pct + '%';
+                document.getElementById('dts-continue-progress-label').textContent =
+                    `Day ${lesson.day_number} / ${withCurrentLesson.total_lessons}${c.exam_target ? ' · ' + c.exam_target : ''}`;
+                continueCard.dataset.lessonId = lesson.id;
+                continueCard.classList.remove('hidden');
+                exploreCard.classList.add('hidden');
+            } else {
+                continueCard.classList.add('hidden');
+                exploreCard.classList.remove('hidden');
+            }
+            if (orDivider) orDivider.classList.remove('hidden');
+        } catch (e) {
+            // Silent — the free note flow below still works fine even
+            // if this hero fails to load (e.g. offline first paint).
+        }
+    }
+
+    const dtsContinueBtn = document.getElementById('dts-continue-btn');
+    if (dtsContinueBtn) {
+        dtsContinueBtn.addEventListener('click', function() {
+            const lessonId = document.getElementById('dts-continue-card').dataset.lessonId;
+            if (lessonId) openDtsLesson(parseInt(lessonId, 10));
+        });
+    }
+    const dtsExploreBtn = document.getElementById('dts-explore-btn');
+    const dtsBrowseMoreBtn = document.getElementById('dts-browse-more-btn');
+    if (dtsExploreBtn) dtsExploreBtn.addEventListener('click', openDtsCoursesModal);
+    if (dtsBrowseMoreBtn) dtsBrowseMoreBtn.addEventListener('click', openDtsCoursesModal);
+
+    // ---------------------------------------------------------------
+    // Course picker modal — grade tabs + subject grid
+    // ---------------------------------------------------------------
+    let dtsAllCourses = [];
+    let dtsSelectedGrade = null;
+
+    async function openDtsCoursesModal() {
+        const backdrop = document.getElementById('dts-courses-modal-backdrop');
+        if (!backdrop) return;
+        backdrop.classList.remove('hidden');
+        const body = document.getElementById('dts-courses-list-body');
+        body.innerHTML = '<p class="mindmap-empty">Loading...</p>';
+        try {
+            const res = await fetch('/courses/list');
+            const data = await res.json();
+            dtsAllCourses = data.courses || [];
+            const grades = [...new Set(dtsAllCourses.map(c => c.grade))];
+            if (!grades.length) {
+                body.innerHTML = '<p class="mindmap-empty">Courses තවම නෑ — ඉක්මනින් එකතු වේවි!</p>';
+                document.getElementById('dts-grade-tabs').innerHTML = '';
+                return;
+            }
+            dtsSelectedGrade = (dtsSelectedGrade && grades.includes(dtsSelectedGrade)) ? dtsSelectedGrade : grades[0];
+            dtsRenderGradeTabs(grades);
+            dtsRenderSubjectGrid();
+        } catch (e) {
+            body.innerHTML = '<p class="mindmap-empty">Courses load කරගන්න බැරි උනා.</p>';
+        }
+    }
+
+    function dtsRenderGradeTabs(grades) {
+        const wrap = document.getElementById('dts-grade-tabs');
+        wrap.innerHTML = grades.map(g =>
+            `<button type="button" class="dts-grade-tab${g === dtsSelectedGrade ? ' active' : ''}" data-grade="${dtsEscapeHtml(g)}">Grade ${dtsEscapeHtml(g)}</button>`
+        ).join('');
+        wrap.querySelectorAll('.dts-grade-tab').forEach(btn => {
+            btn.addEventListener('click', function() {
+                dtsSelectedGrade = this.dataset.grade;
+                dtsRenderGradeTabs(grades);
+                dtsRenderSubjectGrid();
+            });
+        });
+    }
+
+    function dtsRenderSubjectGrid() {
+        const body = document.getElementById('dts-courses-list-body');
+        const filtered = dtsAllCourses.filter(c => c.grade === dtsSelectedGrade);
+        if (!filtered.length) {
+            body.innerHTML = '<p class="mindmap-empty">මේ Grade එකට courses තවම නෑ.</p>';
+            return;
+        }
+        body.innerHTML = `<div class="dts-subject-grid">${filtered.map(c => {
+            const priceLabel = c.price_lkr ? `Rs ${c.price_lkr}/මාසෙට` : (c.free_trial_days ? `Free Trial · Day ${c.free_trial_days}` : 'Free');
+            return `
+            <button type="button" class="dts-subject-card" data-course-id="${c.id}">
+                <div class="dts-subject-card-title">${dtsEscapeHtml(c.subject)}</div>
+                <div class="dts-subject-card-meta">${c.lesson_count} lessons${c.exam_target ? ' · ' + dtsEscapeHtml(c.exam_target) : ''}</div>
+                <span class="dts-subject-card-price${!c.price_lkr ? ' free' : ''}">${priceLabel}</span>
+            </button>`;
+        }).join('')}</div>`;
+        body.querySelectorAll('.dts-subject-card').forEach(card => {
+            card.addEventListener('click', function() {
+                openDtsCourseDetail(parseInt(this.dataset.courseId, 10));
+            });
+        });
+    }
+
+    const dtsCoursesModalClose = document.getElementById('dts-courses-modal-close');
+    if (dtsCoursesModalClose) {
+        dtsCoursesModalClose.addEventListener('click', function() {
+            document.getElementById('dts-courses-modal-backdrop').classList.add('hidden');
+        });
+    }
+    const dtsCoursesModalBackdrop = document.getElementById('dts-courses-modal-backdrop');
+    if (dtsCoursesModalBackdrop) {
+        dtsCoursesModalBackdrop.addEventListener('click', function(e) {
+            if (e.target === this) this.classList.add('hidden');
+        });
+    }
+
+    // ---------------------------------------------------------------
+    // Course detail modal — lessons preview + enroll
+    // ---------------------------------------------------------------
+    async function openDtsCourseDetail(courseId) {
+        const backdrop = document.getElementById('dts-course-detail-modal-backdrop');
+        const body = document.getElementById('dts-course-detail-body');
+        document.getElementById('dts-course-detail-title').textContent = 'Loading...';
+        body.innerHTML = '<p class="mindmap-empty">Loading...</p>';
+        backdrop.classList.remove('hidden');
+        try {
+            const res = await fetch(`/courses/${courseId}`);
+            const data = await res.json();
+            if (data.status !== 'success') {
+                body.innerHTML = `<p class="mindmap-empty">${dtsEscapeHtml(data.message || 'Failed.')}</p>`;
+                return;
+            }
+            const c = data.course;
+            document.getElementById('dts-course-detail-title').textContent = `${c.subject} — Grade ${c.grade}`;
+            const previewLessons = data.lessons.slice(0, 5);
+            const lessonsHtml = previewLessons.map(l =>
+                `<div class="dts-lesson-list-item"><span class="dts-day-badge">${l.day_number}</span> ${dtsEscapeHtml(l.title)}</div>`
+            ).join('') + (data.lessons.length > 5
+                ? `<p style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;">+ තවත් lessons ${data.lessons.length - 5}ක්...</p>`
+                : '');
+            body.innerHTML = `
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin:0 0 4px;">${c.exam_target ? dtsEscapeHtml(c.exam_target) : ''}</p>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 16px;">${data.lessons.length} lessons</p>
+                ${lessonsHtml}
+                <button id="dts-enroll-btn" class="btn-primary" style="margin-top:18px;">
+                    ${data.enrolled ? '✅ දැනටමත් Enroll වෙලා — දිගටම කරමු' : 'Enroll වෙන්න'}
+                </button>
+            `;
+            document.getElementById('dts-enroll-btn').addEventListener('click', function() {
+                if (data.enrolled) {
+                    backdrop.classList.add('hidden');
+                    document.getElementById('dts-courses-modal-backdrop').classList.add('hidden');
+                    goToCourseLesson(c.id);
+                } else {
+                    enrollDtsCourse(c.id);
+                }
+            });
+        } catch (e) {
+            body.innerHTML = '<p class="mindmap-empty">Load කරගන්න බැරි උනා.</p>';
+        }
+    }
+
+    const dtsCourseDetailModalClose = document.getElementById('dts-course-detail-modal-close');
+    if (dtsCourseDetailModalClose) {
+        dtsCourseDetailModalClose.addEventListener('click', function() {
+            document.getElementById('dts-course-detail-modal-backdrop').classList.add('hidden');
+        });
+    }
+    const dtsCourseDetailModalBackdrop = document.getElementById('dts-course-detail-modal-backdrop');
+    if (dtsCourseDetailModalBackdrop) {
+        dtsCourseDetailModalBackdrop.addEventListener('click', function(e) {
+            if (e.target === this) this.classList.add('hidden');
+        });
+    }
+
+    async function goToCourseLesson(courseId) {
+        try {
+            const res = await fetch('/my-learning');
+            const data = await res.json();
+            const match = (data.courses || []).find(c => c.course.id === courseId);
+            if (match && match.current_lesson) {
+                openDtsLesson(match.current_lesson.id);
+            } else {
+                alert('🎉 මේ course එකේ dawana lessons ම ඉවර කරලා! ඊළඟ lessons ඉක්මනින් එකතු වේවි.');
+            }
+            loadDtsHome();
+        } catch (e) {
+            alert('Load කරගන්න බැරි උනා — network error.');
+        }
+    }
+
+    async function enrollDtsCourse(courseId) {
+        if (typeof notewavIsLoggedIn !== 'undefined' && !notewavIsLoggedIn) {
+            dtsShowLoginRequired();
+            return;
+        }
+        const btn = document.getElementById('dts-enroll-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Enrolling...'; }
+        try {
+            const res = await fetch(`/courses/${courseId}/enroll`, { method: 'POST' });
+            const data = await res.json();
+            if (data.status !== 'success') {
+                if (data.login_required) {
+                    dtsShowLoginRequired();
+                } else {
+                    alert(data.message || 'Enroll වීම අසාර්ථක විය.');
+                }
+                if (btn) { btn.disabled = false; btn.textContent = 'Enroll වෙන්න'; }
+                return;
+            }
+            document.getElementById('dts-course-detail-modal-backdrop').classList.add('hidden');
+            document.getElementById('dts-courses-modal-backdrop').classList.add('hidden');
+            goToCourseLesson(courseId);
+        } catch (e) {
+            alert('Enroll වීම අසාර්ථක විය — network error.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Enroll වෙන්න'; }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Lesson player — own audio element + word-highlight, mirroring
+    // (but never sharing state with) the quick-note flow's player.
+    // ---------------------------------------------------------------
+    let dtsHighlightUnits = [];
+    let dtsIsPlaying = false;
+    let dtsCurrentLessonId = null;
+
+    function dtsSplitTextIntoLines(text) {
+        return text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    }
+
+    function dtsRenderLyrics(text, sentenceTimings) {
+        const container = document.getElementById('dts-highlight-text-container');
+        if (!text) { container.innerHTML = ''; dtsHighlightUnits = []; return; }
+        dtsHighlightUnits = [];
+        if (Array.isArray(sentenceTimings) && sentenceTimings.length > 0) {
+            sentenceTimings.forEach(sentence => {
+                const words = sentence.text.trim().split(/\s+/).filter(Boolean);
+                if (words.length === 0) return;
+                const pairs = [];
+                for (let i = 0; i < words.length; i += 2) pairs.push(words.slice(i, i + 2).join(' '));
+                const duration = sentence.end - sentence.start;
+                const totalChars = pairs.reduce((s, p) => s + p.length, 0) || 1;
+                let cursor = sentence.start;
+                pairs.forEach(p => {
+                    const share = p.length / totalChars;
+                    const d = duration * share;
+                    dtsHighlightUnits.push({ text: p, start: cursor, end: cursor + d });
+                    cursor += d;
+                });
+            });
+        }
+        if (dtsHighlightUnits.length === 0) {
+            const lines = dtsSplitTextIntoLines(text);
+            dtsHighlightUnits = lines.map((line, i) => ({ text: line, start: i, end: i + 1, _isFallback: true }));
+        }
+        container.innerHTML = dtsHighlightUnits.map((u, i) =>
+            `<span class="lyric-line" data-index="${i}">${dtsEscapeHtml(u.text)}</span> `
+        ).join('');
+    }
+
+    function dtsUpdateHighlight(currentTime) {
+        if (!dtsHighlightUnits.length) return;
+        let activeIndex = -1;
+        for (let i = 0; i < dtsHighlightUnits.length; i++) {
+            if (currentTime >= dtsHighlightUnits[i].start && currentTime < dtsHighlightUnits[i].end) { activeIndex = i; break; }
+        }
+        if (activeIndex === -1) {
+            for (let i = dtsHighlightUnits.length - 1; i >= 0; i--) {
+                if (currentTime >= dtsHighlightUnits[i].start) { activeIndex = i; break; }
+            }
+        }
+        if (activeIndex === -1) return;
+        const container = document.getElementById('dts-highlight-text-container');
+        const els = container.querySelectorAll('.lyric-line');
+        els.forEach(el => el.classList.remove('active'));
+        if (els[activeIndex]) {
+            els[activeIndex].classList.add('active');
+            els[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    async function openDtsLesson(lessonId) {
+        const backdrop = document.getElementById('dts-lesson-modal-backdrop');
+        if (!backdrop) return;
+        backdrop.classList.remove('hidden');
+        document.getElementById('dts-lesson-title').textContent = 'Loading...';
+        document.getElementById('dts-highlight-text-container').innerHTML = '';
+        const mindmapWrap = document.getElementById('dts-mindmap-wrap');
+        mindmapWrap.classList.add('hidden');
+        mindmapWrap.innerHTML = '';
+        mindmapWrap.removeAttribute('data-rendered');
+
+        try {
+            const res = await fetch(`/lessons/${lessonId}/content`);
+            const data = await res.json();
+            if (data.status !== 'success') {
+                if (data.login_required) {
+                    backdrop.classList.add('hidden');
+                    dtsShowLoginRequired();
+                    return;
+                }
+                document.getElementById('dts-lesson-title').textContent = 'Error';
+                document.getElementById('dts-highlight-text-container').innerHTML = `<p>${dtsEscapeHtml(data.message || 'Failed.')}</p>`;
+                return;
+            }
+            const lesson = data.lesson;
+            dtsCurrentLessonId = lesson.id;
+            document.getElementById('dts-lesson-title').textContent = `Day ${lesson.day_number}: ${lesson.title}`;
+            document.getElementById('dts-complete-btn-text').textContent = lesson.completed
+                ? '✅ ඊළඟ lesson එකට යමු' : '✅ Lesson එක ඉවර, ඊළඟට යමු';
+
+            const audioEl = document.getElementById('dts-lesson-audio');
+            const playerContainer = document.getElementById('dts-lesson-player-container');
+            const warningEl = document.getElementById('dts-lesson-audio-warning');
+
+            audioEl.pause();
+            audioEl.currentTime = 0;
+            dtsIsPlaying = false;
+            document.getElementById('dts-play-pause-btn').innerHTML = '<i class="fas fa-play"></i>';
+            document.getElementById('dts-current-time').textContent = '0:00';
+            document.getElementById('dts-total-time').textContent = '0:00';
+            document.getElementById('dts-progress-fill').style.width = '0%';
+
+            if (lesson.audio_url) {
+                audioEl.src = lesson.audio_url;
+                playerContainer.classList.remove('hidden');
+                warningEl.classList.add('hidden');
+            } else {
+                audioEl.removeAttribute('src');
+                playerContainer.classList.add('hidden');
+                warningEl.classList.remove('hidden');
+            }
+
+            dtsRenderLyrics(lesson.script_text || '', lesson.sentence_timings);
+
+            const mindmapBtn = document.getElementById('dts-view-mindmap-btn');
+            const hasMindmap = !!(lesson.mermaid_code_si || lesson.mermaid_code_en);
+            mindmapBtn.style.display = hasMindmap ? 'inline-flex' : 'none';
+            mindmapBtn.dataset.mermaidSi = lesson.mermaid_code_si || '';
+        } catch (e) {
+            document.getElementById('dts-lesson-title').textContent = 'Error';
+            document.getElementById('dts-highlight-text-container').innerHTML = '<p>Load කරගන්න බැරි උනා — network error.</p>';
+        }
+    }
+    window.openDtsLesson = openDtsLesson; // exposed for the home-hero button above
+
+    const dtsLessonModalClose = document.getElementById('dts-lesson-modal-close');
+    if (dtsLessonModalClose) {
+        dtsLessonModalClose.addEventListener('click', function() {
+            document.getElementById('dts-lesson-audio').pause();
+            document.getElementById('dts-lesson-modal-backdrop').classList.add('hidden');
+        });
+    }
+    const dtsLessonModalBackdrop = document.getElementById('dts-lesson-modal-backdrop');
+    if (dtsLessonModalBackdrop) {
+        dtsLessonModalBackdrop.addEventListener('click', function(e) {
+            if (e.target === this) {
+                document.getElementById('dts-lesson-audio').pause();
+                this.classList.add('hidden');
+            }
+        });
+    }
+
+    const dtsViewMindmapBtn = document.getElementById('dts-view-mindmap-btn');
+    if (dtsViewMindmapBtn) {
+        dtsViewMindmapBtn.addEventListener('click', async function() {
+            const wrap = document.getElementById('dts-mindmap-wrap');
+            if (!wrap.classList.contains('hidden')) { wrap.classList.add('hidden'); return; }
+            const code = this.dataset.mermaidSi;
+            if (!code) return;
+            wrap.classList.remove('hidden');
+            if (wrap.dataset.rendered === code) return;
+            wrap.innerHTML = '<p class="mindmap-empty">Rendering...</p>';
+            if (!window.mermaid) { wrap.innerHTML = '<p class="mindmap-empty">Mermaid.js load වුනේ නෑ.</p>'; return; }
+            try {
+                const uniqueId = 'dtsMermaid_' + Date.now();
+                const { svg } = await mermaid.render(uniqueId, code);
+                wrap.innerHTML = svg;
+                wrap.dataset.rendered = code;
+            } catch (err) {
+                wrap.innerHTML = '<p class="mindmap-empty">Mind map render කරගන්න බැරි උනා.</p>';
+            }
+        });
+    }
+
+    // Audio controls (independent element/state from the note-audio player)
+    const dtsPlayPauseBtn = document.getElementById('dts-play-pause-btn');
+    const dtsSkipBackBtn = document.getElementById('dts-skip-back-btn');
+    const dtsSkipForwardBtn = document.getElementById('dts-skip-forward-btn');
+    const dtsProgressBar = document.getElementById('dts-progress-bar');
+    const dtsProgressFill = document.getElementById('dts-progress-fill');
+    const dtsCurrentTimeEl = document.getElementById('dts-current-time');
+    const dtsTotalTimeEl = document.getElementById('dts-total-time');
+    const dtsAudioEl = document.getElementById('dts-lesson-audio');
+
+    if (dtsPlayPauseBtn && dtsAudioEl) {
+        dtsPlayPauseBtn.addEventListener('click', function() {
+            if (dtsIsPlaying) {
+                dtsAudioEl.pause();
+                dtsIsPlaying = false;
+                dtsPlayPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+            } else {
+                dtsAudioEl.play().then(() => {
+                    dtsIsPlaying = true;
+                    dtsPlayPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                }).catch(() => {});
+            }
+        });
+    }
+    if (dtsSkipBackBtn && dtsAudioEl) {
+        dtsSkipBackBtn.addEventListener('click', function() { dtsAudioEl.currentTime = Math.max(0, dtsAudioEl.currentTime - 10); });
+    }
+    if (dtsSkipForwardBtn && dtsAudioEl) {
+        dtsSkipForwardBtn.addEventListener('click', function() { dtsAudioEl.currentTime = Math.min(dtsAudioEl.duration || Infinity, dtsAudioEl.currentTime + 10); });
+    }
+    if (dtsProgressBar && dtsAudioEl) {
+        dtsProgressBar.addEventListener('click', function(e) {
+            if (!dtsAudioEl.duration) return;
+            const rect = this.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            dtsAudioEl.currentTime = pct * dtsAudioEl.duration;
+        });
+    }
+    if (dtsAudioEl) {
+        dtsAudioEl.addEventListener('loadedmetadata', function() {
+            dtsTotalTimeEl.textContent = dtsFormatTime(dtsAudioEl.duration);
+        });
+        dtsAudioEl.addEventListener('timeupdate', function() {
+            const cur = dtsAudioEl.currentTime, dur = dtsAudioEl.duration;
+            if (!isNaN(cur) && !isNaN(dur) && isFinite(dur) && dur > 0) {
+                dtsCurrentTimeEl.textContent = dtsFormatTime(cur);
+                dtsProgressFill.style.width = Math.min(100, (cur / dur) * 100) + '%';
+                dtsUpdateHighlight(cur);
+            }
+        });
+        dtsAudioEl.addEventListener('ended', function() {
+            dtsIsPlaying = false;
+            dtsPlayPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        });
+    }
+
+    const dtsCompleteLessonBtn = document.getElementById('dts-complete-lesson-btn');
+    if (dtsCompleteLessonBtn) {
+        dtsCompleteLessonBtn.addEventListener('click', async function() {
+            if (!dtsCurrentLessonId) return;
+            this.disabled = true;
+            try {
+                const res = await fetch(`/lessons/${dtsCurrentLessonId}/complete`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status !== 'success') { this.disabled = false; return; }
+                if (data.next_lesson) {
+                    openDtsLesson(data.next_lesson.id);
+                } else {
+                    document.getElementById('dts-lesson-title').textContent = '🎉 දැනට තියෙන lessons ම ඉවර!';
+                    document.getElementById('dts-highlight-text-container').innerHTML = '<p>ඊළඟ lessons ඉක්මනින් එකතු වේවි — check back soon!</p>';
+                    document.getElementById('dts-lesson-player-container').classList.add('hidden');
+                    document.getElementById('dts-lesson-audio-warning').classList.add('hidden');
+                    this.classList.add('hidden');
+                }
+                loadDtsHome();
+            } finally {
+                this.disabled = false;
+            }
+        });
+    }
+
+    loadDtsHome();
+});
