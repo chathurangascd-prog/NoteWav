@@ -2464,6 +2464,16 @@ def ads_txt():
     return app.response_class(content, mimetype='text/plain')
 
 
+@app.route('/about')
+def about_page():
+    """Standalone, English-only "how it works" page — deliberately its
+    own template/lang="en" rather than index.html's Sinhala-default
+    Sinhala/English toggle, so there's real crawlable English content
+    on the site (AdSense's supported-languages check reads the site's
+    primary language; Sinhala/Tamil aren't on that list, English is)."""
+    return render_template('about.html')
+
+
 @app.route('/privacy')
 def privacy_page():
     return render_template('privacy.html')

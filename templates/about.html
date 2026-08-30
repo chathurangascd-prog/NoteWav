@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About NoteWav AI — How It Works</title>
+    <meta name="description" content="NoteWav AI turns study notes into podcast-style audio and mind maps using OCR and AI. Learn how Smart Study mode, Full Text mode, and the Voice Engine work, plus tips and FAQs.">
+    <meta property="og:title" content="About NoteWav AI — How It Works">
+    <meta property="og:description" content="NoteWav AI turns study notes into podcast-style audio and mind maps using OCR and AI. Learn how it works.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://notewav.onrender.com/about">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #0f0f17; color: #e5e5e5; padding: 40px 20px; line-height: 1.7; }
+        .wrap { max-width: 760px; margin: 0 auto; }
+        h1 { color: #a78bfa; font-size: 1.7rem; margin-bottom: 4px; }
+        .lede { color: #ccc; font-size: 1rem; margin-top: 0; }
+        h2 { color: #a78bfa; font-size: 1.15rem; margin-top: 36px; }
+        h3 { color: #d8c9ff; font-size: 1rem; margin-top: 22px; margin-bottom: 6px; }
+        p, li { color: #ccc; font-size: 0.95rem; }
+        a { color: #a78bfa; }
+        .steps { counter-reset: step; list-style: none; padding: 0; }
+        .steps li { counter-increment: step; padding-left: 34px; position: relative; margin-bottom: 14px; }
+        .steps li::before {
+            content: counter(step);
+            position: absolute; left: 0; top: 0;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: rgba(167, 139, 250, 0.18); color: #a78bfa;
+            font-size: 0.78rem; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .faq-q { color: #fff; font-weight: 600; margin-top: 18px; margin-bottom: 4px; }
+        .back { display: inline-block; margin-top: 34px; color: #a78bfa; text-decoration: none; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h1>About NoteWav AI</h1>
+        <p class="lede">NoteWav AI is a free study tool built for students in Sri Lanka. It turns handwritten or typed notes into podcast-style audio narration and visual mind maps, so you can revise by listening instead of just re-reading.</p>
+
+        <h2>What NoteWav AI does</h2>
+        <p>Students often have notes in photos, PDFs, or plain text, but no easy way to review them on the go. NoteWav AI reads that content — using AI to extract text from images, structure it into a clear script, and generate natural-sounding audio and a mind map from it — so a set of notes becomes something you can listen to on a walk or before an exam, and a diagram you can study visually.</p>
+
+        <h2>How it works</h2>
+        <ol class="steps">
+            <li><strong>Enter a note.</strong> Type text directly, upload one or more photos of a page (batch upload), upload a PDF, or take a photo with your camera.</li>
+            <li><strong>Text extraction (OCR).</strong> If you uploaded an image or PDF, NoteWav AI uses Google Cloud Vision's OCR engine to read the text out of the photo, including Sinhala, Tamil, and English handwriting or print.</li>
+            <li><strong>Choose a study mode.</strong> <em>Smart Study</em> sends your note to an AI model (Google Gemini) which rewrites it into a structured, exam-focused podcast script and a mind map outline. <em>Full Text Mode</em> narrates your original text as-is, without rewriting it.</li>
+            <li><strong>Safety check.</strong> Before audio is generated, you can review and edit the script the AI produced, in case anything important needs to be added or corrected.</li>
+            <li><strong>Voice Engine.</strong> Pick <em>Standard</em> (a fast, free text-to-speech voice) or <em>Natural (AI)</em> (a more human-like voice with a male/female option, powered by a neural text-to-speech model, with a limited number of free uses).</li>
+            <li><strong>Audio generation.</strong> The script is converted into a podcast-style audio track with play/pause, speed, and skip controls, and the currently-playing sentence is highlighted in the transcript as it plays.</li>
+            <li><strong>Mind map generation.</strong> Alongside the audio, NoteWav AI generates a visual mind map summarizing the note's key points and how they relate, which you can enlarge, and download as a PNG or PDF.</li>
+            <li><strong>Save to your Library.</strong> Signed-in users can save notes to a personal Library, organized by subject, search through past notes, combine several notes into one longer revision audio, and play saved audio offline without an internet connection.</li>
+        </ol>
+
+        <h2>Tips for getting the best results</h2>
+        <ul>
+            <li>For photo uploads, make sure the page is well-lit and the text is in focus — OCR accuracy depends on image quality.</li>
+            <li>Use <em>Smart Study</em> mode when you want the AI to condense and organize long or messy notes; use <em>Full Text Mode</em> when your notes are already well-organized and you just want them read aloud as-is.</li>
+            <li>Review the script in the Safety Check step before generating audio — it's the easiest place to fix any OCR misreads or add a point the AI missed.</li>
+            <li>Combine related notes in your Library into a single audio episode before an exam for an efficient full-topic revision listen.</li>
+            <li>Download the mind map as a PDF so you can print it or annotate it separately from the app.</li>
+        </ul>
+
+        <h2>Frequently asked questions</h2>
+
+        <p class="faq-q">Is NoteWav AI free to use?</p>
+        <p>Yes. Note processing, audio generation with the Standard voice, and mind map generation are free. The Natural (AI) voice includes a limited number of free trials.</p>
+
+        <p class="faq-q">Which languages does it support?</p>
+        <p>You can type or upload notes in Sinhala, Tamil, or English. In Smart Study mode, you can also choose the output language for the generated script and audio independently of the language you wrote the note in.</p>
+
+        <p class="faq-q">Do I need to create an account?</p>
+        <p>No — you can use the core note-to-audio and mind-map features as a guest. Signing in with Google is only needed to save notes to your Library and sync progress (streaks, levels, coins) across devices.</p>
+
+        <p class="faq-q">Is my note content kept private?</p>
+        <p>See our <a href="/privacy">Privacy Policy</a> for full details on what's collected and how it's used.</p>
+
+        <p class="faq-q">What is "Digital Tuition Sir"?</p>
+        <p>Digital Tuition Sir is a structured course platform we're building alongside NoteWav AI, with daily exam-focused lessons. It's not launched yet — you may see a link to it in the menu marked "available soon."</p>
+
+        <a class="back" href="/">← Back to NoteWav AI</a>
+    </div>
+</body>
+</html>
