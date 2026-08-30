@@ -521,6 +521,17 @@ def init_db():
         except Exception:
             pass  # column already exists
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anon_id TEXT,
+            endpoint TEXT UNIQUE NOT NULL,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -686,6 +697,40 @@ if OPENAI_API_KEY:
 else:
     openai_client = None
     print("⚠️ OPENAI_API_KEY not found — OpenAI Voice option will be unavailable")
+
+# ========================================
+# WEB PUSH (daily study-reminder notifications)
+# ========================================
+# Unlike ADMIN_SECRET_KEY/ADMIN_PASSWORD above, these VAPID keys must
+# NOT fall back to a random value when unset — the public key is
+# embedded in every browser's push subscription at sign-up time; if it
+# changed on a restart, every existing subscription would silently
+# stop working and need to re-subscribe. So there's no safe random
+# fallback here: if unset, the feature is simply disabled everywhere
+# below (PUSH_CONFIGURED = False) rather than working with a value
+# that can't stay stable.
+try:
+    from pywebpush import webpush, WebPushException
+    _PYWEBPUSH_AVAILABLE = True
+except ImportError:
+    _PYWEBPUSH_AVAILABLE = False
+
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_CLAIMS = {'sub': os.environ.get('VAPID_CLAIMS_EMAIL', 'mailto:admin@notewav.onrender.com')}
+PUSH_CONFIGURED = _PYWEBPUSH_AVAILABLE and bool(VAPID_PUBLIC_KEY) and bool(VAPID_PRIVATE_KEY)
+if not PUSH_CONFIGURED:
+    print(
+        "⚠️ Push notifications disabled — "
+        + ("install pywebpush, and " if not _PYWEBPUSH_AVAILABLE else "")
+        + "set VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY in Render's environment variables to enable daily study reminders."
+    )
+
+# Shared secret for the daily-reminder trigger — this is hit by an
+# external scheduler (cron-job.org, GitHub Actions, etc.), not a
+# logged-in admin browser session, so it checks a URL query param
+# against this env var instead of the session-cookie admin login.
+CRON_SECRET = os.environ.get('CRON_SECRET')
 
 SAFETY_SETTINGS = [
     types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_MEDIUM_AND_ABOVE'),
@@ -3107,6 +3152,126 @@ def library_delete(note_id):
     except Exception as e:
         print(f"❌ Library delete error: {e}")
         return jsonify({'status': 'error', 'message': 'Note එක delete කරගැනීම අසාර්ථක විය.'}), 500
+
+
+@app.route('/push/vapid-public-key')
+def push_vapid_public_key():
+    if not PUSH_CONFIGURED:
+        return jsonify({'status': 'error', 'message': 'Push notifications are not configured on this server.'}), 503
+    return jsonify({'status': 'success', 'public_key': VAPID_PUBLIC_KEY})
+
+
+@app.route('/push/subscribe', methods=['POST'])
+@rate_limited(10, 60)
+def push_subscribe():
+    if not PUSH_CONFIGURED:
+        return jsonify({'status': 'error', 'message': 'Push notifications are not configured on this server.'}), 503
+
+    data = request.get_json(silent=True) or {}
+    endpoint = (data.get('endpoint') or '').strip()
+    keys = data.get('keys') or {}
+    p256dh = (keys.get('p256dh') or '').strip()
+    auth = (keys.get('auth') or '').strip()
+    anon_id = (data.get('anon_id') or '').strip()[:64]
+
+    if not endpoint or not p256dh or not auth:
+        return jsonify({'status': 'error', 'message': 'Incomplete push subscription.'}), 400
+
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.execute(
+            "INSERT INTO push_subscriptions (anon_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)",
+            (anon_id, endpoint, p256dh, auth, datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"❌ Push subscribe error: {e}")
+        return jsonify({'status': 'error', 'message': 'Could not save push subscription.'}), 500
+
+
+@app.route('/push/unsubscribe', methods=['POST'])
+@rate_limited(10, 60)
+def push_unsubscribe():
+    data = request.get_json(silent=True) or {}
+    endpoint = (data.get('endpoint') or '').strip()
+    if not endpoint:
+        return jsonify({'status': 'error', 'message': 'Missing endpoint.'}), 400
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"❌ Push unsubscribe error: {e}")
+        return jsonify({'status': 'error', 'message': 'Could not remove push subscription.'}), 500
+
+
+@app.route('/admin/send-daily-reminders', methods=['POST'])
+def admin_send_daily_reminders():
+    """Sends the "come study today" push notification to every stored
+    subscription. Meant to be triggered ONCE A DAY by an external
+    scheduler (this app has no cron of its own — a Render web service
+    doesn't run background jobs alongside gunicorn) hitting this URL
+    with ?key=CRON_SECRET, e.g. a free cron-job.org task or a scheduled
+    GitHub Actions workflow. Does not attempt to target only people who
+    haven't studied yet today — that would need daily-granularity
+    server-side study tracking this app doesn't have; v1 just reminds
+    everyone subscribed."""
+    if not CRON_SECRET or request.args.get('key') != CRON_SECRET:
+        return jsonify({'status': 'error', 'message': 'Unauthorized.'}), 403
+    if not PUSH_CONFIGURED:
+        return jsonify({'status': 'error', 'message': 'Push notifications are not configured on this server.'}), 503
+
+    conn = get_db()
+    rows = conn.execute("SELECT endpoint, p256dh, auth FROM push_subscriptions").fetchall()
+    conn.close()
+
+    payload = json.dumps({
+        'title': 'NoteWav AI',
+        'body': 'අද streak එක save කරගන්න — විනාඩි 5ක් පාඩම් අහන්න! 🔥',
+        'url': '/',
+    })
+
+    sent, expired, failed = 0, 0, 0
+    for row in rows:
+        subscription_info = {
+            'endpoint': row['endpoint'],
+            'keys': {'p256dh': row['p256dh'], 'auth': row['auth']},
+        }
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=dict(VAPID_CLAIMS),
+                timeout=10,
+            )
+            sent += 1
+        except WebPushException as e:
+            status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status_code in (404, 410):
+                # Subscription is gone for good (browser data cleared,
+                # uninstalled, etc.) — stop trying it every day.
+                try:
+                    cleanup_conn = get_db()
+                    cleanup_conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (row['endpoint'],))
+                    cleanup_conn.commit()
+                    cleanup_conn.close()
+                except Exception:
+                    pass
+                expired += 1
+            else:
+                failed += 1
+                print(f"⚠️ Push send failed for one subscription: {e}")
+        except Exception as e:
+            failed += 1
+            print(f"⚠️ Push send failed for one subscription: {e}")
+
+    return jsonify({'status': 'success', 'sent': sent, 'expired_removed': expired, 'failed': failed})
 
 
 @app.route('/health')

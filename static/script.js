@@ -3093,6 +3093,8 @@ const NOTEWAV_TRANSLATIONS = {
     process_btn: { si: 'Script එක සකසන්න', en: 'Prepare Script' },
     safety_title: { si: 'ආරක්ෂිත පරීක්ෂාව', en: 'Safety Check' },
     key_points_title: { si: 'ප්‍රධාන කරුණු (Key Points)', en: 'Key Points' },
+    daily_reminder_enable: { si: '🔔 Daily Reminder ON කරන්න', en: '🔔 Enable Daily Reminder' },
+    daily_reminder_disable: { si: '🔕 Daily Reminder OFF කරන්න', en: '🔕 Disable Daily Reminder' },
     safety_info_text: { si: 'වැදගත් කරුණු මගහැරී ඇත්නම් ඔබට මෙය වෙනස් (Edit) කළ හැක:', en: 'You can Edit this if important points are missing:' },
     font_size_label: { si: 'අකුරු ප්‍රමාණය:', en: 'Font Size:' },
     subject_placeholder: { si: 'Subject (උදා: Biology, Physics)', en: 'Subject (e.g: Biology, Physics)' },
@@ -4307,6 +4309,102 @@ document.addEventListener('DOMContentLoaded', function() {
             stopListening();
         } else {
             startListening();
+        }
+    });
+});
+
+// ========================================
+// DAILY STUDY REMINDER (Web Push notification, works even when the
+// app isn't open — separate from the in-app notification bell, which
+// only shows admin broadcasts while the tab is open)
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    const reminderBtn = document.getElementById('daily-reminder-toggle-btn');
+    const reminderText = document.getElementById('daily-reminder-toggle-text');
+    if (!reminderBtn || !reminderText) return;
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        reminderBtn.style.display = 'none';
+        return;
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+        return outputArray;
+    }
+
+    function setReminderButtonUI(isSubscribed) {
+        const lang = (typeof getAppLanguage === 'function') ? getAppLanguage() : 'si';
+        const key = isSubscribed ? 'daily_reminder_disable' : 'daily_reminder_enable';
+        const entry = NOTEWAV_TRANSLATIONS[key];
+        reminderText.textContent = (entry && entry[lang]) || entry.si;
+    }
+
+    async function getExistingSubscription() {
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            return await reg.pushManager.getSubscription();
+        } catch (e) {
+            return null;
+        }
+    }
+
+    getExistingSubscription().then(sub => setReminderButtonUI(!!sub));
+
+    reminderBtn.addEventListener('click', async function() {
+        reminderBtn.disabled = true;
+        try {
+            const existingSub = await getExistingSubscription();
+
+            if (existingSub) {
+                await existingSub.unsubscribe();
+                fetch('/push/unsubscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint: existingSub.endpoint }),
+                }).catch(() => { /* subscription is already gone client-side either way */ });
+                setReminderButtonUI(false);
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.warn('Notification permission not granted:', permission);
+                return;
+            }
+
+            const keyResp = await fetch('/push/vapid-public-key');
+            const keyData = await keyResp.json();
+            if (keyData.status !== 'success') {
+                console.warn('Push notifications not configured on the server.');
+                return;
+            }
+
+            const reg = await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(keyData.public_key),
+            });
+
+            const subJson = sub.toJSON();
+            await fetch('/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: subJson.endpoint,
+                    keys: subJson.keys,
+                    anon_id: (typeof getOrCreateAnonId === 'function' ? getOrCreateAnonId() : ''),
+                }),
+            });
+            setReminderButtonUI(true);
+        } catch (error) {
+            console.error('Daily reminder toggle failed:', error);
+        } finally {
+            reminderBtn.disabled = false;
         }
     });
 });

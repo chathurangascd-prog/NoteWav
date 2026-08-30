@@ -94,3 +94,38 @@ self.addEventListener('fetch', (event) => {
             .catch(() => caches.match(event.request))
     );
 });
+
+// ========================================
+// PUSH NOTIFICATIONS (daily study reminder)
+// ========================================
+self.addEventListener('push', (event) => {
+    let payload = { title: 'NoteWav AI', body: 'Time to study!', url: '/' };
+    if (event.data) {
+        try {
+            payload = Object.assign(payload, event.data.json());
+        } catch (e) {
+            payload.body = event.data.text();
+        }
+    }
+    event.waitUntil(
+        self.registration.showNotification(payload.title, {
+            body: payload.body,
+            icon: '/static/icons/icon-192.png',
+            badge: '/static/icons/icon-192.png',
+            data: { url: payload.url || '/' },
+        })
+    );
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
+            for (const client of clientsList) {
+                if ('focus' in client) return client.focus();
+            }
+            if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+        })
+    );
+});
