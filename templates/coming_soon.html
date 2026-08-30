@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Tuition Sir - Available Soon</title>
+    <meta name="theme-color" content="#ff6a00">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: linear-gradient(90deg, #e8560a 0%, #ff6a00 45%, #ff7d1f 82%, #ff9142 100%);
+            color: #fff;
+        }
+        .soon-card {
+            position: relative;
+            width: 100%;
+            max-width: 560px;
+            padding: 48px 36px;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            text-align: center;
+            overflow: hidden;
+        }
+        .soon-figure {
+            position: absolute;
+            right: -30px;
+            bottom: -10px;
+            height: 130%;
+            max-width: 55%;
+            width: auto;
+            object-fit: contain;
+            object-position: bottom right;
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        .soon-content { position: relative; z-index: 1; }
+        .soon-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+        }
+        .soon-title {
+            font-family: 'Fraunces', serif;
+            font-weight: 900;
+            font-size: 2.2rem;
+            margin: 0 0 10px;
+        }
+        .soon-tagline {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0 0 4px;
+        }
+        .soon-sub {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.85);
+            margin: 0 0 28px;
+            line-height: 1.6;
+        }
+        .soon-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 26px;
+            border-radius: 999px;
+            background: #fff;
+            color: #ff6a00;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: transform 0.15s ease;
+        }
+        .soon-back-btn:hover { transform: scale(1.04); }
+    </style>
+</head>
+<body>
+    <div class="soon-card">
+        <img class="soon-figure" src="{{ url_for('static', filename='images/auth-promo-figures.png') }}" alt="" aria-hidden="true">
+        <div class="soon-content">
+            <span class="soon-badge"><i class="fas fa-circle-dot"></i> Student Portal</span>
+            <h1 class="soon-title">Digital Tuition Sir</h1>
+            <p class="soon-tagline">දිනපතා AI-powered, exam-focused පාඩම් — ළඟදීම එනවා</p>
+            <p class="soon-sub">Available Soon. ඒ අතරතුර, ඔබේ study notes NoteWav AI එකෙන් podcast/mind map බවට හරවගන්න.</p>
+            <a href="/" class="soon-back-btn"><i class="fas fa-robot"></i> NoteWav AI වෙත යන්න</a>
+        </div>
+    </div>
+</body>
+</html>

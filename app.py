@@ -2410,17 +2410,25 @@ def text_to_speech():
 
 @app.route('/')
 def home():
-    return render_template('index.html', page_mode='tuition')
+    """NoteWav AI is the home screen again. Digital Tuition Sir moved to
+    /tuition as an "available soon" placeholder — see tuition_soon_page()."""
+    return render_template('index.html', page_mode='notewav')
 
 
 @app.route('/notewav')
 def notewav_tool_page():
-    """The original NoteWav note/podcast/mind-map tool, moved off the
-    root URL now that Digital Tuition Sir is the home screen — reachable
-    from the ☰ menu. Same template/JS bundle as '/', just with the
-    opposite set of sections shown (see .page-tuition/.page-notewav in
-    styles.css) so nothing in the shared script.js has to change."""
+    """Same NoteWav tool as '/', kept as a stable alias so existing links
+    to /notewav keep working."""
     return render_template('index.html', page_mode='notewav')
+
+
+@app.route('/tuition')
+def tuition_soon_page():
+    """Digital Tuition Sir, hidden behind an "available soon" placeholder
+    until it's ready to launch. The full branded experience (home hero,
+    sidebar, sign-in) still lives in index.html/styles.css under
+    page_mode='tuition' — just not routed to anymore."""
+    return render_template('coming_soon.html')
 
 
 @app.route('/login')
