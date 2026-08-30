@@ -418,6 +418,35 @@ document.addEventListener('DOMContentLoaded', function() {
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
+    // ===== Lock-screen / media-key playback controls (MediaSession API) =====
+    // Lets the currently-generated podcast audio show up with a proper
+    // title, play/pause/skip buttons on the phone's lock screen and in
+    // notification shades/headset controls — without this, the browser
+    // tab has to stay in the foreground for playback controls to work.
+    function setMediaSessionPlaybackState(state) {
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
+    }
+
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', () => { if (!isPlaying) playPauseBtn.click(); });
+        navigator.mediaSession.setActionHandler('pause', () => { if (isPlaying) playPauseBtn.click(); });
+        navigator.mediaSession.setActionHandler('seekbackward', () => { if (skipBackBtn) skipBackBtn.click(); });
+        navigator.mediaSession.setActionHandler('seekforward', () => { if (skipForwardBtn) skipForwardBtn.click(); });
+        navigator.mediaSession.setActionHandler('stop', () => { if (stopBtn) stopBtn.click(); });
+    }
+
+    function updateMediaSessionMetadata() {
+        if (!('mediaSession' in navigator)) return;
+        const titleSource = (librarySubjectInput && librarySubjectInput.value.trim())
+            || (noteInput && noteInput.value.trim().slice(0, 60))
+            || 'Study Note';
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: titleSource,
+            artist: 'NoteWav AI',
+            album: 'NoteWav AI',
+        });
+    }
+
     // ===== Playback Speed / Volume Controls =====
     const speedButtons = document.querySelectorAll('.speed-btn');
     const volumeSlider = document.getElementById('volume-slider');
@@ -1442,6 +1471,31 @@ document.addEventListener('DOMContentLoaded', function() {
     if (mindmapLangEnBtn) mindmapLangEnBtn.addEventListener('click', () => renderMindMapForLang('en'));
 
     // ========================================
+    // KEY POINTS (short bullet summary alongside the podcast script,
+    // for a quick pre-exam scan without listening to the full audio)
+    // ========================================
+    function renderKeyPoints(points) {
+        const keyPointsSection = document.getElementById('key-points-section');
+        const keyPointsList = document.getElementById('key-points-list');
+        if (!keyPointsSection || !keyPointsList) return;
+
+        keyPointsList.innerHTML = '';
+        const validPoints = Array.isArray(points) ? points.filter(p => typeof p === 'string' && p.trim()) : [];
+
+        if (validPoints.length === 0) {
+            keyPointsSection.classList.add('hidden');
+            return;
+        }
+
+        validPoints.forEach(point => {
+            const li = document.createElement('li');
+            li.textContent = point.trim();
+            keyPointsList.appendChild(li);
+        });
+        keyPointsSection.classList.remove('hidden');
+    }
+
+    // ========================================
     // MIND MAP MODAL (enlarge / close / zoom / PDF export)
     // ========================================
     const mindmapModalBackdrop = document.getElementById('mindmap-modal-backdrop');
@@ -2327,6 +2381,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 await renderMindMap(data.mermaid_code_si, data.mermaid_code_en);
+                renderKeyPoints(data.key_points);
 
                 if (audio) {
                     audio.pause();
@@ -2455,6 +2510,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 audio.playbackRate = getEffectivePlaybackRate();
                 audio.volume = playbackVolume;
                 setupAudioAnalyser(audio);
+                updateMediaSessionMetadata();
 
                 audio.addEventListener('loadedmetadata', function() {
                     const duration = audio.duration;
@@ -2482,6 +2538,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.querySelector('.player-container').classList.remove('playing');
                     stopWaveformAnimation();
                     document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
+                    setMediaSessionPlaybackState('none');
                 });
 
                 audio.addEventListener('error', function(e) {
@@ -2529,11 +2586,13 @@ document.addEventListener('DOMContentLoaded', function() {
                             audioCtx.resume();
                         }
                         startWaveformAnimation();
+                        setMediaSessionPlaybackState('playing');
                     })
                     .catch((error) => {
                         console.error('Auto-play error:', error);
                         isPlaying = false;
                         playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+                        setMediaSessionPlaybackState('paused');
                     });
 
                 audioSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2568,6 +2627,7 @@ document.addEventListener('DOMContentLoaded', function() {
             playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
             document.querySelector('.player-container').classList.remove('playing');
             stopWaveformAnimation();
+            setMediaSessionPlaybackState('paused');
         } else {
             audio.play()
                 .then(() => {
@@ -2578,6 +2638,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         audioCtx.resume();
                     }
                     startWaveformAnimation();
+                    setMediaSessionPlaybackState('playing');
                 })
                 .catch((error) => {
                     console.error('Play error:', error);
@@ -2600,6 +2661,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelector('.player-container').classList.remove('playing');
             stopWaveformAnimation();
             document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
+            setMediaSessionPlaybackState('none');
         }
     });
 
@@ -2654,6 +2716,7 @@ document.addEventListener('DOMContentLoaded', function() {
         safetySection.classList.add('hidden');
         audioSection.classList.add('hidden');
         if (mindmapSection) mindmapSection.classList.add('hidden');
+        renderKeyPoints([]);
         const quizSectionResetEl = document.getElementById('quiz-section');
         if (quizSectionResetEl) quizSectionResetEl.classList.add('hidden');
         const quizBodyResetEl = document.getElementById('quiz-body');
@@ -3029,6 +3092,7 @@ const NOTEWAV_TRANSLATIONS = {
     mode_smart_desc: { si: 'Podcast script + Mind Map දෙකම AI කරයි', en: 'AI creates both a podcast script + Mind Map' },
     process_btn: { si: 'Script එක සකසන්න', en: 'Prepare Script' },
     safety_title: { si: 'ආරක්ෂිත පරීක්ෂාව', en: 'Safety Check' },
+    key_points_title: { si: 'ප්‍රධාන කරුණු (Key Points)', en: 'Key Points' },
     safety_info_text: { si: 'වැදගත් කරුණු මගහැරී ඇත්නම් ඔබට මෙය වෙනස් (Edit) කළ හැක:', en: 'You can Edit this if important points are missing:' },
     font_size_label: { si: 'අකුරු ප්‍රමාණය:', en: 'Font Size:' },
     subject_placeholder: { si: 'Subject (උදා: Biology, Physics)', en: 'Subject (e.g: Biology, Physics)' },
@@ -4192,7 +4256,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function startListening() {
         recognition = new SpeechRecognitionCtor();
-        recognition.lang = 'si-LK';
+        // Was hardcoded to Sinhala regardless of the app's language
+        // setting — an English-mode user dictating in English got much
+        // worse recognition accuracy since the engine was listening for
+        // Sinhala phonemes the whole time.
+        recognition.lang = (getAppLanguage() === 'en') ? 'en-US' : 'si-LK';
         recognition.continuous = true;
         recognition.interimResults = false;
 

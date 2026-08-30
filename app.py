@@ -1304,6 +1304,7 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
 
 {{
   "podcast_script": "<සම්පූර්ණ පොඩ්කාස්ට් script එක, පාඩම ලියැවී ඇති භාෂාවෙන්ම (Sinhala නම් Sinhala, Tamil නම් Tamil)>",
+  "key_points": ["<කෙටි ප්‍රධාන කරුණු 5-8ක්, 'podcast_script' එකේම භාෂාවෙන්ම>", "..."],
   "mermaid_code_si": "<Mermaid.js mindmap syntax එකක්, node labels සියල්ලම සිංහලෙන්>",
   "mermaid_code_en": "<Mermaid.js mindmap syntax එකක්, node labels සියල්ලම English වලින්, mermaid_code_si එකේම structure/nodes ම>"
 }}
@@ -1341,6 +1342,16 @@ text, පැහැදිලි කිරීමක්, හෝ markdown code fence
    එකෙන්ම විතරක්** ලියන්න (උදා: "ඇපල් වොච් (Apple Watch)" නොව, "Apple Watch" විතරක්) —
    සිංහල වාක්‍ය ප්‍රවාහය තුළ English නම එකක්ම ස්වාභාවිකව embed කරන්න, phonetic
    spelling+bracket repetition එකක් නොකර.
+
+=== "key_points" සඳහා නීති ===
+1. පාඩමේ **ප්‍රධානම කරුණු 5-8ක්** (podcast_script එකේ සම්පූර්ණ අන්තර්ගතය නොව, quick-scan
+   revision list එකක් විතරයි) කෙටි වාක්‍ය/වාක්‍ය ඛණ්ඩ ලෙස ලබාදෙන්න — එකක් වචන 15කට වඩා
+   දිග නොවෙන්න.
+2. "podcast_script" එකේම භාෂාවෙන්ම ලියන්න (Sinhala/Tamil නීතිය ඉහත 2 වන රීතියේම).
+3. LaTeX/math notation (\\$H_2O\\$, ^, _ subscript syntax) හෝ subscript/superscript unicode
+   අකුරු (₂, ₃) කිසිසේත් යොදන්න එපා — plain text විතරක් (උදා: "H2O", "CO2").
+4. සරල, ස්වාධීන කරුණු ලෙස ලියන්න (එකකට එකක් යැපෙන්නේ නැති විදිහට) — exam කලින් ඉක්මනට
+   scan කරන්නට පුළුවන් විදිහට.
 
 === "mermaid_code_si" සහ "mermaid_code_en" දෙකටම පොදු නීති ===
 1. "flowchart TD" වලින්ම පටන් ගන්න.
@@ -1505,6 +1516,25 @@ def _clean_podcast_script(text):
     text = re.sub(r'(?<=[A-Za-z0-9])_(?=[A-Za-z0-9])', '', text)
     text = re.sub(r'(?<=[A-Za-z0-9])\^(?=[A-Za-z0-9])', '', text)
     return text
+
+
+MAX_KEY_POINTS = 8
+
+
+def _clean_key_points(points):
+    """Same LaTeX/subscript cleanup as the podcast script, applied to
+    each bullet — the model follows the same content rules for both
+    fields, so it can produce the same stray markup in either."""
+    if not isinstance(points, list):
+        return []
+    cleaned = []
+    for point in points:
+        if not isinstance(point, str):
+            continue
+        point = _clean_podcast_script(point.strip())
+        if point:
+            cleaned.append(point)
+    return cleaned[:MAX_KEY_POINTS]
 
 
 def _is_transient_gemini_error(exc):
@@ -1779,6 +1809,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
         print(f"⚠️ podcast_script still contains $ or _ after cleanup: {podcast_script[:200]!r}")
     mermaid_code_si = _clean_mermaid_code(data.get('mermaid_code_si'))
     mermaid_code_en = _clean_mermaid_code(data.get('mermaid_code_en'))
+    key_points = _clean_key_points(data.get('key_points'))
 
     if not podcast_script:
         raise GeminiGenerationError("Gemini did not return a podcast script.")
@@ -1794,7 +1825,7 @@ def call_gemini_structured(note_text, output_language='si', max_retries=3):
     except Exception as e:
         print(f"⚠️ Gemini call logging failed (non-critical): {e}")
 
-    return podcast_script, mermaid_code_si, mermaid_code_en
+    return podcast_script, mermaid_code_si, mermaid_code_en, key_points
 
 
 OPENAI_SCRIPT_MODEL = 'gpt-4o-mini'  # fallback script/mind-map generator when Gemini fails — cheap, JSON-mode capable
@@ -1852,11 +1883,12 @@ def call_openai_structured(note_text, output_language='si'):
     podcast_script = _clean_podcast_script((data.get('podcast_script') or '').strip())
     mermaid_code_si = _clean_mermaid_code(data.get('mermaid_code_si'))
     mermaid_code_en = _clean_mermaid_code(data.get('mermaid_code_en'))
+    key_points = _clean_key_points(data.get('key_points'))
 
     if not podcast_script:
         raise OpenAIGenerationError("OpenAI did not return a podcast script.")
 
-    return podcast_script, mermaid_code_si, mermaid_code_en
+    return podcast_script, mermaid_code_si, mermaid_code_en, key_points
 
 
 # ========================================
@@ -2859,6 +2891,7 @@ def process_note():
             'processed_text': note_text,
             'mermaid_code_si': '',
             'mermaid_code_en': '',
+            'key_points': [],
             'ai_processed': False,
             'warning': 'NoteWav AI configure වී නොමැති බැවින් Smart Study සහ Mind Map ලබාගත නොහැක.'
         })
@@ -2869,13 +2902,14 @@ def process_note():
             'processed_text': note_text,
             'mermaid_code_si': '',
             'mermaid_code_en': '',
+            'key_points': [],
             'ai_processed': False,
             'warning': ''
         })
 
     _script_gen_start = time.time()
     try:
-        podcast_script, mermaid_code_si, mermaid_code_en = call_gemini_structured(note_text, output_language)
+        podcast_script, mermaid_code_si, mermaid_code_en, key_points = call_gemini_structured(note_text, output_language)
         log_engine_event('script', 'gemini', None, time.time() - _script_gen_start, success=True)
     except GeminiGenerationError as gemini_error:
         print(f"Gemini Error: {gemini_error}")
@@ -2887,6 +2921,7 @@ def process_note():
                 'processed_text': note_text,
                 'mermaid_code_si': '',
                 'mermaid_code_en': '',
+                'key_points': [],
                 'ai_processed': False,
                 'warning': _friendly_gemini_error_message(gemini_error)
             })
@@ -2897,7 +2932,7 @@ def process_note():
         print("⚠️ Gemini failed — falling back to OpenAI for script generation...")
         _openai_script_start = time.time()
         try:
-            podcast_script, mermaid_code_si, mermaid_code_en = call_openai_structured(note_text, output_language)
+            podcast_script, mermaid_code_si, mermaid_code_en, key_points = call_openai_structured(note_text, output_language)
             log_engine_event('script', 'openai', None, time.time() - _openai_script_start, success=True)
         except OpenAIGenerationError as openai_error:
             print(f"OpenAI script fallback Error: {openai_error}")
@@ -2907,6 +2942,7 @@ def process_note():
                 'processed_text': note_text,
                 'mermaid_code_si': '',
                 'mermaid_code_en': '',
+                'key_points': [],
                 'ai_processed': False,
                 'warning': _friendly_gemini_error_message(gemini_error)
             })
@@ -2918,6 +2954,7 @@ def process_note():
         'processed_text': final_text,
         'mermaid_code_si': mermaid_code_si,
         'mermaid_code_en': mermaid_code_en,
+        'key_points': key_points,
         'ai_processed': True
     })
 
