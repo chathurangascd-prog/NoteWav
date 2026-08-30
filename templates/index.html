@@ -1199,24 +1199,6 @@
                         </button>
                     </div>
                     <div class="menu-drawer-body">
-                        <nav class="dts-menu-nav">
-                            <a href="/" class="dts-menu-nav-item{{ ' active' if page_mode == 'notewav' or page_mode is not defined else '' }}">
-                                <span class="dts-menu-nav-icon"><i class="fas fa-house"></i></span> Home
-                            </a>
-                            <a href="/tuition" class="dts-menu-nav-item">
-                                <span class="dts-menu-nav-icon"><i class="fas fa-graduation-cap"></i></span> Digital Tuition Sir
-                            </a>
-                            <button type="button" id="menu-nav-my-courses" class="dts-menu-nav-item">
-                                <span class="dts-menu-nav-icon"><i class="fas fa-book-open"></i></span> My Courses
-                            </button>
-                            <button type="button" id="menu-nav-my-library" class="dts-menu-nav-item">
-                                <span class="dts-menu-nav-icon"><i class="fas fa-layer-group"></i></span> My Library
-                            </button>
-                            <button type="button" id="menu-nav-notices" class="dts-menu-nav-item">
-                                <span class="dts-menu-nav-icon"><i class="fas fa-bell"></i></span> Notices
-                            </button>
-                        </nav>
-                        <hr class="menu-divider">
                         <div class="profile-section">
                             <button type="button" id="profile-avatar-btn" class="profile-avatar-btn" aria-label="Change profile photo">
                                 <img id="profile-avatar-img" class="profile-avatar-img hidden" src="" alt="Profile">
@@ -1247,6 +1229,9 @@
                                 </div>
                             </div>
                         </div>
+                        <a href="/tuition" class="dts-menu-nav-item" style="margin-bottom: 12px;">
+                            <span class="dts-menu-nav-icon"><i class="fas fa-graduation-cap"></i></span> Digital Tuition Sir
+                        </a>
                         <hr class="menu-divider">
         <div id="google-auth-section">
                             <button type="button" id="dts-auth-open-btn" class="library-nav-btn" style="width: 100%; justify-content: center; box-sizing: border-box;">
