@@ -80,10 +80,49 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 # Simple password gate for the /admin usage dashboard. Set
 # ADMIN_PASSWORD in Render's environment variables — do NOT hardcode
-# a real password here in source control.
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme')
+# a real password here in source control. Falling back to a guessable
+# default like 'changeme' would let anyone into /admin on a deploy
+# where the env var was never set, so instead fall back to a random
+# one-time password printed to the server log (same pattern as
+# ADMIN_SECRET_KEY above) — usable in a pinch, but pushes toward
+# setting a real one.
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
+if not ADMIN_PASSWORD:
+    ADMIN_PASSWORD = secrets.token_hex(8)
+    print(
+        f"⚠️ ADMIN_PASSWORD not set — using a random one-time password for this run: "
+        f"{ADMIN_PASSWORD} (check this server's logs to log in). Set ADMIN_PASSWORD to "
+        f"a fixed value in Render's environment variables instead."
+    )
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
+
+
+@app.after_request
+def _add_security_headers(response):
+    """Baseline security headers with no functional risk — none of
+    these restrict what the page itself can load (that's what
+    Content-Security-Policy would do, deliberately left out since this
+    page pulls in several third-party origins — Google Fonts, cdnjs,
+    Google Sign-In, AdSense, Cloudinary — and getting a CSP allowlist
+    wrong would silently break those instead of just failing loudly)."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
+
+
+@app.errorhandler(404)
+def _handle_404(e):
+    return render_template('error.html', code=404, title="Page not found",
+                            message="The page you're looking for doesn't exist or may have moved."), 404
+
+
+@app.errorhandler(500)
+def _handle_500(e):
+    return render_template('error.html', code=500, title="Something went wrong",
+                            message="An unexpected error occurred on our end. Please try again in a moment."), 500
+
 
 # ========================================
 # SENTRY ERROR TRACKING (optional — only activates if SENTRY_DSN is set)
@@ -2462,6 +2501,36 @@ def assetlinks_json():
 def ads_txt():
     content = "google.com, pub-4882546078529900, DIRECT, f08c47fec0942fa0\n"
     return app.response_class(content, mimetype='text/plain')
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /admin/\n"
+        "Disallow: /auth/\n"
+        "\n"
+        "Sitemap: https://notewav.onrender.com/sitemap.xml\n"
+    )
+    return app.response_class(content, mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    pages = ['/', '/about', '/tuition', '/privacy', '/terms']
+    urls = "".join(
+        f"<url><loc>https://notewav.onrender.com{p}</loc></url>\n"
+        for p in pages
+    )
+    content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{urls}"
+        '</urlset>\n'
+    )
+    return app.response_class(content, mimetype='application/xml')
 
 
 @app.route('/about')
