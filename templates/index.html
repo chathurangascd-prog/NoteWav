@@ -844,7 +844,7 @@
                      the figure can break out above the card while the
                      bottom stays anchored within it — an element can't
                      selectively escape its own parent's overflow:hidden. -->
-                <img id="dts-home-hero-figure" class="dts-home-hero-figure hidden"
+                <img id="dts-home-hero-figure" class="dts-home-hero-figure hidden" loading="lazy"
                      src="{{ url_for('static', filename='images/auth-promo-figures.png') }}"
                      alt="" aria-hidden="true">
             </div>
@@ -1216,7 +1216,7 @@
                     <div class="menu-drawer-body">
                         <div class="profile-section">
                             <button type="button" id="profile-avatar-btn" class="profile-avatar-btn" aria-label="Change profile photo">
-                                <img id="profile-avatar-img" class="profile-avatar-img hidden" src="" alt="Profile">
+                                <img id="profile-avatar-img" class="profile-avatar-img hidden" loading="lazy" src="" alt="Profile">
                                 <i id="profile-avatar-placeholder" class="fas fa-user"></i>
                             </button>
                             <input type="file" id="profile-avatar-input" accept="image/*" hidden>

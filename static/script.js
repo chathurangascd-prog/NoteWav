@@ -5664,3 +5664,50 @@ document.addEventListener('DOMContentLoaded', function() {
 
     loadDtsHome();
 });
+
+// ========================================
+// KEYBOARD ACCESSIBILITY: close the open drawer/modal on Escape
+// ========================================
+// Every modal in this file already toggles a shared 'hidden' class
+// (the menu drawer alone uses 'open' instead) — closing on Escape is
+// a matter of finding whichever one is currently visible and toggling
+// the same class its own close button already does, not adding new
+// open/close machinery. Only closes ONE per Escape press (topmost/
+// most-recently-relevant in this list), same as a real modal stack.
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+
+    const menuDrawerBackdrop = document.getElementById('menu-drawer-backdrop');
+    if (menuDrawerBackdrop && menuDrawerBackdrop.classList.contains('open')) {
+        menuDrawerBackdrop.classList.remove('open');
+        return;
+    }
+
+    // On the standalone /login page, dts-auth-modal-backdrop IS the
+    // page content (not an overlay over something else) — nothing to
+    // reveal by hiding it, so it's excluded there.
+    const isLoginPage = document.body.classList.contains('page-login');
+
+    const modalBackdropIds = [
+        'login-required-modal-backdrop',
+        'dts-auth-modal-backdrop',
+        'welcome-modal-backdrop',
+        'stats-modal-backdrop',
+        'daily-quote-modal-backdrop',
+        'onboarding-modal-backdrop',
+        'info-modal-backdrop',
+        'library-modal-backdrop',
+        'dts-courses-modal-backdrop',
+        'dts-course-detail-modal-backdrop',
+        'dts-lesson-modal-backdrop',
+        'mindmap-modal-backdrop',
+    ];
+    for (const id of modalBackdropIds) {
+        if (id === 'dts-auth-modal-backdrop' && isLoginPage) continue;
+        const el = document.getElementById(id);
+        if (el && !el.classList.contains('hidden')) {
+            el.classList.add('hidden');
+            return;
+        }
+    }
+});
