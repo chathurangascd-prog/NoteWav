@@ -4419,11 +4419,18 @@ document.addEventListener('DOMContentLoaded', function() {
             // "did nothing"). Requesting permission FIRST, before any
             // other await, and surfacing every outcome via a visible
             // banner instead of console-only logging, fixes both.
+            // Confirmed via real device testing: in the installed Android
+            // (TWA) app specifically, the JS permission prompt below can
+            // fail to actually grant anything even when the user taps
+            // "Allow" — Settings > Apps > [app name] > Notifications is
+            // the reliable fallback there. Mentioned in both messages
+            // below since there's no way to detect "TWA vs. browser tab"
+            // from here to only show it in one case.
             if (Notification.permission === 'denied') {
                 showReminderMessage(
                     (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
-                        ? 'Notifications are blocked for this site — enable them in your browser\'s site settings, then try again.'
-                        : 'Notification permission block වෙලා තියෙනවා — browser එකේ site settings වලින් Allow කරලා, ආයෙත් try කරන්න.'
+                        ? 'Notifications are blocked. Enable them in your browser\'s site settings — or, if you\'re using the installed app, in Android Settings > Apps > NoteWav > Notifications — then try again.'
+                        : 'Notification permission block වෙලා තියෙනවා — browser එකේ site settings වලින්, නැත්නම් install කරපු app එකක් නම් Android Settings > Apps > NoteWav > Notifications එකෙන් Allow කරලා, ආයෙත් try කරන්න.'
                 );
                 return;
             }
@@ -4432,8 +4439,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (permission !== 'granted') {
                     showReminderMessage(
                         (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
-                            ? 'Notification permission was not granted.'
-                            : 'Notification permission ලබා දුන්නේ නෑ.'
+                            ? 'Notification permission was not granted. If you\'re using the installed app and tapped Allow with no effect, try Android Settings > Apps > NoteWav > Notifications instead.'
+                            : 'Notification permission ලබා දුන්නේ නෑ. Install කරපු app එකේ Allow කළත් වැඩ නොකළොත්, Android Settings > Apps > NoteWav > Notifications එකෙන් try කරන්න.'
                     );
                     return;
                 }
