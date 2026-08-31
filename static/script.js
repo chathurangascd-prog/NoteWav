@@ -4361,16 +4361,49 @@ document.addEventListener('DOMContentLoaded', function() {
         showReminderMessage._timer = setTimeout(() => banner.classList.add('hidden'), 6000);
     }
 
+    // FIX (reported: toggle showed OFF again after fully closing and
+    // reopening the installed Android app icon): on a cold start,
+    // navigator.serviceWorker.ready can take a moment (or, if the
+    // registration step itself hasn't settled yet, keeps the caller
+    // waiting) — the OLD code just showed "OFF" the entire time it was
+    // waiting, which on a slow cold start looked identical to the
+    // subscription having been lost. Two changes: (1) show the LAST
+    // KNOWN state instantly from localStorage instead of waiting on
+    // the service worker at all, then (2) only correct that to "OFF"
+    // once genuinely CONFIRMED unsubscribed — a timeout/error leaves
+    // the optimistic state alone instead of forcing it off.
+    const REMINDER_FLAG_KEY = 'notewav_daily_reminder_enabled';
+
+    function getStoredReminderFlag() {
+        try { return localStorage.getItem(REMINDER_FLAG_KEY) === 'true'; } catch (e) { return false; }
+    }
+    function setStoredReminderFlag(enabled) {
+        try { localStorage.setItem(REMINDER_FLAG_KEY, enabled ? 'true' : 'false'); } catch (e) { /* ignore */ }
+    }
+
+    function withTimeout(promise, ms) {
+        return Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(() => resolve(undefined), ms)),
+        ]);
+    }
+
     async function getExistingSubscription() {
         try {
-            const reg = await navigator.serviceWorker.ready;
+            const reg = await withTimeout(navigator.serviceWorker.ready, 4000);
+            if (!reg) return undefined; // timed out — genuinely unknown, not "confirmed none"
             return await reg.pushManager.getSubscription();
         } catch (e) {
-            return null;
+            return undefined;
         }
     }
 
-    getExistingSubscription().then(sub => setReminderButtonUI(!!sub));
+    setReminderButtonUI(getStoredReminderFlag());
+    getExistingSubscription().then(sub => {
+        if (sub === undefined) return; // couldn't confirm either way — keep showing the last known state
+        setStoredReminderFlag(!!sub);
+        setReminderButtonUI(!!sub);
+    });
 
     reminderBtn.addEventListener('click', async function() {
         reminderBtn.disabled = true;
@@ -4415,6 +4448,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ endpoint: existingSub.endpoint }),
                 }).catch(() => { /* subscription is already gone client-side either way */ });
+                setStoredReminderFlag(false);
                 setReminderButtonUI(false);
                 return;
             }
@@ -4446,6 +4480,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     anon_id: (typeof getOrCreateAnonId === 'function' ? getOrCreateAnonId() : ''),
                 }),
             });
+            setStoredReminderFlag(true);
             setReminderButtonUI(true);
             showReminderMessage(
                 (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
