@@ -4344,6 +4344,23 @@ document.addEventListener('DOMContentLoaded', function() {
         reminderText.textContent = (entry && entry[lang]) || entry.si;
     }
 
+    // Local stand-in for the main script's showErrorBanner() — that
+    // function lives in a different DOMContentLoaded closure and isn't
+    // reachable from here, so this reads the same #error-banner
+    // elements directly instead of duplicating its whole i18n lookup.
+    function showReminderMessage(message) {
+        const banner = document.getElementById('error-banner');
+        const bannerText = document.getElementById('error-banner-text');
+        if (!banner || !bannerText) {
+            alert(message);
+            return;
+        }
+        bannerText.textContent = message;
+        banner.classList.remove('hidden');
+        clearTimeout(showReminderMessage._timer);
+        showReminderMessage._timer = setTimeout(() => banner.classList.add('hidden'), 6000);
+    }
+
     async function getExistingSubscription() {
         try {
             const reg = await navigator.serviceWorker.ready;
@@ -4358,6 +4375,37 @@ document.addEventListener('DOMContentLoaded', function() {
     reminderBtn.addEventListener('click', async function() {
         reminderBtn.disabled = true;
         try {
+            // FIX: previously called Notification.requestPermission()
+            // only after an `await getExistingSubscription()` (which
+            // itself awaits navigator.serviceWorker.ready) — that gap
+            // between the click and the permission request meant some
+            // browsers no longer treated it as "prompted by a direct
+            // user action" and silently resolved without ever showing
+            // the permission dialog, with only a console.warn on
+            // failure (invisible to the user — looked like the button
+            // "did nothing"). Requesting permission FIRST, before any
+            // other await, and surfacing every outcome via a visible
+            // banner instead of console-only logging, fixes both.
+            if (Notification.permission === 'denied') {
+                showReminderMessage(
+                    (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
+                        ? 'Notifications are blocked for this site — enable them in your browser\'s site settings, then try again.'
+                        : 'Notification permission block වෙලා තියෙනවා — browser එකේ site settings වලින් Allow කරලා, ආයෙත් try කරන්න.'
+                );
+                return;
+            }
+            if (Notification.permission !== 'granted') {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    showReminderMessage(
+                        (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
+                            ? 'Notification permission was not granted.'
+                            : 'Notification permission ලබා දුන්නේ නෑ.'
+                    );
+                    return;
+                }
+            }
+
             const existingSub = await getExistingSubscription();
 
             if (existingSub) {
@@ -4371,16 +4419,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.warn('Notification permission not granted:', permission);
-                return;
-            }
-
             const keyResp = await fetch('/push/vapid-public-key');
             const keyData = await keyResp.json();
             if (keyData.status !== 'success') {
-                console.warn('Push notifications not configured on the server.');
+                showReminderMessage(
+                    (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
+                        ? 'Daily Reminder is not available on the server right now.'
+                        : 'Daily Reminder feature එක දැනට available නෑ.'
+                );
                 return;
             }
 
@@ -4401,8 +4447,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 }),
             });
             setReminderButtonUI(true);
+            showReminderMessage(
+                (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
+                    ? '✅ Daily Reminder enabled!'
+                    : '✅ Daily Reminder ON කළා!'
+            );
         } catch (error) {
             console.error('Daily reminder toggle failed:', error);
+            showReminderMessage(
+                (typeof getAppLanguage === 'function' && getAppLanguage() === 'en')
+                    ? 'Something went wrong turning on Daily Reminder.'
+                    : 'Daily Reminder ON කිරීමේදී ගැටලුවක් ආවා.'
+            );
         } finally {
             reminderBtn.disabled = false;
         }
