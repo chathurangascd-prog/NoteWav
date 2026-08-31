@@ -3232,7 +3232,7 @@ def admin_send_daily_reminders():
 
     payload = json.dumps({
         'title': 'NoteWav AI',
-        'body': 'අද streak එක save කරගන්න — විනාඩි 5ක් පාඩම් අහන්න! 🔥',
+        'body': 'NoteWav ඔයා වෙනුවෙන් බලන් ඉන්නවා! 👋 / NoteWav is waiting for you!',
         'url': '/',
     })
 
