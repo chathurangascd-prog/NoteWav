@@ -3070,7 +3070,7 @@ const NOTEWAV_TRANSLATIONS = {
     my_library: { si: 'My Library', en: 'My Library' },
     settings_title: { si: 'සැකසුම්', en: 'Settings' },
     menu_title: { si: 'මෙනුව (Menu)', en: 'Menu' },
-    settings_language_label: { si: 'App භාෂාව (Language)', en: 'App Language' },
+    settings_language_label: { si: 'භාෂාව', en: 'Language' },
     library_search_placeholder: { si: 'Title/Subject/Content එකෙන් හොයන්න...', en: 'Search by Title/Subject/Content...' },
     combine_toggle_btn: { si: 'එකතු කරන්න', en: 'Combine' },
     combine_hint: {

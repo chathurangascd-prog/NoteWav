@@ -378,6 +378,15 @@
         .settings-label { font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 12px; }
         .settings-lang-buttons { display: flex; gap: 10px; }
         .settings-lang-buttons .lang-toggle-btn { flex: 1; justify-content: center; display: flex; padding: 12px; font-size: 0.9rem; }
+        /* Compact side-by-side Language + Theme row in the menu drawer —
+           was two full-width stacked sections (label + full-size button
+           row each), taking up a lot of vertical space for two settings
+           that are really just small toggles. */
+        .settings-inline-group { display: flex; gap: 10px; }
+        .settings-inline-item { flex: 1; min-width: 0; }
+        .settings-label-sm { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+        .settings-lang-buttons-sm { display: flex; gap: 6px; }
+        .settings-lang-buttons-sm .lang-toggle-btn { flex: 1; justify-content: center; display: flex; padding: 8px 2px; font-size: 0.72rem; gap: 4px; white-space: nowrap; }
         .app-header { position: relative; }
         .library-modal-card { width: 720px; }
         .library-search-row { display: flex; align-items: center; gap: 10px; padding: 14px 24px 0; color: var(--text-muted); }
@@ -1268,16 +1277,21 @@
                             <i class="fas fa-quote-right"></i> 📜 Quote of the Day
                         </button>
                         <hr class="menu-divider">
-                        <p class="settings-label" data-i18n="settings_language_label">App භාෂාව (Language)</p>
-                        <div class="settings-lang-buttons">
-                            <button type="button" class="lang-toggle-btn active" id="app-lang-si-btn" data-applang="si">🇱🇰 සිංහල</button>
-                            <button type="button" class="lang-toggle-btn" id="app-lang-en-btn" data-applang="en">🇬🇧 English</button>
-                        </div>
-                        <hr class="menu-divider">
-                        <p class="settings-label">Theme</p>
-                        <div class="settings-lang-buttons">
-                            <button type="button" class="lang-toggle-btn active" id="theme-dark-btn" data-theme="dark">🌙 Dark</button>
-                            <button type="button" class="lang-toggle-btn" id="theme-light-btn" data-theme="light">☀️ Light</button>
+                        <div class="settings-inline-group">
+                            <div class="settings-inline-item">
+                                <p class="settings-label-sm" data-i18n="settings_language_label">Language</p>
+                                <div class="settings-lang-buttons-sm">
+                                    <button type="button" class="lang-toggle-btn active" id="app-lang-si-btn" data-applang="si">🇱🇰 සිං</button>
+                                    <button type="button" class="lang-toggle-btn" id="app-lang-en-btn" data-applang="en">🇬🇧 En</button>
+                                </div>
+                            </div>
+                            <div class="settings-inline-item">
+                                <p class="settings-label-sm">Theme</p>
+                                <div class="settings-lang-buttons-sm">
+                                    <button type="button" class="lang-toggle-btn active" id="theme-dark-btn" data-theme="dark">🌙 Dark</button>
+                                    <button type="button" class="lang-toggle-btn" id="theme-light-btn" data-theme="light">☀️ Light</button>
+                                </div>
+                            </div>
                         </div>
                         <hr class="menu-divider">
                         <button type="button" id="daily-reminder-toggle-btn" class="library-nav-btn" style="width: 100%; justify-content: center;">
