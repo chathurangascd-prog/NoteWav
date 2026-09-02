@@ -17,6 +17,28 @@ function getAppLanguage() {
     }
 }
 
+// FIX (auto-scroll during audio playback fought any attempt to
+// scroll the page up): the active-lyric-line highlight used to call
+// el.scrollIntoView({block:'center'}), which walks EVERY scrollable
+// ancestor — including the page itself — so on each timeupdate tick
+// it yanked the whole page back down to re-center the line. This is
+// a true top-level function (not nested in one DOMContentLoaded
+// closure) because it's called from both the main note player and
+// the course-lesson player, which live in separate closures. It only
+// ever moves the .lyrics-container's own scrollTop, and only when the
+// line isn't already visible inside it — never the page's scroll.
+function scrollLyricLineIntoView(el) {
+    const container = el.closest('.lyrics-container');
+    if (!container) return;
+    const top = el.offsetTop;
+    const bottom = top + el.offsetHeight;
+    const viewTop = container.scrollTop;
+    const viewBottom = viewTop + container.clientHeight;
+    if (top < viewTop || bottom > viewBottom) {
+        container.scrollTo({ top: top - (container.clientHeight - el.offsetHeight) / 2, behavior: 'smooth' });
+    }
+}
+
 function autoResizeTextarea(el, maxHeightPx) {
     maxHeightPx = maxHeightPx || 320;
     el.style.height = 'auto';
@@ -1298,7 +1320,7 @@ document.addEventListener('DOMContentLoaded', function() {
         unitElements.forEach(el => el.classList.remove('active'));
         if (unitElements[activeIndex]) {
             unitElements[activeIndex].classList.add('active');
-            unitElements[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            scrollLyricLineIntoView(unitElements[activeIndex]);
         }
     }
 
@@ -5399,7 +5421,7 @@ document.addEventListener('DOMContentLoaded', function() {
         els.forEach(el => el.classList.remove('active'));
         if (els[activeIndex]) {
             els[activeIndex].classList.add('active');
-            els[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            scrollLyricLineIntoView(els[activeIndex]);
         }
     }
 
