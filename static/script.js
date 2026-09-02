@@ -797,11 +797,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 showErrorBanner(data.message || (lang === 'en' ? 'Failed to create share link.' : 'Share link එක හදාගැනීම අසාර්ථක විය.'));
                 return;
             }
+            // Branded message — carries the NoteWav AI name wherever the
+            // link ends up (WhatsApp, SMS, etc.), not just on the page
+            // the link opens to.
+            const shareTitle = data.title || (lang === 'en' ? 'My note' : 'මගේ note එක');
+            const shareText = lang === 'en'
+                ? `📚 ${shareTitle} — via NoteWav AI`
+                : `📚 ${shareTitle} — NoteWav AI වලින්`;
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'NoteWav AI', text: shareText, url: data.share_url });
+                    return;
+                } catch (e) {
+                    if (e && e.name === 'AbortError') return; // person cancelled the share sheet
+                    // fall through to clipboard below
+                }
+            }
             try {
-                await navigator.clipboard.writeText(data.share_url);
+                await navigator.clipboard.writeText(`${shareText}\n${data.share_url}`);
                 showErrorBanner(lang === 'en' ? '🔗 Link copied! Anyone with it can view this note (read-only).' : '🔗 Link එක copy උනා! මේ link එක තියෙන ඕනම කෙනෙකුට note එක බලන්න පුළුවන් (read-only).');
             } catch (e) {
-                window.prompt(lang === 'en' ? 'Copy this link:' : 'මේ link එක copy කරන්න:', data.share_url);
+                window.prompt(lang === 'en' ? 'Copy this link:' : 'මේ link එක copy කරන්න:', `${shareText}\n${data.share_url}`);
             }
         } catch (e) {
             showErrorBanner(lang === 'en' ? 'Network error. Failed to create share link.' : 'Network error. Share link එක හදාගැනීම අසාර්ථක විය.');

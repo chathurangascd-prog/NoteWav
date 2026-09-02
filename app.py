@@ -3264,7 +3264,7 @@ def library_share(note_id):
         return jsonify({'status': 'error', 'message': 'Share කරන්න login වෙන්න ඕන.'}), 401
     try:
         conn = get_db()
-        row = conn.execute('SELECT owner_google_id, share_token FROM notes WHERE id = ?', (note_id,)).fetchone()
+        row = conn.execute('SELECT owner_google_id, share_token, title FROM notes WHERE id = ?', (note_id,)).fetchone()
         if not row:
             conn.close()
             return jsonify({'status': 'error', 'message': 'Note එක හමු නොවීය.'}), 404
@@ -3284,7 +3284,14 @@ def library_share(note_id):
             conn.execute('UPDATE notes SET share_token = ? WHERE id = ?', (token, note_id))
             conn.commit()
         conn.close()
-        return jsonify({'status': 'success', 'share_url': url_for('view_shared_note', token=token, _external=True)})
+        # title returned here (not read from a DOM attribute client-side)
+        # so the frontend never has to embed user-authored text into an
+        # HTML attribute to build the branded share message below.
+        return jsonify({
+            'status': 'success',
+            'share_url': url_for('view_shared_note', token=token, _external=True),
+            'title': row['title'],
+        })
     except Exception as e:
         print(f"❌ Library share error: {e}")
         return jsonify({'status': 'error', 'message': 'Share link එක හදාගැනීම අසාර්ථක විය.'}), 500
