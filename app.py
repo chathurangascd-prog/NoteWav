@@ -10,6 +10,8 @@ import shutil
 import sqlite3
 import secrets
 import requests
+import subprocess
+import tempfile
 import libsql_client
 from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
@@ -23,6 +25,7 @@ from pydub import AudioSegment  # pip install pydub --break-system-packages
 import fitz  # PyMuPDF — pip install pymupdf --break-system-packages
 import io
                                  # also requires ffmpeg installed on the system
+from PIL import Image, ImageDraw, ImageFont  # key-point video frames — pip install Pillow
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import threading
 from collections import defaultdict, deque
@@ -899,6 +902,142 @@ def cleanup_old_audio(max_age_seconds=3600):
                 os.remove(path)
     except Exception as e:
         print(f"⚠️ Audio cleanup skipped: {e}")
+
+
+def cleanup_old_video(max_age_seconds=3600):
+    try:
+        now = time.time()
+        for path in glob.glob('static/video_*.mp4'):
+            if now - os.path.getmtime(path) > max_age_seconds:
+                os.remove(path)
+    except Exception as e:
+        print(f"⚠️ Video cleanup skipped: {e}")
+
+
+# ========================================
+# KEY-POINTS VIDEO — a slideshow-style .mp4 (white card per key point,
+# a rotating accent color, crossfade-free hard cuts) built from data
+# that already exists (key points + the just-generated TTS audio),
+# muxed with ffmpeg. Not an AI-animated video — see the "Sync vs.
+# Render" comparison this was scoped from: this is the cheap, ffmpeg-
+# only path, no video-generation API involved.
+# ========================================
+VIDEO_FONT_SINHALA = os.path.join('static', 'fonts', 'NotoSansSinhala-Bold.ttf')
+VIDEO_FONT_TAMIL = os.path.join('static', 'fonts', 'NotoSansTamil-Bold.ttf')
+VIDEO_PALETTE = ['#8b5cf6', '#f59e0b', '#14b8a6', '#ec4899', '#3b82f6', '#ef4444']
+
+
+def _pick_video_font_path(text):
+    # Sinhala font also covers Latin fine, so it's the default; Tamil
+    # needs its own font — Noto Sans Sinhala has no Tamil glyphs.
+    if re.search(r'[஀-௿]', text):
+        return VIDEO_FONT_TAMIL
+    return VIDEO_FONT_SINHALA
+
+
+def _get_video_font(text, size):
+    font = ImageFont.truetype(_pick_video_font_path(text), size)
+    try:
+        font.set_variation_by_axes([700])  # both bundled fonts are variable — pin to bold
+    except Exception:
+        pass
+    return font
+
+
+def _wrap_video_text(draw, text, font, max_width):
+    words = text.split(' ')
+    lines, current = [], ''
+    for word in words:
+        candidate = (current + ' ' + word).strip()
+        if draw.textlength(candidate, font=font) <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _render_key_point_frame(index, total, text, out_path):
+    width, height = 1280, 720
+    img = Image.new('RGB', (width, height), '#ffffff')
+    draw = ImageDraw.Draw(img)
+    accent = VIDEO_PALETTE[index % len(VIDEO_PALETTE)]
+
+    draw.rectangle([0, 0, width, 14], fill=accent)
+
+    badge_r, badge_cx, badge_cy = 44, 110, 130
+    draw.ellipse([badge_cx - badge_r, badge_cy - badge_r, badge_cx + badge_r, badge_cy + badge_r], fill=accent)
+    num_text = str(index + 1)
+    num_font = _get_video_font(num_text, 40)
+    bbox = draw.textbbox((0, 0), num_text, font=num_font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text((badge_cx - tw / 2, badge_cy - th / 2 - bbox[1]), num_text, font=num_font, fill='white')
+
+    body_font = _get_video_font(text, 52)
+    max_w = width - 260
+    lines = _wrap_video_text(draw, text, body_font, max_w)
+    line_h = 68
+    y = height / 2 - (len(lines) * line_h) / 2
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=body_font)
+        lw = bbox[2] - bbox[0]
+        draw.text((width / 2 - lw / 2, y), line, font=body_font, fill='#1c1826')
+        y += line_h
+
+    footer_font = _get_video_font('NoteWav AI', 28)
+    bbox = draw.textbbox((0, 0), 'NoteWav AI', font=footer_font)
+    fw = bbox[2] - bbox[0]
+    draw.text((width / 2 - fw / 2, height - 70), 'NoteWav AI', font=footer_font, fill=accent)
+
+    dot_r, gap = 6, 24
+    start_x = width / 2 - (total - 1) * gap / 2
+    for i in range(total):
+        color = accent if i == index else '#e5e5e5'
+        cx = start_x + i * gap
+        draw.ellipse([cx - dot_r, height - 30 - dot_r, cx + dot_r, height - 30 + dot_r], fill=color)
+
+    img.save(out_path)
+
+
+def generate_key_points_video(key_points, audio_path, out_path):
+    audio_segment = AudioSegment.from_file(audio_path)
+    total_duration = len(audio_segment) / 1000.0
+    # Same even-split-across-duration approximation already used for
+    # the in-app key point highlight — no per-point timing exists.
+    # Floored so a short audio clip doesn't shrink frames to a blur.
+    per_point = max(1.5, total_duration / len(key_points))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        frame_paths = []
+        for i, kp in enumerate(key_points):
+            frame_path = os.path.join(tmp_dir, f'frame_{i:03d}.png')
+            _render_key_point_frame(i, len(key_points), kp, frame_path)
+            frame_paths.append(frame_path)
+
+        concat_path = os.path.join(tmp_dir, 'concat.txt')
+        with open(concat_path, 'w', encoding='utf-8') as f:
+            for p in frame_paths:
+                f.write(f"file '{p}'\n")
+                f.write(f"duration {per_point}\n")
+            # ffmpeg's concat demuxer quirk: the last entry's duration is
+            # ignored unless the file is repeated once more without one.
+            f.write(f"file '{frame_paths[-1]}'\n")
+
+        cmd = [
+            'ffmpeg', '-y',
+            '-f', 'concat', '-safe', '0', '-i', concat_path,
+            '-i', audio_path,
+            '-vf', 'scale=1280:720,format=yuv420p',
+            '-c:v', 'libx264', '-r', '25',
+            '-c:a', 'aac', '-shortest',
+            out_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed: {result.stderr[-800:]}")
 
 
 GTTS_AVAILABLE = True
@@ -2596,6 +2735,41 @@ def text_to_speech():
             'status': 'error',
             'message': 'gTTS හරහා audio එක generate කරගැනීම අසාර්ථක විය. පසුව උත්සාහ කරන්න.'
         }), 500
+
+
+@app.route('/generate-video', methods=['POST'])
+@rate_limited(3, 300)
+def generate_video():
+    data = request.get_json(silent=True) or {}
+    key_points = data.get('key_points')
+    audio_url = (data.get('audio_url') or '').strip()
+
+    if not isinstance(key_points, list):
+        return jsonify({'status': 'error', 'message': 'Key points නෑ.'}), 400
+    key_points = [str(p).strip() for p in key_points if str(p).strip()][:12]
+    if not key_points:
+        return jsonify({'status': 'error', 'message': 'Key points නෑ — script එකට Key Points තිබ්බ නම් විතරයි video එකක් හදාගන්න පුළුවන්.'}), 400
+
+    # audio_url must point at a file THIS server just generated —
+    # never trust a client-supplied path/URL directly (path traversal /
+    # reading arbitrary files on disk).
+    if not re.match(r'^/static/output_[0-9a-f]{32}\.mp3$', audio_url):
+        return jsonify({'status': 'error', 'message': 'Audio එක හම්බුනේ නෑ — කලින් Audio Generate කරන්න.'}), 400
+    audio_path = audio_url.lstrip('/')
+    if not os.path.exists(audio_path):
+        return jsonify({'status': 'error', 'message': 'Audio එක තවම නෑ — Audio Generate කරලා try කරන්න.'}), 404
+
+    try:
+        if not os.path.exists('static'):
+            os.makedirs('static')
+        cleanup_old_video()
+        out_name = f"video_{uuid.uuid4().hex}.mp4"
+        out_path = os.path.join('static', out_name)
+        generate_key_points_video(key_points, audio_path, out_path)
+        return jsonify({'status': 'success', 'video_url': '/' + out_path.replace('\\', '/')})
+    except Exception as e:
+        print(f"❌ Video generation error: {e}")
+        return jsonify({'status': 'error', 'message': 'Video එක හදාගැනීම අසාර්ථක විය.'}), 500
 
 
 @app.route('/')

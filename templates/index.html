@@ -1426,6 +1426,15 @@
                         <span data-i18n="lyrics_placeholder">Audio එක Play කරනකොට මෙතන text එක highlight වෙනවා...</span>
                     </p>
                 </div>
+
+                <div id="video-section" style="margin-top: 16px;">
+                    <button id="generate-video-btn" class="btn-secondary" type="button">
+                        <i class="fas fa-film"></i> <span id="generate-video-label" data-i18n="generate_video_btn">Video එකක් හදන්න</span>
+                    </button>
+                    <div id="video-player-wrap" class="hidden" style="margin-top: 12px;">
+                        <video id="generated-video-player" controls playsinline style="width: 100%; border-radius: var(--radius-md); background: #000; display: block;"></video>
+                    </div>
+                </div>
             </div>
 
             <div id="status-message" class="status-message hidden notewav-only">

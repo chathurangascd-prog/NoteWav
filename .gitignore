@@ -7,6 +7,7 @@ venv/
 env/
 notewav.db
 static/output_*.mp3
+static/video_*.mp4
 static/lesson_audio/
 .DS_Store
 *.log

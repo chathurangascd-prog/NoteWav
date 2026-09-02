@@ -438,6 +438,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let isOCRRunning = false;
     let highlightUnits = [];
     let keyPointsCount = 0; // how many <li> are in #key-points-list — drives updateKeyPointHighlight
+    let lastKeyPoints = []; // raw key_points array from the last /process-note response — feeds /generate-video
+    let lastAudioUrl = ''; // audio_url from the last /tts response — feeds /generate-video
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
@@ -2513,6 +2515,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 await renderMindMap(data.mermaid_code_si, data.mermaid_code_en);
                 renderKeyPoints(data.key_points);
+                lastKeyPoints = Array.isArray(data.key_points) ? data.key_points : [];
 
                 if (audio) {
                     audio.pause();
@@ -2637,6 +2640,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 audio = new Audio(data.audio_url);
+                lastAudioUrl = data.audio_url || '';
+                resetGeneratedVideo();
                 currentAudioEngine = data.engine || 'gtts';
                 audio.playbackRate = getEffectivePlaybackRate();
                 audio.volume = playbackVolume;
@@ -2749,6 +2754,59 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // ========================================
+    // KEY-POINTS VIDEO — a slideshow-style .mp4 built server-side from
+    // the key points + the audio just generated above (see /generate-video
+    // in app.py). Not available until both exist.
+    // ========================================
+    const generateVideoBtn = document.getElementById('generate-video-btn');
+    const videoPlayerWrap = document.getElementById('video-player-wrap');
+    const generatedVideoPlayer = document.getElementById('generated-video-player');
+
+    function resetGeneratedVideo() {
+        if (videoPlayerWrap) videoPlayerWrap.classList.add('hidden');
+        if (generatedVideoPlayer) generatedVideoPlayer.removeAttribute('src');
+    }
+
+    if (generateVideoBtn) {
+        generateVideoBtn.addEventListener('click', async function() {
+            const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+            if (!lastAudioUrl) {
+                showErrorBanner(lang === 'en' ? 'Generate audio first.' : 'මුලින්ම Audio Generate කරන්න.');
+                return;
+            }
+            if (!lastKeyPoints || lastKeyPoints.length === 0) {
+                showErrorBanner(lang === 'en' ? 'This note has no Key Points to build a video from.' : 'මේ note එකට Key Points නෑ — video එකක් හදාගන්න බැහැ.');
+                return;
+            }
+
+            const originalHtml = generateVideoBtn.innerHTML;
+            generateVideoBtn.innerHTML = `<span class="mini-wave"><span></span><span></span><span></span><span></span></span> ${lang === 'en' ? 'Generating video...' : 'Video එක හදමින්...'}`;
+            generateVideoBtn.disabled = true;
+
+            try {
+                const res = await fetch('/generate-video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_points: lastKeyPoints, audio_url: lastAudioUrl }),
+                });
+                const data = await res.json();
+                if (data.status === 'success' && generatedVideoPlayer && videoPlayerWrap) {
+                    generatedVideoPlayer.src = data.video_url;
+                    videoPlayerWrap.classList.remove('hidden');
+                    trackUsageEvent('video_generated');
+                } else {
+                    showErrorBanner(data.message || (lang === 'en' ? 'Failed to generate video.' : 'Video එක හදාගැනීම අසාර්ථක විය.'));
+                }
+            } catch (e) {
+                showErrorBanner(lang === 'en' ? 'Network error. Failed to generate video.' : 'Network error. Video එක හදාගැනීම අසාර්ථක විය.');
+            } finally {
+                generateVideoBtn.innerHTML = originalHtml;
+                generateVideoBtn.disabled = false;
+            }
+        });
+    }
+
+    // ========================================
     // PLAY / PAUSE
     // ========================================
     playPauseBtn.addEventListener('click', function() {
@@ -2853,6 +2911,9 @@ document.addEventListener('DOMContentLoaded', function() {
         audioSection.classList.add('hidden');
         if (mindmapSection) mindmapSection.classList.add('hidden');
         renderKeyPoints([]);
+        lastKeyPoints = [];
+        lastAudioUrl = '';
+        resetGeneratedVideo();
         const quizSectionResetEl = document.getElementById('quiz-section');
         if (quizSectionResetEl) quizSectionResetEl.classList.add('hidden');
         const quizBodyResetEl = document.getElementById('quiz-body');
@@ -3236,6 +3297,7 @@ const NOTEWAV_TRANSLATIONS = {
     subject_placeholder: { si: 'Subject (උදා: Biology, Physics)', en: 'Subject (e.g: Biology, Physics)' },
     save_to_library_btn: { si: 'Library එකට Save කරන්න', en: 'Save to Library' },
     generate_audio_btn: { si: 'තරංග උත්පාදනය කරන්න', en: 'Generate Audio' },
+    generate_video_btn: { si: 'Video එකක් හදන්න', en: 'Generate Video' },
     reset_btn: { si: 'නැවත උත්සාහ කරන්න', en: 'Try Again' },
     mindmap_empty: { si: 'Mind map එකක් තවම නෑ.', en: 'No mind map yet.' },
     download_png_btn: { si: 'PNG එකක් විදිහට Download කරන්න', en: 'Download as PNG' },

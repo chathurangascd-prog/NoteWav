@@ -13,3 +13,4 @@ openai==3.6.0
 requests==2.34.2
 cloudinary==1.46.2
 pywebpush==2.5.0
+Pillow==11.3.0
