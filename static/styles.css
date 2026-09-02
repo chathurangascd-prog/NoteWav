@@ -1021,6 +1021,20 @@ textarea:hover {
     }
 }
 
+/* Key point currently being narrated — same "alive" treatment as the
+   active lyric line, adapted for a list item instead of an inline span. */
+#key-points-list li.active {
+    color: #ffffff;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(102, 126, 234, 0.15));
+    margin-left: -8px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    list-style-position: inside;
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+    animation: highlightPulse 1.5s ease-in-out infinite;
+}
+
 /* ===== LYRICS SCROLLBAR ===== */
 .lyrics-container::-webkit-scrollbar {
     width: 4px;

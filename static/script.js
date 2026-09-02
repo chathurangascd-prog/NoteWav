@@ -415,6 +415,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isPlaying = false;
     let isOCRRunning = false;
     let highlightUnits = [];
+    let keyPointsCount = 0; // how many <li> are in #key-points-list — drives updateKeyPointHighlight
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
@@ -1545,18 +1546,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
         keyPointsList.innerHTML = '';
         const validPoints = Array.isArray(points) ? points.filter(p => typeof p === 'string' && p.trim()) : [];
+        keyPointsCount = validPoints.length;
 
         if (validPoints.length === 0) {
             keyPointsSection.classList.add('hidden');
             return;
         }
 
-        validPoints.forEach(point => {
+        validPoints.forEach((point, index) => {
             const li = document.createElement('li');
             li.textContent = point.trim();
+            li.dataset.index = index;
             keyPointsList.appendChild(li);
         });
         keyPointsSection.classList.remove('hidden');
+    }
+
+    // ========================================
+    // SYNC THE ACTIVE KEY POINT TO PLAYBACK — no per-node mind-map
+    // timing exists server-side, so this approximates it by splitting
+    // the audio's total duration evenly across the key points (they're
+    // generated in narration order, so this tracks "roughly where we
+    // are" well enough to feel alive without claiming false precision).
+    // ========================================
+    function updateKeyPointHighlight(currentTime, duration) {
+        const keyPointsList = document.getElementById('key-points-list');
+        if (!keyPointsList || keyPointsCount === 0 || !duration || !isFinite(duration) || duration <= 0) return;
+        const activeIndex = Math.min(keyPointsCount - 1, Math.max(0, Math.floor((currentTime / duration) * keyPointsCount)));
+        const items = keyPointsList.querySelectorAll('li');
+        items.forEach(li => li.classList.remove('active'));
+        if (items[activeIndex]) {
+            items[activeIndex].classList.add('active');
+        }
     }
 
     // ========================================
@@ -2590,6 +2611,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         currentTimeEl.textContent = formatTime(current);
                         updateProgress((current / duration) * 100);
                         updateHighlight(current);
+                        updateKeyPointHighlight(current, duration);
                     }
                     trackStudyTime(current);
                 });
@@ -2602,6 +2624,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.querySelector('.player-container').classList.remove('playing');
                     stopWaveformAnimation();
                     document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
+                    document.querySelectorAll('#key-points-list li').forEach(el => el.classList.remove('active'));
                     setMediaSessionPlaybackState('none');
                 });
 
