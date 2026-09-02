@@ -850,9 +850,15 @@
         });
 
         function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
+            // Must be safe for BOTH text-node and quoted-attribute contexts —
+            // textContent/innerHTML round-tripping does not escape quotes, which
+            // let a user-controlled name/email break out of data-* attributes below.
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         let allUsers = [];
@@ -887,7 +893,7 @@
                         emailDisplay += `<br><span style="color:#f87171; font-size:0.76rem;">${escapeHtml(oldE)}</span>`;
                     });
                 }
-                html += `<tr class="clickable-row" data-anon-id="${u.anon_id}" data-name="${escapeHtml(displayName)}" data-notes="${u.notes_processed}" data-audio="${u.audio_generated}" data-actions="${u.total_events}" data-email="${u.current_email || ''}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${coinsDisplay}</td></tr>`;
+                html += `<tr class="clickable-row" data-anon-id="${escapeHtml(u.anon_id)}" data-name="${escapeHtml(displayName)}" data-notes="${u.notes_processed}" data-audio="${u.audio_generated}" data-actions="${u.total_events}" data-email="${escapeHtml(u.current_email || '')}"><td class="${nameClass}">${onlineDot}${displayName}</td><td>${emailDisplay}</td><td>${deviceDisplay}</td><td>${u.first_seen}</td><td>${u.last_seen}</td><td>${coinsDisplay}</td></tr>`;
             });
             html += '</tbody></table>';
             wrapper.innerHTML = html;
