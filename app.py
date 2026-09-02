@@ -3171,7 +3171,7 @@ def library_list():
         if user_id:
             if query:
                 rows = conn.execute(
-                    """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes
+                    """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image, (share_token IS NOT NULL) AS is_shared FROM notes
                        WHERE owner_google_id = ?
                        AND (title LIKE ? OR subject LIKE ? OR note_text LIKE ? OR processed_text LIKE ?)
                        ORDER BY created_at DESC""",
@@ -3179,13 +3179,13 @@ def library_list():
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    'SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
+                    'SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image, (share_token IS NOT NULL) AS is_shared FROM notes WHERE owner_google_id = ? ORDER BY created_at DESC',
                     (user_id,)
                 ).fetchall()
         else:
             if query:
                 rows = conn.execute(
-                    """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes
+                    """SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image, (share_token IS NOT NULL) AS is_shared FROM notes
                        WHERE owner_google_id IS NULL
                        AND (title LIKE ? OR subject LIKE ? OR note_text LIKE ? OR processed_text LIKE ?)
                        ORDER BY created_at DESC""",
@@ -3193,7 +3193,7 @@ def library_list():
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    'SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
+                    'SELECT id, subject, title, mode, created_at, (source_image_data IS NOT NULL) AS has_image, (share_token IS NOT NULL) AS is_shared FROM notes WHERE owner_google_id IS NULL ORDER BY created_at DESC'
                 ).fetchall()
         conn.close()
         notes = [dict(row) for row in rows]
