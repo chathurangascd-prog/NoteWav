@@ -439,7 +439,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let highlightUnits = [];
     let keyPointsCount = 0; // how many <li> are in #key-points-list — drives updateKeyPointHighlight
     let lastKeyPoints = []; // raw key_points array from the last /process-note response — feeds /generate-video
-    let lastAudioUrl = ''; // audio_url from the last /tts response — feeds /generate-video
+    // The actual audio BYTES (not just the URL) from the last /tts response,
+    // fetched immediately while the file is guaranteed to exist server-side.
+    // /generate-video needs this because Render runs the app across more
+    // than one instance with separate disks — a URL fetched again later,
+    // even seconds later, can land on a different instance than the one
+    // that wrote the file and 404.
+    let lastAudioBlob = null;
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
@@ -2640,8 +2646,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 audio = new Audio(data.audio_url);
-                lastAudioUrl = data.audio_url || '';
                 resetGeneratedVideo();
+                lastAudioBlob = null;
+                if (data.audio_url) {
+                    // Grab the bytes NOW, while this server instance still
+                    // has the file — see the note on lastAudioBlob above.
+                    fetch(data.audio_url).then(r => r.blob()).then(blob => { lastAudioBlob = blob; }).catch(() => {});
+                }
                 currentAudioEngine = data.engine || 'gtts';
                 audio.playbackRate = getEffectivePlaybackRate();
                 audio.volume = playbackVolume;
@@ -2770,7 +2781,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (generateVideoBtn) {
         generateVideoBtn.addEventListener('click', async function() {
             const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
-            if (!lastAudioUrl) {
+            if (!lastAudioBlob) {
                 showErrorBanner(lang === 'en' ? 'Generate audio first.' : 'මුලින්ම Audio Generate කරන්න.');
                 return;
             }
@@ -2784,15 +2795,13 @@ document.addEventListener('DOMContentLoaded', function() {
             generateVideoBtn.disabled = true;
 
             try {
-                const res = await fetch('/generate-video', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        key_points: lastKeyPoints,
-                        script_text: scriptOutput ? scriptOutput.value.trim() : '',
-                        audio_url: lastAudioUrl,
-                    }),
-                });
+                // multipart, not JSON — the audio travels as actual bytes
+                // (see lastAudioBlob) rather than a server-path reference.
+                const formData = new FormData();
+                formData.append('audio', lastAudioBlob, 'audio.mp3');
+                formData.append('key_points', JSON.stringify(lastKeyPoints || []));
+                formData.append('script_text', scriptOutput ? scriptOutput.value.trim() : '');
+                const res = await fetch('/generate-video', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.status === 'success' && generatedVideoPlayer && videoPlayerWrap) {
                     generatedVideoPlayer.src = data.video_url;
@@ -2916,7 +2925,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mindmapSection) mindmapSection.classList.add('hidden');
         renderKeyPoints([]);
         lastKeyPoints = [];
-        lastAudioUrl = '';
+        lastAudioBlob = null;
         resetGeneratedVideo();
         const quizSectionResetEl = document.getElementById('quiz-section');
         if (quizSectionResetEl) quizSectionResetEl.classList.add('hidden');

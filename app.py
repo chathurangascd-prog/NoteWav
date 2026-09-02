@@ -2758,10 +2758,28 @@ def text_to_speech():
 @app.route('/generate-video', methods=['POST'])
 @rate_limited(3, 300)
 def generate_video():
-    data = request.get_json(silent=True) or {}
-    key_points = data.get('key_points')
-    script_text = (data.get('script_text') or '').strip()
-    audio_url = (data.get('audio_url') or '').strip()
+    # FIX ("Audio එක තවම නෑ" even when clicked immediately after
+    # generating audio): this used to take an audio_url and re-open
+    # that path on disk. Render runs this app across more than one
+    # instance, each with its own ephemeral disk — the /tts request
+    # that wrote the file and this /generate-video request are not
+    # guaranteed to land on the same instance, so the file could
+    # genuinely not exist here even seconds later. Fixed by having the
+    # audio travel WITH this request as an upload instead of being
+    # referenced by a server-local path.
+    request.max_content_length = 20 * 1024 * 1024
+
+    if 'audio' not in request.files:
+        return jsonify({'status': 'error', 'message': 'Audio එක හම්බුනේ නෑ — කලින් Audio Generate කරන්න.'}), 400
+    audio_bytes = request.files['audio'].read()
+    if not audio_bytes:
+        return jsonify({'status': 'error', 'message': 'Audio එක හම්බුනේ නෑ — කලින් Audio Generate කරන්න.'}), 400
+
+    try:
+        key_points = json.loads(request.form.get('key_points') or '[]')
+    except (ValueError, TypeError):
+        key_points = []
+    script_text = (request.form.get('script_text') or '').strip()
 
     cards = [str(p).strip() for p in key_points if str(p).strip()] if isinstance(key_points, list) else []
     if not cards and script_text:
@@ -2774,26 +2792,24 @@ def generate_video():
     if not cards:
         return jsonify({'status': 'error', 'message': 'Video එකක් හදාගන්න මදි text එකක් හම්බුනේ නෑ.'}), 400
 
-    # audio_url must point at a file THIS server just generated —
-    # never trust a client-supplied path/URL directly (path traversal /
-    # reading arbitrary files on disk).
-    if not re.match(r'^/static/output_[0-9a-f]{32}\.mp3$', audio_url):
-        return jsonify({'status': 'error', 'message': 'Audio එක හම්බුනේ නෑ — කලින් Audio Generate කරන්න.'}), 400
-    audio_path = audio_url.lstrip('/')
-    if not os.path.exists(audio_path):
-        return jsonify({'status': 'error', 'message': 'Audio එක තවම නෑ — Audio Generate කරලා try කරන්න.'}), 404
-
+    tmp_audio_path = None
     try:
         if not os.path.exists('static'):
             os.makedirs('static')
         cleanup_old_video()
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_audio:
+            tmp_audio.write(audio_bytes)
+            tmp_audio_path = tmp_audio.name
         out_name = f"video_{uuid.uuid4().hex}.mp4"
         out_path = os.path.join('static', out_name)
-        generate_key_points_video(cards, audio_path, out_path)
+        generate_key_points_video(cards, tmp_audio_path, out_path)
         return jsonify({'status': 'success', 'video_url': '/' + out_path.replace('\\', '/')})
     except Exception as e:
         print(f"❌ Video generation error: {e}")
         return jsonify({'status': 'error', 'message': 'Video එක හදාගැනීම අසාර්ථක විය.'}), 500
+    finally:
+        if tmp_audio_path and os.path.exists(tmp_audio_path):
+            os.remove(tmp_audio_path)
 
 
 @app.route('/')
