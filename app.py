@@ -2736,6 +2736,7 @@ def _establish_local_session(row):
 
 
 @app.route('/auth/local/signup', methods=['POST'])
+@rate_limited(8, 300)
 def auth_local_signup():
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()[:60]
@@ -2785,6 +2786,7 @@ def auth_local_signup():
 
 
 @app.route('/auth/local/login', methods=['POST'])
+@rate_limited(8, 300)
 def auth_local_login():
     data = request.get_json(silent=True) or {}
     identifier = (data.get('identifier') or '').strip()
@@ -3109,11 +3111,16 @@ def library_list():
 
 @app.route('/library/export', methods=['GET'])
 def library_export():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'Export කරන්න login වෙන්න ඕන.'}), 401
     try:
         conn = get_db()
         rows = conn.execute(
             """SELECT subject, title, note_text, processed_text, mermaid_code_si,
-                      mermaid_code_en, mode, created_at FROM notes ORDER BY created_at DESC"""
+                      mermaid_code_en, mode, created_at FROM notes
+               WHERE owner_google_id = ? ORDER BY created_at DESC""",
+            (user_id,)
         ).fetchall()
         conn.close()
         notes = [dict(row) for row in rows]
@@ -3131,6 +3138,8 @@ def library_get(note_id):
         conn.close()
         if not row:
             return jsonify({'status': 'error', 'message': 'Note එක හමු නොවීය.'}), 404
+        if row['owner_google_id'] and row['owner_google_id'] != session.get('user_id'):
+            return jsonify({'status': 'error', 'message': 'ඔබට මේ note එක බලන්න අවසර නෑ.'}), 403
         return jsonify({'status': 'success', 'note': dict(row)})
     except Exception as e:
         print(f"❌ Library get error: {e}")
