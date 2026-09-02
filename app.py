@@ -1049,11 +1049,17 @@ def generate_key_points_video(key_points, audio_path, out_path):
             '-f', 'concat', '-safe', '0', '-i', concat_path,
             '-i', audio_path,
             '-vf', 'scale=1280:720,format=yuv420p',
-            '-c:v', 'libx264', '-r', '25',
+            # Content is static text cards (no motion), so a fast preset
+            # and low framerate cost nothing visually but cut encode time
+            # ~3x (benchmarked locally) — matters on Render's slower/
+            # shared CPU, where the previous settings risked outrunning
+            # the platform's request timeout and surfacing as a client
+            # "network error" instead of a clean HTTP error response.
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '10',
             '-c:a', 'aac', '-shortest',
             out_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg failed: {result.stderr[-800:]}")
 
