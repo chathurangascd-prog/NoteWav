@@ -77,6 +77,14 @@ if not os.environ.get('ADMIN_SECRET_KEY'):
 # changes on every server restart would still invalidate all sessions
 # regardless of this cookie lifetime setting).
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+# Belt-and-braces session cookie hardening — Flask already sets
+# HttpOnly by default. SECURE stops the cookie (including the admin
+# login) from ever being sent over a plain http:// connection;
+# SAMESITE='Lax' stops it being attached to cross-site requests
+# except top-level navigation, which is the main browser-level CSRF
+# defense for session-cookie-authenticated POST endpoints.
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_DEBUG', 'false').lower() != 'true'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Simple password gate for the /admin usage dashboard. Set
 # ADMIN_PASSWORD in Render's environment variables — do NOT hardcode
