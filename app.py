@@ -2386,12 +2386,48 @@ def ocr_image():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _get_coin_balance(user_id, anon_id):
+    """Server-side source of truth for spendable coins — never trust
+    the client's own count of its balance for this (it's used below to
+    gate the paid TTS engines, which cost real API money per call).
+    Returns None (not 0) when no row exists yet, so callers can tell
+    "never synced" apart from "synced down to zero" — that distinction
+    matters for a brand-new anon_id's very first sync, which should be
+    free to establish its starting balance rather than get capped."""
+    conn = get_db()
+    try:
+        if user_id:
+            row = conn.execute("SELECT coins FROM users WHERE google_id = ?", (user_id,)).fetchone()
+        elif anon_id:
+            row = conn.execute("SELECT coins FROM user_state WHERE anon_id = ?", (anon_id,)).fetchone()
+        else:
+            row = None
+        return row['coins'] if row and row['coins'] is not None else None
+    finally:
+        conn.close()
+
+
+def _deduct_coins(user_id, anon_id, amount):
+    if amount <= 0 or (not user_id and not anon_id):
+        return
+    conn = get_db()
+    try:
+        if user_id:
+            conn.execute("UPDATE users SET coins = MAX(0, coins - ?) WHERE google_id = ?", (amount, user_id))
+        else:
+            conn.execute("UPDATE user_state SET coins = MAX(0, coins - ?) WHERE anon_id = ?", (amount, anon_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 @app.route('/tts', methods=['POST'])
 @rate_limited(10, 60)
 def text_to_speech():
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
-    if _is_banned(anon_id=(data.get('anon_id') or '').strip()[:64], email=session.get('user_email')):
+    anon_id = (data.get('anon_id') or '').strip()[:64]
+    if _is_banned(anon_id=anon_id, email=session.get('user_email')):
         return jsonify({'status': 'error', 'message': 'ඔබේ account/device එකට මේ feature එක restrict කර ඇත.'}), 403
     engine = (data.get('engine') or 'gtts').strip().lower()
     if engine not in ('gtts', 'gemini'):
@@ -2431,6 +2467,24 @@ def text_to_speech():
     GEMINI_TO_OPENAI_VOICE = {'Sadaltager': 'fable', 'Leda': 'nova'}
 
     if engine == 'gemini':
+        # Enforce the coin cost server-side using the DB balance —
+        # previously only the frontend checked getCoinsBalance() before
+        # calling this route, so a direct request straight to /tts
+        # (skipping the UI entirely) could use the paid engines for
+        # free with any/no coin balance, burning real Gemini/OpenAI
+        # API cost. estimated_cost uses the REQUESTED model_version,
+        # which is always >= whatever cheaper model a fallback might
+        # actually use, so this can't under-charge.
+        user_id = session.get('user_id')
+        estimated_cost = (calculate_openai_tts_coin_cost(len(formatted_text)) if model_version == 'v21'
+                           else calculate_gemini_tts_coin_cost(len(formatted_text), model_version=model_version))
+        if (_get_coin_balance(user_id, anon_id) or 0) < estimated_cost:
+            return jsonify({
+                'status': 'error',
+                'message': 'Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ.',
+                'insufficient_coins': True,
+            }), 402
+
         # NEW (Aug 19, 2026): "NoteWav 2.1" — OpenAI's gpt-4o-mini-tts,
         # a GA/stable alternative positioned before "NoteWav 2.5" in the
         # UI. Routed here (not a separate top-level engine) so it lives
@@ -2451,6 +2505,7 @@ def text_to_speech():
                 _openai_elapsed = time.time() - _openai_start
                 print(f"✅ OpenAI TTS Success! Total time: {_openai_elapsed:.1f}s")
                 log_engine_event('tts', 'openai', 'v21', _openai_elapsed, success=True)
+                _deduct_coins(user_id, anon_id, calculate_openai_tts_coin_cost(len(formatted_text)))
                 return jsonify({
                     'status': 'success',
                     'audio_url': '/' + filename.replace('\\', '/'),
@@ -2478,16 +2533,18 @@ def text_to_speech():
             _gemini_tts_elapsed = time.time() - _gemini_tts_route_start
             print(f"✅ Gemini TTS Success! (model used: {actual_model_used})")
             log_engine_event('tts', 'gemini', actual_model_used, _gemini_tts_elapsed, success=True)
+            # FIX (Aug 19, 2026): charge for whichever model ACTUALLY
+            # generated the audio, not necessarily the one the person
+            # picked — if v31 failed and this fell back to v25, the
+            # person should pay v25's lower price, not v31's.
+            actual_cost = calculate_gemini_tts_coin_cost(len(formatted_text), model_version=actual_model_used)
+            _deduct_coins(user_id, anon_id, actual_cost)
             return jsonify({
                 'status': 'success',
                 'audio_url': '/' + filename.replace('\\', '/'),
                 'sentence_timings': sentence_timings,
                 'engine': 'gemini',
-                # FIX (Aug 19, 2026): charge for whichever model ACTUALLY
-                # generated the audio, not necessarily the one the person
-                # picked — if v31 failed and this fell back to v25, the
-                # person should pay v25's lower price, not v31's.
-                'coin_cost': calculate_gemini_tts_coin_cost(len(formatted_text), model_version=actual_model_used),
+                'coin_cost': actual_cost,
                 'model_version': actual_model_used,
                 'fallback_used': actual_model_used != model_version,
             })
@@ -2856,12 +2913,15 @@ def user_update_profile():
         print(f"⚠️ /user/update-profile failed: {e}")
         return jsonify({'status': 'error'}), 200
 # Coins are tracked client-side (localStorage) and pushed here as an
-# absolute value — nothing server-side currently gates a paid feature
-# on this balance, but it's still shown in the admin dashboard and
-# used for level-up bookkeeping, so clamp it to a plausible range
-# instead of trusting an arbitrary client-supplied number verbatim
-# (e.g. a crafted request setting coins to 999999999).
+# absolute value. /tts now deducts real spend server-side (see
+# _deduct_coins) for the paid AI voice engines, so this endpoint must
+# not let the client freely overwrite that balance back upward — a
+# stale/crafted higher number here would silently undo a server-side
+# deduction. Only a small increase (matching the biggest legitimate
+# client-side reward, the level-up bonus) is allowed per call; the
+# client is always free to report a LOWER balance (its own spending).
 MAX_SYNCABLE_COINS = 100_000
+MAX_COIN_INCREASE_PER_SYNC = 20
 
 
 @app.route('/user/sync', methods=['POST'])
@@ -2874,8 +2934,16 @@ def user_sync():
         data = request.get_json(silent=True) or {}
         updates, params = [], []
         if isinstance(data.get('coins'), int):
+            requested = max(0, min(data['coins'], MAX_SYNCABLE_COINS))
+            current = _get_coin_balance(user_id, None)
+            # current is None only if the users row is somehow missing
+            # (shouldn't happen — it's created at signup/login with the
+            # default balance); a real, already-established balance is
+            # what the increase cap guards.
+            if current is not None and requested > current:
+                requested = min(requested, current + MAX_COIN_INCREASE_PER_SYNC)
             updates.append('coins = ?')
-            params.append(max(0, min(data['coins'], MAX_SYNCABLE_COINS)))
+            params.append(requested)
         if isinstance(data.get('streak'), int):
             updates.append('streak = ?')
             params.append(data['streak'])
@@ -3326,6 +3394,13 @@ def track_event():
             (anon_id, user_name, action, datetime.now(timezone.utc).isoformat(), device_info, user_email)
         )
         if isinstance(coins, int):
+            # Same "don't let a stale/crafted balance overwrite a
+            # server-side TTS deduction" guard as /user/sync — but a
+            # brand-new anon_id (no user_state row yet) is free to
+            # establish its starting balance without the increase cap.
+            current_coins = _get_coin_balance(None, anon_id)
+            if current_coins is not None and coins > current_coins:
+                coins = min(coins, current_coins + MAX_COIN_INCREASE_PER_SYNC)
             conn.execute(
                 """INSERT INTO user_state (anon_id, coins, updated_at) VALUES (?, ?, ?)
                    ON CONFLICT(anon_id) DO UPDATE SET coins = excluded.coins, updated_at = excluded.updated_at""",
