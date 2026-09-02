@@ -2855,7 +2855,17 @@ def user_update_profile():
     except Exception as e:
         print(f"⚠️ /user/update-profile failed: {e}")
         return jsonify({'status': 'error'}), 200
+# Coins are tracked client-side (localStorage) and pushed here as an
+# absolute value — nothing server-side currently gates a paid feature
+# on this balance, but it's still shown in the admin dashboard and
+# used for level-up bookkeeping, so clamp it to a plausible range
+# instead of trusting an arbitrary client-supplied number verbatim
+# (e.g. a crafted request setting coins to 999999999).
+MAX_SYNCABLE_COINS = 100_000
+
+
 @app.route('/user/sync', methods=['POST'])
+@rate_limited(30, 60)
 def user_sync():
     user_id = session.get('user_id')
     if not user_id:
@@ -2865,7 +2875,7 @@ def user_sync():
         updates, params = [], []
         if isinstance(data.get('coins'), int):
             updates.append('coins = ?')
-            params.append(data['coins'])
+            params.append(max(0, min(data['coins'], MAX_SYNCABLE_COINS)))
         if isinstance(data.get('streak'), int):
             updates.append('streak = ?')
             params.append(data['streak'])
@@ -3303,6 +3313,8 @@ def track_event():
         user_name = (data.get('user_name') or '').strip()[:80]
         action = (data.get('action') or '').strip()[:40]
         coins = data.get('coins')
+        if isinstance(coins, int):
+            coins = max(0, min(coins, MAX_SYNCABLE_COINS))
         if not anon_id or not action:
             return jsonify({'status': 'ignored'})
 
