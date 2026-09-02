@@ -1035,6 +1035,18 @@ textarea:hover {
     animation: highlightPulse 1.5s ease-in-out infinite;
 }
 
+/* Mind-map node currently being narrated — a glow filter, not a fill
+   color change, because mermaid's dark theme already renders node
+   text in a light color, so recoloring text alone wouldn't read as
+   "highlighted" against it. */
+#mindmap-container svg g.mm-node-active {
+    animation: mindMapNodePulse 1.5s ease-in-out infinite;
+}
+@keyframes mindMapNodePulse {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.75)); }
+    50% { filter: drop-shadow(0 0 11px rgba(139, 92, 246, 1)); }
+}
+
 /* ===== LYRICS SCROLLBAR ===== */
 .lyrics-container::-webkit-scrollbar {
     width: 4px;

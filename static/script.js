@@ -1603,6 +1603,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ========================================
+    // SYNC THE ACTIVE MIND-MAP NODE TO PLAYBACK — same approximation
+    // as updateKeyPointHighlight (even split across duration, in the
+    // node's render order), applied to the actual mermaid diagram.
+    // Targets each node's <g> (not just its <text>) and glows it via
+    // an SVG filter, since mermaid's dark theme already renders node
+    // text in a light color — a fill-color change alone wouldn't read
+    // as "highlighted" against that.
+    // ========================================
+    function updateMindMapHighlight(currentTime, duration) {
+        if (!mindmapContainer || !duration || !isFinite(duration) || duration <= 0) return;
+        const svg = mindmapContainer.querySelector('svg');
+        if (!svg) return;
+        const nodeGroups = Array.from(svg.querySelectorAll('text'))
+            .map(t => t.closest('g'))
+            .filter(Boolean);
+        if (!nodeGroups.length) return;
+        const activeIndex = Math.min(nodeGroups.length - 1, Math.max(0, Math.floor((currentTime / duration) * nodeGroups.length)));
+        nodeGroups.forEach((g, i) => g.classList.toggle('mm-node-active', i === activeIndex));
+    }
+
+    // ========================================
     // MIND MAP MODAL (enlarge / close / zoom / PDF export)
     // ========================================
     const mindmapModalBackdrop = document.getElementById('mindmap-modal-backdrop');
@@ -2634,6 +2655,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         updateProgress((current / duration) * 100);
                         updateHighlight(current);
                         updateKeyPointHighlight(current, duration);
+                        updateMindMapHighlight(current, duration);
                     }
                     trackStudyTime(current);
                 });
@@ -2647,6 +2669,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     stopWaveformAnimation();
                     document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
                     document.querySelectorAll('#key-points-list li').forEach(el => el.classList.remove('active'));
+                    document.querySelectorAll('#mindmap-container .mm-node-active').forEach(el => el.classList.remove('mm-node-active'));
                     setMediaSessionPlaybackState('none');
                 });
 
