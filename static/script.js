@@ -446,6 +446,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // even seconds later, can land on a different instance than the one
     // that wrote the file and 404.
     let lastAudioBlob = null;
+    let lastSentenceTimings = []; // data.sentence_timings from the last /tts response — feeds /generate-video for real per-card durations
     let playbackSpeed = 1;
     let playbackVolume = 1;
 
@@ -2614,6 +2615,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status === 'success') {
                 audioSection.classList.remove('hidden');
                 renderLyrics(text, data.sentence_timings);
+                lastSentenceTimings = Array.isArray(data.sentence_timings) ? data.sentence_timings : [];
                 trackUsageEvent('audio_generated');
                 saveOfflineAudioEntry(text, data.audio_url);
 
@@ -2801,6 +2803,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 formData.append('audio', lastAudioBlob, 'audio.mp3');
                 formData.append('key_points', JSON.stringify(lastKeyPoints || []));
                 formData.append('script_text', scriptOutput ? scriptOutput.value.trim() : '');
+                formData.append('sentence_timings', JSON.stringify(lastSentenceTimings || []));
                 const res = await fetch('/generate-video', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.status === 'success' && generatedVideoPlayer && videoPlayerWrap) {
@@ -2926,6 +2929,7 @@ document.addEventListener('DOMContentLoaded', function() {
         renderKeyPoints([]);
         lastKeyPoints = [];
         lastAudioBlob = null;
+        lastSentenceTimings = [];
         resetGeneratedVideo();
         const quizSectionResetEl = document.getElementById('quiz-section');
         if (quizSectionResetEl) quizSectionResetEl.classList.add('hidden');

@@ -1020,26 +1020,48 @@ def _derive_video_cards_from_text(text, target_cards=8):
     return cards[:12]
 
 
-def generate_key_points_video(key_points, audio_path, out_path):
-    audio_segment = AudioSegment.from_file(audio_path)
-    total_duration = len(audio_segment) / 1000.0
-    # Same even-split-across-duration approximation already used for
-    # the in-app key point highlight — no per-point timing exists.
-    # Floored so a short audio clip doesn't shrink frames to a blur.
-    per_point = max(1.5, total_duration / len(key_points))
+def _derive_video_cards_from_sentence_timings(sentence_timings, target_cards=8):
+    """Groups the note's own sentence_timings (already measured against
+    the real audio, same data the in-app transcript highlight uses)
+    into ~target_cards cards, each carrying its REAL duration — used
+    instead of an even-split guess whenever this timing data is
+    available, since some points genuinely take longer to narrate
+    than others."""
+    valid = [
+        s for s in sentence_timings
+        if isinstance(s, dict) and str(s.get('text') or '').strip()
+        and isinstance(s.get('start'), (int, float)) and isinstance(s.get('end'), (int, float))
+    ]
+    if not valid:
+        return []
+    target_cards = max(1, min(target_cards, len(valid)))
+    per_card = -(-len(valid) // target_cards)  # ceiling division
+    cards = []
+    for i in range(0, len(valid), per_card):
+        group = valid[i:i + per_card]
+        text = ' '.join(str(s['text']).strip() for s in group if str(s['text']).strip())
+        duration = max(1.0, group[-1]['end'] - group[0]['start'])
+        if text:
+            cards.append((text, duration))
+    return cards[:12]
 
+
+def generate_key_points_video(cards, audio_path, out_path):
+    """cards: list of (text, duration_seconds) tuples — the caller
+    decides each card's duration (real sentence timing when available,
+    an even split of the actual audio length otherwise)."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         frame_paths = []
-        for i, kp in enumerate(key_points):
+        for i, (text, _duration) in enumerate(cards):
             frame_path = os.path.join(tmp_dir, f'frame_{i:03d}.png')
-            _render_key_point_frame(i, len(key_points), kp, frame_path)
+            _render_key_point_frame(i, len(cards), text, frame_path)
             frame_paths.append(frame_path)
 
         concat_path = os.path.join(tmp_dir, 'concat.txt')
         with open(concat_path, 'w', encoding='utf-8') as f:
-            for p in frame_paths:
-                f.write(f"file '{p}'\n")
-                f.write(f"duration {per_point}\n")
+            for path, (_text, duration) in zip(frame_paths, cards):
+                f.write(f"file '{path}'\n")
+                f.write(f"duration {duration}\n")
             # ffmpeg's concat demuxer quirk: the last entry's duration is
             # ignored unless the file is repeated once more without one.
             f.write(f"file '{frame_paths[-1]}'\n")
@@ -2785,18 +2807,13 @@ def generate_video():
         key_points = json.loads(request.form.get('key_points') or '[]')
     except (ValueError, TypeError):
         key_points = []
+    try:
+        sentence_timings = json.loads(request.form.get('sentence_timings') or '[]')
+    except (ValueError, TypeError):
+        sentence_timings = []
     script_text = (request.form.get('script_text') or '').strip()
 
-    cards = [str(p).strip() for p in key_points if str(p).strip()] if isinstance(key_points, list) else []
-    if not cards and script_text:
-        # Fallback for notes with no AI key_points (e.g. Full Text Mode) —
-        # derive cards from the script itself instead of just refusing.
-        length_error = validate_text_length(script_text)
-        if not length_error:
-            cards = _derive_video_cards_from_text(script_text)
-    cards = cards[:12]
-    if not cards:
-        return jsonify({'status': 'error', 'message': 'Video එකක් හදාගන්න මදි text එකක් හම්බුනේ නෑ.'}), 400
+    real_key_points = [str(p).strip() for p in key_points if str(p).strip()] if isinstance(key_points, list) else []
 
     tmp_audio_path = None
     try:
@@ -2806,6 +2823,33 @@ def generate_video():
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_audio:
             tmp_audio.write(audio_bytes)
             tmp_audio_path = tmp_audio.name
+
+        cards = []
+        if real_key_points:
+            # AI key points aren't tied to specific sentences, so there's
+            # no real per-point timing for them — even split across the
+            # actual audio duration, same approximation the in-app
+            # highlight already uses.
+            audio_segment = AudioSegment.from_file(tmp_audio_path)
+            total_duration = len(audio_segment) / 1000.0
+            per_point = max(1.5, total_duration / len(real_key_points[:12]))
+            cards = [(text, per_point) for text in real_key_points[:12]]
+        else:
+            # No AI key points (e.g. Full Text Mode) — prefer REAL timing
+            # from this note's own sentence_timings over guessing.
+            if isinstance(sentence_timings, list):
+                cards = _derive_video_cards_from_sentence_timings(sentence_timings)
+            if not cards and script_text and not validate_text_length(script_text):
+                text_cards = _derive_video_cards_from_text(script_text)
+                if text_cards:
+                    audio_segment = AudioSegment.from_file(tmp_audio_path)
+                    total_duration = len(audio_segment) / 1000.0
+                    per_point = max(1.5, total_duration / len(text_cards))
+                    cards = [(text, per_point) for text in text_cards]
+
+        if not cards:
+            return jsonify({'status': 'error', 'message': 'Video එකක් හදාගන්න මදි text එකක් හම්බුනේ නෑ.'}), 400
+
         out_name = f"video_{uuid.uuid4().hex}.mp4"
         out_path = os.path.join('static', out_name)
         generate_key_points_video(cards, tmp_audio_path, out_path)
