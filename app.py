@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 import glob
+import shutil
 import sqlite3
 import secrets
 import requests
@@ -3475,6 +3476,10 @@ def health():
         'cloud_ocr': CLOUD_OCR_AVAILABLE,
         'gemini': bool(client),
         'gtts_tts': GTTS_AVAILABLE,
+        # pydub (used for every TTS export today) shells out to this
+        # binary — shutil.which mirrors how pydub itself locates it, so
+        # this reports what's actually on PATH, not just installed.
+        'ffmpeg': shutil.which('ffmpeg') is not None,
         'library': os.path.exists(DB_PATH),
         'max_text_length': MAX_TEXT_LENGTH,
     })
