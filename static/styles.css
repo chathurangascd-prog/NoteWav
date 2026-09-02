@@ -1035,16 +1035,18 @@ textarea:hover {
     animation: highlightPulse 1.5s ease-in-out infinite;
 }
 
-/* Mind-map node currently being narrated — a glow filter, not a fill
-   color change, because mermaid's dark theme already renders node
-   text in a light color, so recoloring text alone wouldn't read as
-   "highlighted" against it. */
-#mindmap-container svg g.mm-node-active {
-    animation: mindMapNodePulse 1.5s ease-in-out infinite;
+/* Mind map pulsing in sync with playback. Uses the container's own
+   border + an INSET box-shadow (not an outer glow) deliberately —
+   .mindmap-container has overflow-x:auto, which clips anything that
+   would render outside the box, so an outer shadow/glow would get
+   silently cut off. Border-color and inset shadow both stay inside
+   the box, so this is visible no matter what's rendered inside it. */
+#mindmap-container.mm-pulse {
+    animation: mindMapPulse 1.1s ease-out;
 }
-@keyframes mindMapNodePulse {
-    0%, 100% { filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.75)); }
-    50% { filter: drop-shadow(0 0 11px rgba(139, 92, 246, 1)); }
+@keyframes mindMapPulse {
+    0% { border-color: #8b5cf6; box-shadow: inset 0 0 0 2px rgba(139, 92, 246, 0.6); }
+    100% { border-color: var(--border-color); box-shadow: inset 0 0 0 0 rgba(139, 92, 246, 0); }
 }
 
 /* ===== LYRICS SCROLLBAR ===== */

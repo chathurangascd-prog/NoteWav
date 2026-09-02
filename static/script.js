@@ -1603,24 +1603,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ========================================
-    // SYNC THE ACTIVE MIND-MAP NODE TO PLAYBACK — same approximation
-    // as updateKeyPointHighlight (even split across duration, in the
-    // node's render order), applied to the actual mermaid diagram.
-    // Targets each node's <g> (not just its <text>) and glows it via
-    // an SVG filter, since mermaid's dark theme already renders node
-    // text in a light color — a fill-color change alone wouldn't read
-    // as "highlighted" against that.
+    // PULSE THE MIND MAP IN SYNC WITH PLAYBACK — an earlier version
+    // tried to target individual mermaid-rendered nodes (their <g>
+    // wrapping each <text> label), but mermaid's "mindmap" diagram
+    // type renders labels via <foreignObject> instead of plain SVG
+    // <text> in the versions this app loads, so that selector matched
+    // nothing and nothing ever lit up. This pulses the container's own
+    // border instead — same even-split-by-duration approximation as
+    // the key points, but guaranteed visible regardless of mermaid's
+    // internal markup, since it never looks inside the SVG at all.
     // ========================================
+    let lastMindMapPulseSegment = -1;
     function updateMindMapHighlight(currentTime, duration) {
-        if (!mindmapContainer || !duration || !isFinite(duration) || duration <= 0) return;
-        const svg = mindmapContainer.querySelector('svg');
-        if (!svg) return;
-        const nodeGroups = Array.from(svg.querySelectorAll('text'))
-            .map(t => t.closest('g'))
-            .filter(Boolean);
-        if (!nodeGroups.length) return;
-        const activeIndex = Math.min(nodeGroups.length - 1, Math.max(0, Math.floor((currentTime / duration) * nodeGroups.length)));
-        nodeGroups.forEach((g, i) => g.classList.toggle('mm-node-active', i === activeIndex));
+        if (!mindmapContainer || !mindmapContainer.querySelector('svg')) return;
+        if (!duration || !isFinite(duration) || duration <= 0) return;
+        const segments = keyPointsCount > 0 ? keyPointsCount : 6;
+        const segment = Math.min(segments - 1, Math.max(0, Math.floor((currentTime / duration) * segments)));
+        if (segment === lastMindMapPulseSegment) return;
+        lastMindMapPulseSegment = segment;
+        mindmapContainer.classList.remove('mm-pulse');
+        void mindmapContainer.offsetWidth; // force reflow so re-adding the class restarts the CSS animation
+        mindmapContainer.classList.add('mm-pulse');
     }
 
     // ========================================
@@ -2669,7 +2672,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     stopWaveformAnimation();
                     document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
                     document.querySelectorAll('#key-points-list li').forEach(el => el.classList.remove('active'));
-                    document.querySelectorAll('#mindmap-container .mm-node-active').forEach(el => el.classList.remove('mm-node-active'));
+                    if (mindmapContainer) mindmapContainer.classList.remove('mm-pulse');
+                    lastMindMapPulseSegment = -1;
                     setMediaSessionPlaybackState('none');
                 });
 
