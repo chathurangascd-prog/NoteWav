@@ -729,6 +729,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="library-note-actions">
                             <button class="library-load-btn" data-id="${note.id}" aria-label="Load"><i class="fas fa-folder-open"></i></button>
                             ${note.has_image ? `<button class="library-image-btn" data-id="${note.id}" aria-label="View original image" title="View original photo"><i class="fas fa-image"></i></button>` : ''}
+                            <button class="library-share-btn" data-id="${note.id}" aria-label="Share" title="Read-only link එකක් share කරන්න"><i class="fas fa-share-alt"></i></button>
                             <button class="library-report-btn" data-id="${note.id}" aria-label="Report" title="Report inappropriate content"><i class="fas fa-flag"></i></button>
                             <button class="library-delete-btn" data-id="${note.id}" aria-label="Delete"><i class="fas fa-trash"></i></button>
                         </div>
@@ -744,6 +745,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         libraryModalBody.querySelectorAll('.library-image-btn').forEach(btn => {
             btn.addEventListener('click', () => viewLibraryNoteImage(btn.dataset.id));
+        });
+        libraryModalBody.querySelectorAll('.library-share-btn').forEach(btn => {
+            btn.addEventListener('click', () => shareLibraryNote(btn.dataset.id));
         });
         libraryModalBody.querySelectorAll('.library-report-btn').forEach(btn => {
             btn.addEventListener('click', () => reportLibraryNote(btn.dataset.id));
@@ -781,6 +785,26 @@ document.addEventListener('DOMContentLoaded', function() {
             lightbox.classList.remove('hidden');
         } catch (e) {
             showErrorBanner('Image එක load කරගැනීම අසාර්ථක විය.');
+        }
+    }
+
+    async function shareLibraryNote(noteId) {
+        const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+        try {
+            const res = await fetch(`/library/notes/${noteId}/share`, { method: 'POST' });
+            const data = await res.json();
+            if (data.status !== 'success') {
+                showErrorBanner(data.message || (lang === 'en' ? 'Failed to create share link.' : 'Share link එක හදාගැනීම අසාර්ථක විය.'));
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(data.share_url);
+                showErrorBanner(lang === 'en' ? '🔗 Link copied! Anyone with it can view this note (read-only).' : '🔗 Link එක copy උනා! මේ link එක තියෙන ඕනම කෙනෙකුට note එක බලන්න පුළුවන් (read-only).');
+            } catch (e) {
+                window.prompt(lang === 'en' ? 'Copy this link:' : 'මේ link එක copy කරන්න:', data.share_url);
+            }
+        } catch (e) {
+            showErrorBanner(lang === 'en' ? 'Network error. Failed to create share link.' : 'Network error. Share link එක හදාගැනීම අසාර්ථක විය.');
         }
     }
 

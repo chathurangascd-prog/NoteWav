@@ -310,6 +310,14 @@ def init_db():
         conn.execute("ALTER TABLE notes ADD COLUMN source_image_data TEXT")
     except Exception:
         pass  # column already exists
+    try:
+        conn.execute("ALTER TABLE notes ADD COLUMN share_token TEXT")
+    except Exception:
+        pass  # column already exists
+    try:
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_share_token ON notes(share_token)")
+    except Exception:
+        pass
     conn.execute("""
         CREATE TABLE IF NOT EXISTS usage_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3247,6 +3255,90 @@ def library_delete(note_id):
     except Exception as e:
         print(f"❌ Library delete error: {e}")
         return jsonify({'status': 'error', 'message': 'Note එක delete කරගැනීම අසාර්ථක විය.'}), 500
+
+
+@app.route('/library/notes/<int:note_id>/share', methods=['POST'])
+def library_share(note_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'Share කරන්න login වෙන්න ඕන.'}), 401
+    try:
+        conn = get_db()
+        row = conn.execute('SELECT owner_google_id, share_token FROM notes WHERE id = ?', (note_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Note එක හමු නොවීය.'}), 404
+        if row['owner_google_id'] != user_id:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'ඔබට මේ note එක share කරන්න අවසර නෑ.'}), 403
+
+        # Reuse the existing token if already shared — re-clicking
+        # "Share" shouldn't invalidate a link someone already has.
+        token = row['share_token']
+        if not token:
+            # Unguessable and unrelated to the sequential note id —
+            # the id-based endpoints intentionally reject cross-owner
+            # access, and a share link must not become a backdoor
+            # around that by being enumerable the same way.
+            token = secrets.token_urlsafe(20)
+            conn.execute('UPDATE notes SET share_token = ? WHERE id = ?', (token, note_id))
+            conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'share_url': url_for('view_shared_note', token=token, _external=True)})
+    except Exception as e:
+        print(f"❌ Library share error: {e}")
+        return jsonify({'status': 'error', 'message': 'Share link එක හදාගැනීම අසාර්ථක විය.'}), 500
+
+
+@app.route('/library/notes/<int:note_id>/unshare', methods=['POST'])
+def library_unshare(note_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'Login වෙන්න ඕන.'}), 401
+    try:
+        conn = get_db()
+        row = conn.execute('SELECT owner_google_id FROM notes WHERE id = ?', (note_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Note එක හමු නොවීය.'}), 404
+        if row['owner_google_id'] != user_id:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'ඔබට මේ note එක වෙනස් කරන්න අවසර නෑ.'}), 403
+        conn.execute('UPDATE notes SET share_token = NULL WHERE id = ?', (note_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"❌ Library unshare error: {e}")
+        return jsonify({'status': 'error', 'message': 'Share එක නවත්වාගැනීම අසාර්ථක විය.'}), 500
+
+
+@app.route('/share/<token>')
+def get_shared_note(token):
+    """Public, read-only note lookup by unguessable share token — no
+    login required. Deliberately returns only display fields: no id
+    (would let someone pivot to /library/notes/<id>), no owner/anon
+    identity, no source_image_data (the original photo may contain
+    more than the person meant to publish, e.g. their handwriting on
+    an otherwise-private page)."""
+    token = (token or '').strip()[:64]
+    if not token:
+        return jsonify({'status': 'error', 'message': 'Link එක වලංගු නැත.'}), 404
+    conn = get_db()
+    row = conn.execute(
+        """SELECT subject, title, note_text, processed_text, mermaid_code_si,
+                  mermaid_code_en, mode, created_at FROM notes WHERE share_token = ?""",
+        (token,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'status': 'error', 'message': 'මේ note එක තවදුරටත් share කර නැත.'}), 404
+    return jsonify({'status': 'success', 'note': dict(row)})
+
+
+@app.route('/shared/<token>')
+def view_shared_note(token):
+    return render_template('shared_note.html', token=token)
 
 
 @app.route('/push/vapid-public-key')

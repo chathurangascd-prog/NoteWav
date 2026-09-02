@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shared Note — NoteWav AI</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #0f0f17; color: #e5e5e5; padding: 40px 20px; line-height: 1.7; }
+        .wrap { max-width: 720px; margin: 0 auto; }
+        .badge-row { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+        .badge-row img { width: 28px; height: 28px; border-radius: 8px; }
+        .badge-row span { color: #a78bfa; font-weight: 700; font-size: 0.95rem; }
+        .subject-pill { display: inline-block; background: rgba(167, 139, 250, 0.16); color: #a78bfa; font-size: 0.76rem; font-weight: 700; padding: 4px 12px; border-radius: 20px; margin-bottom: 10px; }
+        h1 { color: #fff; font-size: 1.5rem; margin: 0 0 18px; }
+        .note-body { color: #ddd; font-size: 0.98rem; white-space: pre-wrap; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px; }
+        .mindmap-wrap { margin-top: 22px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 18px; overflow-x: auto; }
+        .mindmap-wrap h2 { color: #a78bfa; font-size: 0.9rem; margin: 0 0 12px; }
+        .state-msg { color: #999; font-size: 0.95rem; padding: 40px 0; text-align: center; }
+        .cta { display: block; margin-top: 32px; text-align: center; background: linear-gradient(135deg, #6b30ff 0%, #8613eb 100%); color: #fff; text-decoration: none; font-weight: 700; font-size: 0.92rem; padding: 14px; border-radius: 12px; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="badge-row">
+            <img src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="">
+            <span>NoteWav AI</span>
+        </div>
+
+        <div id="state-loading" class="state-msg">Loading...</div>
+        <div id="state-missing" class="state-msg" hidden>මේ note එක හම්බුනේ නෑ — link එක invalid වෙන්න, නැත්නම් owner share එක නවත්තලා ඇති.</div>
+
+        <div id="note-content" hidden>
+            <span id="note-subject" class="subject-pill"></span>
+            <h1 id="note-title"></h1>
+            <div id="note-body" class="note-body"></div>
+            <div id="mindmap-wrap" class="mindmap-wrap" hidden>
+                <h2>Mind Map</h2>
+                <div id="mindmap-target"></div>
+            </div>
+        </div>
+
+        <a class="cta" href="/">🎧 ඔබේම notes NoteWav AI වලින් audio + mind map කරගන්න →</a>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+
+        async function loadSharedNote() {
+            const token = {{ token|tojson }};
+            const loadingEl = document.getElementById('state-loading');
+            const missingEl = document.getElementById('state-missing');
+            const contentEl = document.getElementById('note-content');
+            try {
+                const res = await fetch(`/share/${encodeURIComponent(token)}`);
+                const data = await res.json();
+                loadingEl.hidden = true;
+                if (data.status !== 'success') {
+                    missingEl.hidden = false;
+                    return;
+                }
+                const note = data.note;
+                document.title = `${note.title} — NoteWav AI`;
+                document.getElementById('note-subject').textContent = note.subject || 'General';
+                document.getElementById('note-title').textContent = note.title || 'Untitled Note';
+                document.getElementById('note-body').textContent = note.processed_text || note.note_text || '';
+
+                const mermaidCode = note.mermaid_code_si || note.mermaid_code_en || '';
+                if (mermaidCode.trim()) {
+                    try {
+                        const { svg } = await mermaid.render('shared-mindmap-svg', mermaidCode);
+                        document.getElementById('mindmap-target').innerHTML = svg;
+                        document.getElementById('mindmap-wrap').hidden = false;
+                    } catch (e) {
+                        console.warn('Mind map render failed:', e);
+                    }
+                }
+                contentEl.hidden = false;
+            } catch (e) {
+                loadingEl.hidden = true;
+                missingEl.hidden = false;
+            }
+        }
+        loadSharedNote();
+    </script>
+</body>
+</html>
