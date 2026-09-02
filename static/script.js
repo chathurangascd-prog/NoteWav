@@ -2774,10 +2774,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 showErrorBanner(lang === 'en' ? 'Generate audio first.' : 'මුලින්ම Audio Generate කරන්න.');
                 return;
             }
-            if (!lastKeyPoints || lastKeyPoints.length === 0) {
-                showErrorBanner(lang === 'en' ? 'This note has no Key Points to build a video from.' : 'මේ note එකට Key Points නෑ — video එකක් හදාගන්න බැහැ.');
-                return;
-            }
+            // No client-side "must have key points" gate — the server
+            // falls back to splitting the script itself into cards when
+            // key_points is empty (e.g. Full Text Mode never generates
+            // key points at all), so script_text is always sent too.
 
             const originalHtml = generateVideoBtn.innerHTML;
             generateVideoBtn.innerHTML = `<span class="mini-wave"><span></span><span></span><span></span><span></span></span> ${lang === 'en' ? 'Generating video...' : 'Video එක හදමින්...'}`;
@@ -2787,7 +2787,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const res = await fetch('/generate-video', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key_points: lastKeyPoints, audio_url: lastAudioUrl }),
+                    body: JSON.stringify({
+                        key_points: lastKeyPoints,
+                        script_text: scriptOutput ? scriptOutput.value.trim() : '',
+                        audio_url: lastAudioUrl,
+                    }),
                 });
                 const data = await res.json();
                 if (data.status === 'success' && generatedVideoPlayer && videoPlayerWrap) {

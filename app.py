@@ -1002,6 +1002,24 @@ def _render_key_point_frame(index, total, text, out_path):
     img.save(out_path)
 
 
+def _derive_video_cards_from_text(text, target_cards=8):
+    """Fallback for notes with no AI-generated key_points (e.g. Full
+    Text Mode, which narrates the original text as-is and never asked
+    Gemini for key points) — groups the script's own sentences into a
+    handful of cards instead of refusing to make a video at all."""
+    sentences = split_into_sentences(text)
+    if not sentences:
+        return []
+    target_cards = max(1, min(target_cards, len(sentences)))
+    per_card = -(-len(sentences) // target_cards)  # ceiling division, no extra import needed
+    cards = []
+    for i in range(0, len(sentences), per_card):
+        chunk = ' '.join(sentences[i:i + per_card]).strip()
+        if chunk:
+            cards.append(chunk)
+    return cards[:12]
+
+
 def generate_key_points_video(key_points, audio_path, out_path):
     audio_segment = AudioSegment.from_file(audio_path)
     total_duration = len(audio_segment) / 1000.0
@@ -2742,13 +2760,19 @@ def text_to_speech():
 def generate_video():
     data = request.get_json(silent=True) or {}
     key_points = data.get('key_points')
+    script_text = (data.get('script_text') or '').strip()
     audio_url = (data.get('audio_url') or '').strip()
 
-    if not isinstance(key_points, list):
-        return jsonify({'status': 'error', 'message': 'Key points නෑ.'}), 400
-    key_points = [str(p).strip() for p in key_points if str(p).strip()][:12]
-    if not key_points:
-        return jsonify({'status': 'error', 'message': 'Key points නෑ — script එකට Key Points තිබ්බ නම් විතරයි video එකක් හදාගන්න පුළුවන්.'}), 400
+    cards = [str(p).strip() for p in key_points if str(p).strip()] if isinstance(key_points, list) else []
+    if not cards and script_text:
+        # Fallback for notes with no AI key_points (e.g. Full Text Mode) —
+        # derive cards from the script itself instead of just refusing.
+        length_error = validate_text_length(script_text)
+        if not length_error:
+            cards = _derive_video_cards_from_text(script_text)
+    cards = cards[:12]
+    if not cards:
+        return jsonify({'status': 'error', 'message': 'Video එකක් හදාගන්න මදි text එකක් හම්බුනේ නෑ.'}), 400
 
     # audio_url must point at a file THIS server just generated —
     # never trust a client-supplied path/URL directly (path traversal /
@@ -2765,7 +2789,7 @@ def generate_video():
         cleanup_old_video()
         out_name = f"video_{uuid.uuid4().hex}.mp4"
         out_path = os.path.join('static', out_name)
-        generate_key_points_video(key_points, audio_path, out_path)
+        generate_key_points_video(cards, audio_path, out_path)
         return jsonify({'status': 'success', 'video_url': '/' + out_path.replace('\\', '/')})
     except Exception as e:
         print(f"❌ Video generation error: {e}")
