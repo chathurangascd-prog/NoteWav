@@ -960,8 +960,13 @@ def _wrap_video_text(draw, text, font, max_width):
     return lines
 
 
-def _render_key_point_frame(index, total, text, out_path):
-    width, height = 1280, 720
+def _render_key_point_frame(index, total, text, out_path, width=1280, height=720):
+    # All the absolute pixel constants below (badge radius, font sizes,
+    # dot spacing) were tuned against a 720px SHORT side. Landscape
+    # (1280x720) and portrait (720x1280) both have 720 as their short
+    # side, so reusing the same constants for both just works — no
+    # separate portrait layout to maintain. Only what actually differs
+    # by orientation (wrap width, footer/dots Y) reads width/height.
     img = Image.new('RGB', (width, height), '#ffffff')
     draw = ImageDraw.Draw(img)
     accent = VIDEO_PALETTE[index % len(VIDEO_PALETTE)]
@@ -1046,36 +1051,65 @@ def _derive_video_cards_from_sentence_timings(sentence_timings, target_cards=8):
     return cards[:12]
 
 
-def generate_key_points_video(cards, audio_path, out_path):
+VIDEO_TRANSITION_SECONDS = 0.4
+
+
+def generate_key_points_video(cards, audio_path, out_path, orientation='landscape'):
     """cards: list of (text, duration_seconds) tuples — the caller
     decides each card's duration (real sentence timing when available,
-    an even split of the actual audio length otherwise)."""
+    an even split of the actual audio length otherwise). Cards
+    crossfade into each other (ffmpeg xfade) instead of hard-cutting."""
+    width, height = (720, 1280) if orientation == 'portrait' else (1280, 720)
+    T = VIDEO_TRANSITION_SECONDS
+
+    audio_segment = AudioSegment.from_file(audio_path)
+    audio_duration = len(audio_segment) / 1000.0
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         frame_paths = []
         for i, (text, _duration) in enumerate(cards):
             frame_path = os.path.join(tmp_dir, f'frame_{i:03d}.png')
-            _render_key_point_frame(i, len(cards), text, frame_path)
+            _render_key_point_frame(i, len(cards), text, frame_path, width=width, height=height)
             frame_paths.append(frame_path)
 
-        concat_path = os.path.join(tmp_dir, 'concat.txt')
-        with open(concat_path, 'w', encoding='utf-8') as f:
-            for path, (_text, duration) in zip(frame_paths, cards):
-                f.write(f"file '{path}'\n")
-                f.write(f"duration {duration}\n")
-            # ffmpeg's concat demuxer quirk: the last entry's duration is
-            # ignored unless the file is repeated once more without one.
-            f.write(f"file '{frame_paths[-1]}'\n")
+        durations = [max(0.6, d) for _text, d in cards]  # each clip must outlast its own transitions
+        if len(cards) > 1:
+            # Chaining N xfade transitions shortens the total by T per
+            # transition (each overlaps two clips) — pad the last card
+            # so the video is never shorter than the audio, which would
+            # otherwise get cut off early by -shortest below.
+            video_total = sum(durations) - T * (len(cards) - 1)
+            if video_total < audio_duration:
+                durations[-1] += audio_duration - video_total
 
-        cmd = [
-            'ffmpeg', '-y',
-            '-f', 'concat', '-safe', '0', '-i', concat_path,
-            '-i', audio_path,
-            '-vf', 'scale=1280:720,format=yuv420p',
+        cmd = ['ffmpeg', '-y']
+        for path, d in zip(frame_paths, durations):
+            cmd += ['-loop', '1', '-t', str(d), '-i', path]
+        cmd += ['-i', audio_path]
+
+        if len(cards) == 1:
+            filter_complex = f'[0:v]scale={width}:{height},format=yuv420p[vout]'
+        else:
+            parts = []
+            prev_label = '0'
+            cumulative = 0.0
+            for i in range(1, len(cards)):
+                cumulative += durations[i - 1]
+                offset = cumulative - T * i
+                in_a = prev_label if i == 1 else f'v{i - 1}'
+                out_label = f'v{i}' if i < len(cards) - 1 else 'vpre'
+                parts.append(f'[{in_a}][{i}]xfade=transition=fade:duration={T}:offset={offset:.3f}[{out_label}]')
+                prev_label = out_label
+            filter_complex = ';'.join(parts) + f';[vpre]scale={width}:{height},format=yuv420p[vout]'
+
+        cmd += [
+            '-filter_complex', filter_complex,
+            '-map', '[vout]', '-map', f'{len(cards)}:a',
             # Content is static text cards (no motion), so a fast preset
             # and low framerate cost nothing visually but cut encode time
             # ~3x (benchmarked locally) — matters on Render's slower/
-            # shared CPU, where the previous settings risked outrunning
-            # the platform's request timeout and surfacing as a client
+            # shared CPU, where slower settings risked outrunning the
+            # platform's request timeout and surfacing as a client
             # "network error" instead of a clean HTTP error response.
             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '10',
             '-c:a', 'aac', '-shortest',
@@ -2812,6 +2846,7 @@ def generate_video():
     except (ValueError, TypeError):
         sentence_timings = []
     script_text = (request.form.get('script_text') or '').strip()
+    orientation = 'portrait' if (request.form.get('orientation') or '').strip() == 'portrait' else 'landscape'
 
     real_key_points = [str(p).strip() for p in key_points if str(p).strip()] if isinstance(key_points, list) else []
 
@@ -2852,7 +2887,7 @@ def generate_video():
 
         out_name = f"video_{uuid.uuid4().hex}.mp4"
         out_path = os.path.join('static', out_name)
-        generate_key_points_video(cards, tmp_audio_path, out_path)
+        generate_key_points_video(cards, tmp_audio_path, out_path, orientation=orientation)
         return jsonify({'status': 'success', 'video_url': '/' + out_path.replace('\\', '/')})
     except Exception as e:
         print(f"❌ Video generation error: {e}")

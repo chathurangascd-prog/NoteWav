@@ -2774,10 +2774,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const generateVideoBtn = document.getElementById('generate-video-btn');
     const videoPlayerWrap = document.getElementById('video-player-wrap');
     const generatedVideoPlayer = document.getElementById('generated-video-player');
+    const downloadVideoBtn = document.getElementById('download-video-btn');
+    const videoOrientationBtns = document.querySelectorAll('.video-orientation-btn');
+    let selectedVideoOrientation = 'landscape';
+
+    videoOrientationBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            selectedVideoOrientation = this.dataset.orientation;
+            videoOrientationBtns.forEach(b => {
+                const isActive = b === this;
+                b.classList.toggle('active', isActive);
+                b.style.background = isActive ? 'rgba(107,48,255,0.15)' : 'transparent';
+                b.style.color = isActive ? 'var(--text-primary)' : 'var(--text-secondary)';
+            });
+        });
+    });
 
     function resetGeneratedVideo() {
         if (videoPlayerWrap) videoPlayerWrap.classList.add('hidden');
         if (generatedVideoPlayer) generatedVideoPlayer.removeAttribute('src');
+        if (downloadVideoBtn) downloadVideoBtn.classList.add('hidden');
     }
 
     if (generateVideoBtn) {
@@ -2804,11 +2820,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 formData.append('key_points', JSON.stringify(lastKeyPoints || []));
                 formData.append('script_text', scriptOutput ? scriptOutput.value.trim() : '');
                 formData.append('sentence_timings', JSON.stringify(lastSentenceTimings || []));
+                formData.append('orientation', selectedVideoOrientation);
                 const res = await fetch('/generate-video', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.status === 'success' && generatedVideoPlayer && videoPlayerWrap) {
                     generatedVideoPlayer.src = data.video_url;
                     videoPlayerWrap.classList.remove('hidden');
+                    if (downloadVideoBtn) {
+                        downloadVideoBtn.href = data.video_url;
+                        downloadVideoBtn.classList.remove('hidden');
+                    }
                     trackUsageEvent('video_generated');
                 } else {
                     showErrorBanner(data.message || (lang === 'en' ? 'Failed to generate video.' : 'Video එක හදාගැනීම අසාර්ථක විය.'));
@@ -3315,6 +3336,7 @@ const NOTEWAV_TRANSLATIONS = {
     save_to_library_btn: { si: 'Library එකට Save කරන්න', en: 'Save to Library' },
     generate_audio_btn: { si: 'තරංග උත්පාදනය කරන්න', en: 'Generate Audio' },
     generate_video_btn: { si: 'Video එකක් හදන්න', en: 'Generate Video' },
+    download_video_btn: { si: 'Video Download කරන්න', en: 'Download Video' },
     reset_btn: { si: 'නැවත උත්සාහ කරන්න', en: 'Try Again' },
     mindmap_empty: { si: 'Mind map එකක් තවම නෑ.', en: 'No mind map yet.' },
     download_png_btn: { si: 'PNG එකක් විදිහට Download කරන්න', en: 'Download as PNG' },

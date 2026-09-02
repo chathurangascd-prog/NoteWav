@@ -1428,11 +1428,19 @@
                 </div>
 
                 <div id="video-section" style="margin-top: 16px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);"><i class="fas fa-crop-simple"></i> Format:</span>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="video-orientation-btn active" data-orientation="landscape" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(107,48,255,0.15); color: var(--text-primary); font-size: 0.78rem; font-weight: 600; cursor: pointer;"><i class="fas fa-tv"></i> Landscape</button>
+                            <button type="button" class="video-orientation-btn" data-orientation="portrait" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 0.78rem; font-weight: 600; cursor: pointer;"><i class="fas fa-mobile-screen"></i> Portrait</button>
+                        </div>
+                    </div>
                     <button id="generate-video-btn" class="btn-secondary" type="button">
                         <i class="fas fa-film"></i> <span id="generate-video-label" data-i18n="generate_video_btn">Video එකක් හදන්න</span>
                     </button>
                     <div id="video-player-wrap" class="hidden" style="margin-top: 12px;">
-                        <video id="generated-video-player" controls playsinline style="width: 100%; border-radius: var(--radius-md); background: #000; display: block;"></video>
+                        <video id="generated-video-player" controls playsinline style="width: 100%; max-width: 480px; display: block; margin: 0 auto; border-radius: var(--radius-md); background: #000;"></video>
+                        <a id="download-video-btn" class="btn-secondary hidden" style="margin-top: 10px; text-align: center;" download="notewav-video.mp4"><i class="fas fa-download"></i> <span data-i18n="download_video_btn">Video Download කරන්න</span></a>
                     </div>
                 </div>
             </div>
