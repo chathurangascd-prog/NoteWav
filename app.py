@@ -1007,6 +1007,37 @@ def _render_key_point_frame(index, total, text, out_path, width=1280, height=720
     img.save(out_path)
 
 
+def _render_outro_frame(out_path, width=1280, height=720):
+    """Closing card appended after the last key point — centered
+    branding, held for VIDEO_OUTRO_SECONDS. Uses the first palette
+    color specifically (not the rotating per-card accent) so it reads
+    as "the brand," not just another card in the sequence."""
+    img = Image.new('RGB', (width, height), '#ffffff')
+    draw = ImageDraw.Draw(img)
+    accent = VIDEO_PALETTE[0]
+
+    draw.rectangle([0, 0, width, 14], fill=accent)
+
+    title = 'NoteWav AI'
+    title_font = _get_video_font(title, 76)
+    bbox = draw.textbbox((0, 0), title, font=title_font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    title_y = height / 2 - th - 10
+    draw.text((width / 2 - tw / 2, title_y - bbox[1]), title, font=title_font, fill=accent)
+
+    tagline = 'ඔයාගේම notes AI වලින් Audio + Video කරගන්න'
+    tagline_font = _get_video_font(tagline, 30)
+    lines = _wrap_video_text(draw, tagline, tagline_font, width - 200)
+    y = title_y + th + 30
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=tagline_font)
+        lw = bbox[2] - bbox[0]
+        draw.text((width / 2 - lw / 2, y), line, font=tagline_font, fill='#5c5468')
+        y += 42
+
+    img.save(out_path)
+
+
 def _derive_video_cards_from_text(text, target_cards=8):
     """Fallback for notes with no AI-generated key_points (e.g. Full
     Text Mode, which narrates the original text as-is and never asked
@@ -1052,13 +1083,15 @@ def _derive_video_cards_from_sentence_timings(sentence_timings, target_cards=8):
 
 
 VIDEO_TRANSITION_SECONDS = 0.4
+VIDEO_OUTRO_SECONDS = 3.0
 
 
 def generate_key_points_video(cards, audio_path, out_path, orientation='landscape'):
     """cards: list of (text, duration_seconds) tuples — the caller
     decides each card's duration (real sentence timing when available,
     an even split of the actual audio length otherwise). Cards
-    crossfade into each other (ffmpeg xfade) instead of hard-cutting."""
+    crossfade into each other (ffmpeg xfade) instead of hard-cutting,
+    with a branded outro card appended after the last one."""
     width, height = (720, 1280) if orientation == 'portrait' else (1280, 720)
     T = VIDEO_TRANSITION_SECONDS
 
@@ -1066,45 +1099,54 @@ def generate_key_points_video(cards, audio_path, out_path, orientation='landscap
     audio_duration = len(audio_segment) / 1000.0
 
     with tempfile.TemporaryDirectory() as tmp_dir:
+        durations = [max(0.6, d) for _text, d in cards]  # each clip must outlast its own transitions
+        if len(cards) > 1:
+            # Chaining transitions shortens the total by T per transition
+            # (each overlaps two clips) — pad the last KEY POINT card (not
+            # the outro) so the narrated portion is never shorter than the
+            # audio, which would otherwise cut the narration off early.
+            video_total = sum(durations) - T * (len(cards) - 1)
+            if video_total < audio_duration:
+                durations[-1] += audio_duration - video_total
+
         frame_paths = []
         for i, (text, _duration) in enumerate(cards):
             frame_path = os.path.join(tmp_dir, f'frame_{i:03d}.png')
             _render_key_point_frame(i, len(cards), text, frame_path, width=width, height=height)
             frame_paths.append(frame_path)
 
-        durations = [max(0.6, d) for _text, d in cards]  # each clip must outlast its own transitions
-        if len(cards) > 1:
-            # Chaining N xfade transitions shortens the total by T per
-            # transition (each overlaps two clips) — pad the last card
-            # so the video is never shorter than the audio, which would
-            # otherwise get cut off early by -shortest below.
-            video_total = sum(durations) - T * (len(cards) - 1)
-            if video_total < audio_duration:
-                durations[-1] += audio_duration - video_total
+        outro_path = os.path.join(tmp_dir, f'frame_{len(cards):03d}.png')
+        _render_outro_frame(outro_path, width=width, height=height)
+        frame_paths.append(outro_path)
+        durations.append(VIDEO_OUTRO_SECONDS)
+        total_slots = len(frame_paths)
 
         cmd = ['ffmpeg', '-y']
         for path, d in zip(frame_paths, durations):
             cmd += ['-loop', '1', '-t', str(d), '-i', path]
         cmd += ['-i', audio_path]
 
-        if len(cards) == 1:
+        if total_slots == 1:
             filter_complex = f'[0:v]scale={width}:{height},format=yuv420p[vout]'
         else:
             parts = []
             prev_label = '0'
             cumulative = 0.0
-            for i in range(1, len(cards)):
+            for i in range(1, total_slots):
                 cumulative += durations[i - 1]
                 offset = cumulative - T * i
                 in_a = prev_label if i == 1 else f'v{i - 1}'
-                out_label = f'v{i}' if i < len(cards) - 1 else 'vpre'
+                out_label = f'v{i}' if i < total_slots - 1 else 'vpre'
                 parts.append(f'[{in_a}][{i}]xfade=transition=fade:duration={T}:offset={offset:.3f}[{out_label}]')
                 prev_label = out_label
             filter_complex = ';'.join(parts) + f';[vpre]scale={width}:{height},format=yuv420p[vout]'
 
         cmd += [
             '-filter_complex', filter_complex,
-            '-map', '[vout]', '-map', f'{len(cards)}:a',
+            '-map', '[vout]', '-map', f'{total_slots}:a',
+            # No -shortest here — the outro deliberately runs past the
+            # end of the audio (silent tail), so trimming to the
+            # shorter stream would cut the outro off entirely.
             # Content is static text cards (no motion), so a fast preset
             # and low framerate cost nothing visually but cut encode time
             # ~3x (benchmarked locally) — matters on Render's slower/
@@ -1112,7 +1154,7 @@ def generate_key_points_video(cards, audio_path, out_path, orientation='landscap
             # platform's request timeout and surfacing as a client
             # "network error" instead of a clean HTTP error response.
             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '10',
-            '-c:a', 'aac', '-shortest',
+            '-c:a', 'aac',
             out_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
