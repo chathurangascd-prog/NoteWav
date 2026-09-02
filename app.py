@@ -1082,32 +1082,40 @@ def _derive_video_cards_from_sentence_timings(sentence_timings, target_cards=8):
     return cards[:12]
 
 
-VIDEO_TRANSITION_SECONDS = 0.4
 VIDEO_OUTRO_SECONDS = 3.0
 
 
 def generate_key_points_video(cards, audio_path, out_path, orientation='landscape'):
     """cards: list of (text, duration_seconds) tuples — the caller
     decides each card's duration (real sentence timing when available,
-    an even split of the actual audio length otherwise). Cards
-    crossfade into each other (ffmpeg xfade) instead of hard-cutting,
-    with a branded outro card appended after the last one."""
+    an even split of the actual audio length otherwise), with a
+    branded outro card appended after the last one.
+
+    FIX (reverted crossfade — "network error" came back after adding
+    it): xfade requires ffmpeg to -loop and re-decode EVERY frame as
+    its own full-duration video stream, then run real per-frame
+    compositing math for each transition — meaningfully heavier than
+    the concat demuxer's near-instant "hold this image" hard cut, even
+    though both benchmarked fast on this machine. Render enforces a
+    hard ~15s request timeout that isn't configurable (confirmed via
+    Render's own community forum) — a scaled-up worst case (12 cards,
+    a slower/shared production CPU) risked outrunning it, which shows
+    up to the browser as a connection failure, not a catchable HTTP
+    error. Hard cuts are simpler and were already proven reliable."""
     width, height = (720, 1280) if orientation == 'portrait' else (1280, 720)
-    T = VIDEO_TRANSITION_SECONDS
 
     audio_segment = AudioSegment.from_file(audio_path)
     audio_duration = len(audio_segment) / 1000.0
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        durations = [max(0.6, d) for _text, d in cards]  # each clip must outlast its own transitions
-        if len(cards) > 1:
-            # Chaining transitions shortens the total by T per transition
-            # (each overlaps two clips) — pad the last KEY POINT card (not
-            # the outro) so the narrated portion is never shorter than the
-            # audio, which would otherwise cut the narration off early.
-            video_total = sum(durations) - T * (len(cards) - 1)
-            if video_total < audio_duration:
-                durations[-1] += audio_duration - video_total
+        durations = [max(1.0, d) for _text, d in cards]
+        if cards:
+            # Pad the last KEY POINT card (not the outro) so the
+            # narrated portion is never shorter than the audio, which
+            # would otherwise cut the narration off early.
+            key_point_total = sum(durations)
+            if key_point_total < audio_duration:
+                durations[-1] += audio_duration - key_point_total
 
         frame_paths = []
         for i, (text, _duration) in enumerate(cards):
@@ -1119,45 +1127,39 @@ def generate_key_points_video(cards, audio_path, out_path, orientation='landscap
         _render_outro_frame(outro_path, width=width, height=height)
         frame_paths.append(outro_path)
         durations.append(VIDEO_OUTRO_SECONDS)
-        total_slots = len(frame_paths)
 
-        cmd = ['ffmpeg', '-y']
-        for path, d in zip(frame_paths, durations):
-            cmd += ['-loop', '1', '-t', str(d), '-i', path]
-        cmd += ['-i', audio_path]
+        concat_path = os.path.join(tmp_dir, 'concat.txt')
+        with open(concat_path, 'w', encoding='utf-8') as f:
+            for path, d in zip(frame_paths, durations):
+                f.write(f"file '{path}'\n")
+                f.write(f"duration {d}\n")
+            # ffmpeg's concat demuxer quirk: the last entry's duration is
+            # ignored unless the file is repeated once more without one.
+            f.write(f"file '{frame_paths[-1]}'\n")
 
-        if total_slots == 1:
-            filter_complex = f'[0:v]scale={width}:{height},format=yuv420p[vout]'
-        else:
-            parts = []
-            prev_label = '0'
-            cumulative = 0.0
-            for i in range(1, total_slots):
-                cumulative += durations[i - 1]
-                offset = cumulative - T * i
-                in_a = prev_label if i == 1 else f'v{i - 1}'
-                out_label = f'v{i}' if i < total_slots - 1 else 'vpre'
-                parts.append(f'[{in_a}][{i}]xfade=transition=fade:duration={T}:offset={offset:.3f}[{out_label}]')
-                prev_label = out_label
-            filter_complex = ';'.join(parts) + f';[vpre]scale={width}:{height},format=yuv420p[vout]'
-
-        cmd += [
-            '-filter_complex', filter_complex,
-            '-map', '[vout]', '-map', f'{total_slots}:a',
-            # No -shortest here — the outro deliberately runs past the
-            # end of the audio (silent tail), so trimming to the
-            # shorter stream would cut the outro off entirely.
-            # Content is static text cards (no motion), so a fast preset
-            # and low framerate cost nothing visually but cut encode time
-            # ~3x (benchmarked locally) — matters on Render's slower/
-            # shared CPU, where slower settings risked outrunning the
-            # platform's request timeout and surfacing as a client
-            # "network error" instead of a clean HTTP error response.
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '10',
+        cmd = [
+            'ffmpeg', '-y',
+            '-f', 'concat', '-safe', '0', '-i', concat_path,
+            '-i', audio_path,
+            '-vf', f'scale={width}:{height},format=yuv420p',
+            # Content is static text cards (no motion), so a fast
+            # preset costs nothing visually but cuts encode time —
+            # matters on Render's slower/shared CPU under its hard
+            # request timeout. FIX: a forced low output framerate
+            # (-r 10, and fps=10 in -vf too) corrupted the concat
+            # demuxer's duration accounting — verified locally: a
+            # 15s-of-content concat came out 20.8s (or 18.0s with the
+            # filter variant) instead of ~15s. Removing the framerate
+            # override entirely fixed it (15.04s). Speed still comes
+            # from -preset/-crf alone.
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+            # No -shortest — the outro deliberately runs past the end
+            # of the audio (silent tail), so trimming to the shorter
+            # stream would cut the outro off entirely.
             '-c:a', 'aac',
             out_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg failed: {result.stderr[-800:]}")
 
