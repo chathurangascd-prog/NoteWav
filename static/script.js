@@ -2775,8 +2775,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const videoPlayerWrap = document.getElementById('video-player-wrap');
     const generatedVideoPlayer = document.getElementById('generated-video-player');
     const downloadVideoBtn = document.getElementById('download-video-btn');
+    const shareVideoBtn = document.getElementById('share-video-btn');
     const videoOrientationBtns = document.querySelectorAll('.video-orientation-btn');
     let selectedVideoOrientation = 'landscape';
+    let lastVideoBlob = null; // cached once at generation time — see the lastAudioBlob note above for why (Render's multi-instance disk)
+    let lastVideoObjectUrl = null;
 
     videoOrientationBtns.forEach(btn => {
         btn.addEventListener('click', function() {
@@ -2794,6 +2797,31 @@ document.addEventListener('DOMContentLoaded', function() {
         if (videoPlayerWrap) videoPlayerWrap.classList.add('hidden');
         if (generatedVideoPlayer) generatedVideoPlayer.removeAttribute('src');
         if (downloadVideoBtn) downloadVideoBtn.classList.add('hidden');
+        if (shareVideoBtn) shareVideoBtn.classList.add('hidden');
+        if (lastVideoObjectUrl) { URL.revokeObjectURL(lastVideoObjectUrl); lastVideoObjectUrl = null; }
+        lastVideoBlob = null;
+    }
+
+    if (shareVideoBtn) {
+        shareVideoBtn.addEventListener('click', async function() {
+            const lang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
+            if (!lastVideoBlob) return;
+            const file = new File([lastVideoBlob], 'notewav-video.mp4', { type: 'video/mp4' });
+            const shareText = lang === 'en' ? 'Made with NoteWav AI' : 'NoteWav AI වලින් හදපු video එකක්';
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({ files: [file], title: 'NoteWav AI', text: shareText });
+                } catch (e) {
+                    if (e && e.name !== 'AbortError') {
+                        showErrorBanner(lang === 'en' ? 'Failed to share — try Download instead.' : 'Share කරගන්න බැරි උනා — Download කරලා share කරන්න.');
+                    }
+                }
+            } else {
+                // Desktop browsers mostly don't support sharing files yet —
+                // the video is already downloadable, so point there instead.
+                showErrorBanner(lang === 'en' ? 'This browser can\'t share video files directly — use Download, then share the file.' : 'මේ browser එකට video file share කරන්න බැහැ — Download කරලා, ඒ file එක share කරන්න.');
+            }
+        });
     }
 
     if (generateVideoBtn) {
@@ -2824,12 +2852,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 const res = await fetch('/generate-video', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.status === 'success' && generatedVideoPlayer && videoPlayerWrap) {
-                    generatedVideoPlayer.src = data.video_url;
+                    // Fetch the bytes now, while they're guaranteed to still
+                    // exist (same reasoning as lastAudioBlob) — the player,
+                    // download link, and share button all use this ONE
+                    // cached blob rather than re-hitting the server URL.
+                    const videoRes = await fetch(data.video_url);
+                    const videoBlob = await videoRes.blob();
+                    lastVideoBlob = videoBlob;
+                    if (lastVideoObjectUrl) URL.revokeObjectURL(lastVideoObjectUrl);
+                    lastVideoObjectUrl = URL.createObjectURL(videoBlob);
+
+                    generatedVideoPlayer.src = lastVideoObjectUrl;
                     videoPlayerWrap.classList.remove('hidden');
                     if (downloadVideoBtn) {
-                        downloadVideoBtn.href = data.video_url;
+                        downloadVideoBtn.href = lastVideoObjectUrl;
                         downloadVideoBtn.classList.remove('hidden');
                     }
+                    if (shareVideoBtn) shareVideoBtn.classList.remove('hidden');
                     trackUsageEvent('video_generated');
                 } else {
                     showErrorBanner(data.message || (lang === 'en' ? 'Failed to generate video.' : 'Video එක හදාගැනීම අසාර්ථක විය.'));
@@ -3336,7 +3375,8 @@ const NOTEWAV_TRANSLATIONS = {
     save_to_library_btn: { si: 'Library එකට Save කරන්න', en: 'Save to Library' },
     generate_audio_btn: { si: 'තරංග උත්පාදනය කරන්න', en: 'Generate Audio' },
     generate_video_btn: { si: 'Video එකක් හදන්න', en: 'Generate Video' },
-    download_video_btn: { si: 'Video Download කරන්න', en: 'Download Video' },
+    download_video_btn: { si: 'Download', en: 'Download' },
+    share_video_btn: { si: 'Share', en: 'Share' },
     reset_btn: { si: 'නැවත උත්සාහ කරන්න', en: 'Try Again' },
     mindmap_empty: { si: 'Mind map එකක් තවම නෑ.', en: 'No mind map yet.' },
     download_png_btn: { si: 'PNG එකක් විදිහට Download කරන්න', en: 'Download as PNG' },
