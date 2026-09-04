@@ -539,6 +539,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const waveBarEls = document.querySelectorAll('.wave-bar');
     const playerVisualizerEl = document.querySelector('.player-visualizer');
 
+    // Short two-tone "ding" played when a long-running generation (audio/
+    // video) finishes — synthesized with an oscillator so it works with no
+    // audio asset to load, and needs no user gesture beyond the click that
+    // already started the generation (that gesture is what unlocks the
+    // AudioContext, so it's still allowed to autoplay here).
+    function playCompletionChime() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+            [[880, now], [1318.51, now + 0.12]].forEach(([freq, startTime]) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.2, startTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(startTime);
+                osc.stop(startTime + 0.26);
+            });
+            setTimeout(() => ctx.close().catch(() => {}), 500);
+        } catch (e) { /* Web Audio unsupported — silently skip the chime */ }
+    }
+
     // ========================================
     // ERROR BANNER (Feature 2: friendly error UI)
     // ========================================
@@ -2618,6 +2644,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 lastSentenceTimings = Array.isArray(data.sentence_timings) ? data.sentence_timings : [];
                 trackUsageEvent('audio_generated');
                 saveOfflineAudioEntry(text, data.audio_url);
+                playCompletionChime();
 
                 // NEW (Aug 19, 2026): if the backend silently fell back
                 // from NoteWav 3.1 to 2.5 (because 3.1 was down/erroring),
@@ -2870,6 +2897,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (shareVideoBtn) shareVideoBtn.classList.remove('hidden');
                     trackUsageEvent('video_generated');
+                    playCompletionChime();
                 } else {
                     showErrorBanner(data.message || (lang === 'en' ? 'Failed to generate video.' : 'Video එක හදාගැනීම අසාර්ථක විය.'));
                 }
