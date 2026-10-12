@@ -352,6 +352,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const savedTtsEngine = localStorage.getItem('notewav_tts_engine');
         if (savedTtsEngine === 'gtts' || savedTtsEngine === 'gemini') {
             setTtsEngineUI(savedTtsEngine);
+        } else {
+            setTtsEngineUI('gemini');  // new users default to Natural (AI)
         }
         const savedTtsVoice = localStorage.getItem('notewav_tts_voice');
         if (savedTtsVoice && ttsVoiceSelect) {
@@ -360,9 +362,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const savedTtsModelVersion = localStorage.getItem('notewav_tts_model_version');
         if (savedTtsModelVersion === 'v21' || savedTtsModelVersion === 'v25' || savedTtsModelVersion === 'v31') {
             setTtsModelVersionUI(savedTtsModelVersion);
+        } else {
+            setTtsModelVersionUI('v31');  // "NoteWav 3.8"
         }
     } catch (e) {
-        // ignore, default to 'gtts' / first voice option / v25
+        // localStorage unavailable — still default to Natural (AI) + NoteWav 3.8
+        setTtsEngineUI('gemini');
+        setTtsModelVersionUI('v31');
     }
 
     if (ttsEngineGttsBtn) ttsEngineGttsBtn.addEventListener('click', () => setTtsEngineUI('gtts'));
