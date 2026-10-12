@@ -1292,6 +1292,9 @@ GEMINI_TTS_VOICE_OPTIONS = {
 GEMINI_TTS_MODEL_VERSIONS = {
     'v25': 'gemini-2.5-flash-preview-tts',
     'v31': 'gemini-3.1-flash-tts-preview',
+    # GA (non-preview) model — tried FIRST in the fallback chain, never
+    # user-selectable. Billed at the base (v25) rate.
+    'v38': 'gemini-3.8-flash-lite-tts',
 }
 
 
@@ -1363,6 +1366,9 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # when 3.1 isn't. Only falls back v31 -> v25 (never the reverse,
     # since v25 is the safer default already).
     model_attempt_plan = [model_version] if model_version == 'v25' else [model_version, 'v25']
+    # Stable GA model goes first; the existing preview chain follows it.
+    if model_attempt_plan[0] != 'v38':
+        model_attempt_plan = ['v38'] + model_attempt_plan
 
     # FIX #2 (Aug 19, 2026 — confirmed by production logs): the first
     # UPDATE (Aug 19, 2026 — per explicit request): give BOTH models 2
@@ -1398,7 +1404,9 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
             try:
                 response = client.models.generate_content(
                     model=GEMINI_TTS_MODEL_VERSIONS.get(plan_model, GEMINI_TTS_MODEL_VERSIONS['v25']),
-                    contents=directed_prompt,
+                    # 3.8 TTS no longer supports inline "Style:" directions
+                    # in the text (they'd be read aloud) — send plain text.
+                    contents=text if plan_model == 'v38' else directed_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["AUDIO"],
                         speech_config=types.SpeechConfig(
@@ -1438,12 +1446,17 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
 
     audio_data = response.candidates[0].content.parts[0].inline_data.data
-    audio_segment = AudioSegment(
-        data=audio_data,
-        sample_width=2,
-        frame_rate=24000,
-        channels=1,
-    )
+    if audio_data[:4] == b'RIFF':
+        # Gemini 3.8 TTS returns WAV with a RIFF header by default;
+        # older models return headerless 24kHz mono 16-bit PCM.
+        audio_segment = AudioSegment.from_file(io.BytesIO(audio_data), format='wav')
+    else:
+        audio_segment = AudioSegment(
+            data=audio_data,
+            sample_width=2,
+            frame_rate=24000,
+            channels=1,
+        )
 
     total_duration_ms = len(audio_segment)
     total_chars = sum(len(s) for s in flat_sentences) or 1
