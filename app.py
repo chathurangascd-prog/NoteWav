@@ -1352,8 +1352,25 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         "encouraging and approachable, never flat, robotic or formal. "
         "IMPORTANT: speak clearly and audibly at a normal, full speaking volume — "
         "NOT a whisper, NOT hushed or breathy, every word should be crisp and easy to hear.\n"
-        "Pace: Natural, comfortable speaking speed — not rushed, not slow."
     )
+    # Measured with gemini-3.8-flash-lite-tts on a Sinhala sample: the soft
+    # wording slows Leda ~19%, but Sadaltager only responds (~27%) to the
+    # explicit "SLOWLY" wording.
+    if voice_name == 'Sadaltager':
+        style_directions += (
+            "Pace: Speak SLOWLY and deliberately — a bit slower than normal "
+            "conversation, with a clear pause after every sentence. Do not rush."
+        )
+    else:
+        style_directions += (
+            "Pace: A little slower than normal conversation — calm and unhurried, "
+            "with short natural pauses between sentences, but not dragging."
+        )
+    if voice_name == 'Leda':
+        style_directions += (
+            "\nVoice: Clearly feminine — soft, gentle, sweet and graceful tone, "
+            "like a caring young woman speaking warmly."
+        )
     directed_prompt = f"Style: {style_directions}\n\n{text}"
 
     # FIX (Aug 19, 2026 — automatic model fallback, same pattern as
