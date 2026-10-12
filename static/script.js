@@ -2654,8 +2654,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.fallback_used) {
                     const fbLang = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en') ? 'en' : 'si';
                     showErrorBanner(fbLang === 'en'
-                        ? 'NoteWav 3.1 was temporarily unavailable — used NoteWav 2.5 instead (charged at the lower price).'
-                        : 'NoteWav 3.1 එක තාවකාලිකව available නැති නිසා, NoteWav 2.5 එකෙන් audio එක හදුනා (අඩු coins ගාණකින්).');
+                        ? 'NoteWav 3.8 was temporarily unavailable — used NoteWav 2.5 instead (charged at the lower price).'
+                        : 'NoteWav 3.8 එක තාවකාලිකව available නැති නිසා, NoteWav 2.5 එකෙන් audio එක හදුනා (අඩු coins ගාණකින්).');
                 }
 
                 if (data.engine === 'gemini') {
