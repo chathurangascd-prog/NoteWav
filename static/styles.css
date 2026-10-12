@@ -87,10 +87,26 @@ body.light-theme, body.page-tuition, body.page-login {
     --shadow-lg: 0 16px 48px rgba(107, 48, 255, 0.12);
     --shadow-glow: 0 8px 32px rgba(107, 48, 255, 0.10);
 }
+body.light-theme {
+    --bg-primary: #ecf8f3;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(16, 163, 127, 0.06);
+    --bg-card-hover: rgba(16, 163, 127, 0.03);
+    --bg-input: #e0f3ec;
+    --bg-input-hover: #d0ebe1;
+    --border-color: rgba(16, 140, 110, 0.20);
+    --border-hover: rgba(107, 48, 255, 0.45);
+    --text-primary: #12281f;
+    --text-secondary: rgba(18, 40, 31, 0.74);
+    --text-muted: rgba(18, 40, 31, 0.5);
+    --shadow-md: 0 8px 32px rgba(16, 140, 110, 0.10);
+    --shadow-lg: 0 16px 48px rgba(16, 140, 110, 0.14);
+    --shadow-glow: 0 8px 32px rgba(16, 140, 110, 0.12);
+}
 /* Badge uses hardcoded white-on-translucent-white in dark mode — needs
    its own light-mode colors since it doesn't read the variables above. */
 body.light-theme .badge {
-    background: rgba(107, 48, 255, 0.08);
+    background: rgba(16, 163, 127, 0.10);
     color: #6b30ff;
     -webkit-text-fill-color: #6b30ff;
     border-color: rgba(107, 48, 255, 0.22);
@@ -137,7 +153,7 @@ body.light-theme .progress-bar:hover {
     background: var(--bg-input-hover);
 }
 body.light-theme .skeleton-block {
-    background: linear-gradient(90deg, rgba(107,48,255,0.04) 25%, rgba(107,48,255,0.12) 50%, rgba(107,48,255,0.04) 75%);
+    background: linear-gradient(90deg, rgba(16,163,127,0.05) 25%, rgba(16,163,127,0.14) 50%, rgba(16,163,127,0.05) 75%);
     background-size: 200% 100%;
 }
 body.light-theme .lyric-line.active,
