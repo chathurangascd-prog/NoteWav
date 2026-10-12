@@ -1290,12 +1290,16 @@ GEMINI_TTS_VOICE_OPTIONS = {
     'Leda': 'Female',
 }
 
+_GEMINI_38_MODELS = ('v38', 'v38l')
+
 GEMINI_TTS_MODEL_VERSIONS = {
     'v25': 'gemini-2.5-flash-preview-tts',
     'v31': 'gemini-3.1-flash-tts-preview',
-    # GA (non-preview) model — tried FIRST in the fallback chain, never
-    # user-selectable. Billed at the base (v25) rate.
-    'v38': 'gemini-3.8-flash-lite-tts',
+    # GA (non-preview) models — tried FIRST in the fallback chain, never
+    # user-selectable: flagship (more expressive) then flash-lite (faster).
+    # Billed at the tier the person requested (see the /tts route).
+    'v38': 'gemini-3.8-flash-tts',
+    'v38l': 'gemini-3.8-flash-lite-tts',
 }
 
 
@@ -1346,32 +1350,23 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     if not flat_sentences:
         flat_sentences = [text]
 
+    # Short, natural style for the Gemini 3.8 models (chosen by ear from
+    # voice samples; the longer directions made them sound robotic). Sent
+    # via speech_metadata, never inside the text.
     style_directions = (
-        "Friendly, upbeat and cheerful — a warm smile in the voice, "
-        "like a kind older sibling or friendly tutor chatting with a student, "
-        "encouraging and approachable, never flat, robotic or formal. "
+        "Say this warmly and in a friendly way, like a kind, cheerful teacher "
+        "chatting with a student. Natural, relaxed, and expressive — not robotic."
+    )
+    # Original directions, still used for the older 3.1 / 2.5 preview models,
+    # which take them inline as part of the prompt.
+    directed_prompt = (
+        "Style: Empathetic — warm, caring, and encouraging delivery, "
+        "like a supportive teacher patiently explaining something to a student. "
         "IMPORTANT: speak clearly and audibly at a normal, full speaking volume — "
         "NOT a whisper, NOT hushed or breathy, every word should be crisp and easy to hear.\n"
+        "Pace: Natural, comfortable speaking speed — not rushed, not slow.\n\n"
+        f"{text}"
     )
-    # Measured with gemini-3.8-flash-lite-tts on a Sinhala sample: the soft
-    # wording slows Leda ~19%, but Sadaltager only responds (~27%) to the
-    # explicit "SLOWLY" wording.
-    if voice_name == 'Sadaltager':
-        style_directions += (
-            "Pace: Speak SLOWLY and deliberately — a bit slower than normal "
-            "conversation, with a clear pause after every sentence. Do not rush."
-        )
-    else:
-        style_directions += (
-            "Pace: A little slower than normal conversation — calm and unhurried, "
-            "with short natural pauses between sentences, but not dragging."
-        )
-    if voice_name == 'Leda':
-        style_directions += (
-            "\nVoice: Clearly feminine — soft, gentle, sweet and graceful tone, "
-            "like a caring young woman speaking warmly."
-        )
-    directed_prompt = f"Style: {style_directions}\n\n{text}"
 
     # FIX (Aug 19, 2026 — automatic model fallback, same pattern as
     # call_gemini_structured): gemini-3.1-flash-tts-preview is a newer,
@@ -1386,8 +1381,8 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # since v25 is the safer default already).
     model_attempt_plan = [model_version] if model_version == 'v25' else [model_version, 'v25']
     # Stable GA model goes first; the existing preview chain follows it.
-    if model_attempt_plan[0] != 'v38':
-        model_attempt_plan = ['v38'] + model_attempt_plan
+    if model_attempt_plan[0] not in _GEMINI_38_MODELS:
+        model_attempt_plan = ['v38', 'v38l'] + model_attempt_plan
 
     # FIX #2 (Aug 19, 2026 — confirmed by production logs): the first
     # UPDATE (Aug 19, 2026 — per explicit request): give BOTH models 2
@@ -1422,13 +1417,13 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
 
             _gemini_tts_call_gate()
             try:
-                if plan_model == 'v38':
+                if plan_model in _GEMINI_38_MODELS:
                     # Gemini 3.8 TTS treats the text as a verbatim transcript
                     # (inline "Style:" lines would be read aloud), so the
                     # delivery directions go in speech_metadata via the
                     # Interactions API. Returns base64 WAV.
                     interaction = client.interactions.create(
-                        model=GEMINI_TTS_MODEL_VERSIONS['v38'],
+                        model=GEMINI_TTS_MODEL_VERSIONS[plan_model],
                         input=[{
                             "type": "text",
                             "text": text,
@@ -1462,7 +1457,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
                 )
                 actual_model_used = plan_model
                 model_succeeded = True
-                if plan_model not in (model_version, 'v38'):
+                if plan_model not in (model_version, *_GEMINI_38_MODELS):
                     print(f"✅ Gemini TTS succeeded on fallback model {plan_model} (requested {model_version} was unavailable)")
                 break  # success — exit retry loop for this model
             except Exception as e:
@@ -1485,7 +1480,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     if response is None:
         raise last_tts_error or GeminiGenerationError("Gemini TTS failed after retries.")
 
-    if actual_model_used == 'v38':
+    if actual_model_used in _GEMINI_38_MODELS:
         audio_data = audio_bytes_from_v38
     else:
         if not getattr(response, 'candidates', None):
@@ -2875,7 +2870,10 @@ def text_to_speech():
             # generated the audio, not necessarily the one the person
             # picked — if v31 failed and this fell back to v25, the
             # person should pay v25's lower price, not v31's.
-            actual_cost = calculate_gemini_tts_coin_cost(len(formatted_text), model_version=actual_model_used)
+            # 3.8 models are an invisible first choice — bill the tier the
+            # person actually picked (e.g. "NoteWav 3.8" = 2x, "2.5" = base).
+            _billing_version = model_version if actual_model_used in _GEMINI_38_MODELS else actual_model_used
+            actual_cost = calculate_gemini_tts_coin_cost(len(formatted_text), model_version=_billing_version)
             _deduct_coins(user_id, anon_id, actual_cost)
             return jsonify({
                 'status': 'success',
@@ -2884,7 +2882,7 @@ def text_to_speech():
                 'engine': 'gemini',
                 'coin_cost': actual_cost,
                 'model_version': actual_model_used,
-                'fallback_used': actual_model_used not in (model_version, 'v38'),  # v38 is the normal first choice, not a fallback
+                'fallback_used': actual_model_used not in (model_version, *_GEMINI_38_MODELS),  # 3.8 is the normal first choice, not a fallback
             })
         except Exception as e:
             print(f"❌ Gemini TTS Error: {str(e)}")
