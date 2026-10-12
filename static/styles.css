@@ -102,6 +102,51 @@ body.light-theme::after, body.page-tuition::after, body.page-login::after {
     opacity: 0.3;
 }
 
+/* Light-theme readability fixes: these rules hardcode white text or
+   white-tinted (invisible-on-light) surfaces in the base styles, so
+   they need explicit light-mode colors instead of the variables. */
+body.light-theme .brand h1 {
+    background: linear-gradient(90deg, #b9741d 0%, #9c4a1c 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: #a85a1c;
+}
+body.light-theme .btn-secondary {
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+body.light-theme .btn-secondary:hover {
+    background: var(--bg-input-hover);
+}
+body.light-theme .btn-reset:hover {
+    background: var(--bg-input-hover) !important;
+}
+body.light-theme .stat-badge,
+body.light-theme .step-subtitle,
+body.light-theme .skeleton-item,
+body.light-theme .control-btn.download {
+    background: var(--bg-input);
+    border-color: var(--border-color);
+}
+body.light-theme .stat-badge:hover,
+body.light-theme .mode-box:hover,
+body.light-theme .control-btn.stop:hover,
+body.light-theme .control-btn.download:hover,
+body.light-theme .progress-bar:hover {
+    background: var(--bg-input-hover);
+}
+body.light-theme .skeleton-item {
+    background: linear-gradient(90deg, rgba(107,48,255,0.04) 25%, rgba(107,48,255,0.10) 50%, rgba(107,48,255,0.04) 75%);
+    background-size: 200% 100%;
+}
+body.light-theme .lyric-line.active,
+body.light-theme #key-points-list li.active {
+    color: #3b1a9e;
+    text-shadow: none;
+}
+body.light-theme ::selection { background: rgba(107, 48, 255, 0.25); color: #1a1a2e; }
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar {
     width: 6px;
