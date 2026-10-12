@@ -136,8 +136,8 @@ body.light-theme .control-btn.download:hover,
 body.light-theme .progress-bar:hover {
     background: var(--bg-input-hover);
 }
-body.light-theme .skeleton-item {
-    background: linear-gradient(90deg, rgba(107,48,255,0.04) 25%, rgba(107,48,255,0.10) 50%, rgba(107,48,255,0.04) 75%);
+body.light-theme .skeleton-block {
+    background: linear-gradient(90deg, rgba(107,48,255,0.04) 25%, rgba(107,48,255,0.12) 50%, rgba(107,48,255,0.04) 75%);
     background-size: 200% 100%;
 }
 body.light-theme .lyric-line.active,
