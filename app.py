@@ -1347,8 +1347,9 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         flat_sentences = [text]
 
     style_directions = (
-        "Empathetic — warm, caring, and encouraging delivery, "
-        "like a supportive teacher patiently explaining something to a student. "
+        "Friendly, upbeat and cheerful — a warm smile in the voice, "
+        "like a kind older sibling or friendly tutor chatting with a student, "
+        "encouraging and approachable, never flat, robotic or formal. "
         "IMPORTANT: speak clearly and audibly at a normal, full speaking volume — "
         "NOT a whisper, NOT hushed or breathy, every word should be crisp and easy to hear.\n"
         "Pace: Natural, comfortable speaking speed — not rushed, not slow."
