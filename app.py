@@ -1419,7 +1419,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
                 )
                 actual_model_used = plan_model
                 model_succeeded = True
-                if plan_model != model_version:
+                if plan_model not in (model_version, 'v38'):
                     print(f"✅ Gemini TTS succeeded on fallback model {plan_model} (requested {model_version} was unavailable)")
                 break  # success — exit retry loop for this model
             except Exception as e:
@@ -2839,7 +2839,7 @@ def text_to_speech():
                 'engine': 'gemini',
                 'coin_cost': actual_cost,
                 'model_version': actual_model_used,
-                'fallback_used': actual_model_used != model_version,
+                'fallback_used': actual_model_used not in (model_version, 'v38'),  # v38 is the normal first choice, not a fallback
             })
         except Exception as e:
             print(f"❌ Gemini TTS Error: {str(e)}")
