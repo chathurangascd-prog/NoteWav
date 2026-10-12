@@ -1,6 +1,7 @@
 import os
 import sys
 import io
+import base64
 import re
 import json
 import time
@@ -1345,14 +1346,14 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     if not flat_sentences:
         flat_sentences = [text]
 
-    directed_prompt = (
-        "Style: Empathetic — warm, caring, and encouraging delivery, "
+    style_directions = (
+        "Empathetic — warm, caring, and encouraging delivery, "
         "like a supportive teacher patiently explaining something to a student. "
         "IMPORTANT: speak clearly and audibly at a normal, full speaking volume — "
         "NOT a whisper, NOT hushed or breathy, every word should be crisp and easy to hear.\n"
-        "Pace: Natural, comfortable speaking speed — not rushed, not slow.\n\n"
-        f"{text}"
+        "Pace: Natural, comfortable speaking speed — not rushed, not slow."
     )
+    directed_prompt = f"Style: {style_directions}\n\n{text}"
 
     # FIX (Aug 19, 2026 — automatic model fallback, same pattern as
     # call_gemini_structured): gemini-3.1-flash-tts-preview is a newer,
@@ -1381,6 +1382,7 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
         return 2
 
     response = None
+    audio_bytes_from_v38 = None
     last_tts_error = None
     synth_start_time = time.time()
     # Raised from 150s now that gunicorn's own worker timeout is 180s
@@ -1402,11 +1404,34 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
 
             _gemini_tts_call_gate()
             try:
+                if plan_model == 'v38':
+                    # Gemini 3.8 TTS treats the text as a verbatim transcript
+                    # (inline "Style:" lines would be read aloud), so the
+                    # delivery directions go in speech_metadata via the
+                    # Interactions API. Returns base64 WAV.
+                    interaction = client.interactions.create(
+                        model=GEMINI_TTS_MODEL_VERSIONS['v38'],
+                        input=[{
+                            "type": "text",
+                            "text": text,
+                            "annotations": [{"type": "speech_metadata", "style": style_directions}],
+                        }],
+                        generation_config={"speech_config": [{"voice": voice_name}]},
+                        response_modalities=["audio"],
+                        store=False,
+                        timeout=40,
+                    )
+                    v38_audio = getattr(interaction, 'output_audio', None)
+                    if not v38_audio or not getattr(v38_audio, 'data', None):
+                        raise GeminiGenerationError("Gemini 3.8 TTS returned no audio.")
+                    audio_bytes_from_v38 = base64.b64decode(v38_audio.data)
+                    response = True  # marks success; audio is in audio_bytes_from_v38
+                    actual_model_used = plan_model
+                    model_succeeded = True
+                    break
                 response = client.models.generate_content(
                     model=GEMINI_TTS_MODEL_VERSIONS.get(plan_model, GEMINI_TTS_MODEL_VERSIONS['v25']),
-                    # 3.8 TTS no longer supports inline "Style:" directions
-                    # in the text (they'd be read aloud) — send plain text.
-                    contents=text if plan_model == 'v38' else directed_prompt,
+                    contents=directed_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["AUDIO"],
                         speech_config=types.SpeechConfig(
@@ -1442,10 +1467,12 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     if response is None:
         raise last_tts_error or GeminiGenerationError("Gemini TTS failed after retries.")
 
-    if not getattr(response, 'candidates', None):
-        raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
-
-    audio_data = response.candidates[0].content.parts[0].inline_data.data
+    if actual_model_used == 'v38':
+        audio_data = audio_bytes_from_v38
+    else:
+        if not getattr(response, 'candidates', None):
+            raise GeminiGenerationError("Gemini TTS returned no audio (possibly blocked by safety filters).")
+        audio_data = response.candidates[0].content.parts[0].inline_data.data
     if audio_data[:4] == b'RIFF':
         # Gemini 3.8 TTS returns WAV with a RIFF header by default;
         # older models return headerless 24kHz mono 16-bit PCM.
