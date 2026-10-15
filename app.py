@@ -626,13 +626,29 @@ def _check_rate_limit(key, max_requests, window_seconds):
         return True, 0
 
 
-def rate_limited(max_requests, window_seconds):
+def rate_limited(max_requests, window_seconds, per_anon=False):
+    """per_anon=True: logged-out callers are limited per anon_id instead of
+    per IP. Behind Render's proxy every request has remote_addr 127.0.0.1,
+    so an IP bucket is ONE bucket shared by every logged-out visitor — they'd
+    throttle each other. The IP bucket is kept as a looser global backstop
+    (6x the limit). Only use this on routes that are also gated server-side
+    (e.g. /tts requires a coin balance), since anon_id is client-chosen."""
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            identifier = session.get('user_id') or request.remote_addr or 'unknown'
-            bucket_key = f"{f.__name__}:{identifier}"
-            allowed, retry_after = _check_rate_limit(bucket_key, max_requests, window_seconds)
+            user_id = session.get('user_id')
+            anon = ''
+            if per_anon and not user_id:
+                payload = request.get_json(silent=True) or {}
+                anon = str(payload.get('anon_id') or request.args.get('anon_id') or '').strip()[:64]
+            if anon:
+                allowed, retry_after = _check_rate_limit(f"{f.__name__}:anon:{anon}", max_requests, window_seconds)
+                if allowed:
+                    ip_key = f"{f.__name__}:{request.remote_addr or 'unknown'}"
+                    allowed, retry_after = _check_rate_limit(ip_key, max_requests * 6, window_seconds)
+            else:
+                identifier = user_id or request.remote_addr or 'unknown'
+                allowed, retry_after = _check_rate_limit(f"{f.__name__}:{identifier}", max_requests, window_seconds)
             if not allowed:
                 mins, secs = divmod(retry_after, 60)
                 if mins > 0:
@@ -2767,7 +2783,7 @@ def _deduct_coins(user_id, anon_id, amount):
 
 
 @app.route('/tts', methods=['POST'])
-@rate_limited(10, 60)
+@rate_limited(10, 60, per_anon=True)
 def text_to_speech():
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
@@ -3349,11 +3365,12 @@ def user_update_profile():
 # client-side reward, the level-up bonus) is allowed per call; the
 # client is always free to report a LOWER balance (its own spending).
 MAX_SYNCABLE_COINS = 100_000
-# Matches STARTING_FREE_COINS in static/script.js. A brand-new anon_id may
-# only establish this much as its first-ever balance — otherwise a crafted
+# Matches STARTING_FREE_COINS in static/script.js (logged-out visitors; a
+# signed-up account gets 100 server-side, so signing up is rewarded). A
+# brand-new anon_id may only establish this much as its first-ever balance — otherwise a crafted
 # /track call could set any starting balance (up to MAX_SYNCABLE_COINS) and
 # use the paid TTS engines for free.
-STARTING_FREE_COINS = 100
+STARTING_FREE_COINS = 30
 MAX_COIN_INCREASE_PER_SYNC = 20
 # The only legitimate client-reported coin increase is the level-up reward
 # (5 coins); admin top-ups are written to the DB directly. So cap the TOTAL

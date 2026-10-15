@@ -4913,7 +4913,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // COINS SYSTEM (placeholder — for future paid features)
 // ========================================
 const COINS_KEY = 'notewav_coins';
-const STARTING_FREE_COINS = 100;
+const STARTING_FREE_COINS = 30;  // logged-out visitors; a new account gets 100 server-side
 
 function getCoinsBalance() {
     try {
