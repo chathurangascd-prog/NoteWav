@@ -347,6 +347,11 @@ def init_db():
             updated_at TEXT
         )
     """)
+    for _col in ("sync_credit_day TEXT", "sync_credit_used INTEGER DEFAULT 0"):
+        try:
+            conn.execute(f"ALTER TABLE user_state ADD COLUMN {_col}")
+        except Exception:
+            pass  # column already exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS announcements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -381,6 +386,8 @@ def init_db():
         "phone TEXT",
         "password_hash TEXT",
         "auth_provider TEXT DEFAULT 'google'",
+        "sync_credit_day TEXT",
+        "sync_credit_used INTEGER DEFAULT 0",
     ]:
         try:
             conn.execute(f"ALTER TABLE users ADD COLUMN {column_def}")
@@ -3348,6 +3355,25 @@ MAX_SYNCABLE_COINS = 100_000
 # use the paid TTS engines for free.
 STARTING_FREE_COINS = 100
 MAX_COIN_INCREASE_PER_SYNC = 20
+# The only legitimate client-reported coin increase is the level-up reward
+# (5 coins); admin top-ups are written to the DB directly. So cap the TOTAL
+# a person can raise their own balance via /user/sync or /track per UTC day —
+# otherwise +20 per call, at 30 calls/min, is still ~600 coins a minute.
+MAX_DAILY_COIN_CREDIT_VIA_SYNC = 50
+
+
+def _apply_daily_coin_credit_cap(conn, table, key_col, key, current, requested):
+    """Returns (balance_to_store, day, used_today). Decreases always pass;
+    an increase is limited to what's left of today's credit allowance."""
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    row = conn.execute(
+        f"SELECT sync_credit_day, sync_credit_used FROM {table} WHERE {key_col} = ?", (key,)
+    ).fetchone()
+    used = (row['sync_credit_used'] or 0) if row and row['sync_credit_day'] == today else 0
+    if current is None or requested <= current:
+        return requested, today, used
+    increase = min(requested - current, max(0, MAX_DAILY_COIN_CREDIT_VIA_SYNC - used))
+    return current + increase, today, used + increase
 
 
 @app.route('/user/sync', methods=['POST'])
@@ -3368,8 +3394,18 @@ def user_sync():
             # what the increase cap guards.
             if current is not None and requested > current:
                 requested = min(requested, current + MAX_COIN_INCREASE_PER_SYNC)
+            _cap_conn = get_db()
+            try:
+                requested, _credit_day, _credit_used = _apply_daily_coin_credit_cap(
+                    _cap_conn, 'users', 'google_id', user_id, current, requested)
+            finally:
+                _cap_conn.close()
             updates.append('coins = ?')
             params.append(requested)
+            updates.append('sync_credit_day = ?')
+            params.append(_credit_day)
+            updates.append('sync_credit_used = ?')
+            params.append(_credit_used)
         if isinstance(data.get('streak'), int):
             updates.append('streak = ?')
             params.append(data['streak'])
@@ -3924,10 +3960,13 @@ def track_event():
                 coins = min(coins, STARTING_FREE_COINS)
             elif coins > current_coins:
                 coins = min(coins, current_coins + MAX_COIN_INCREASE_PER_SYNC)
+            coins, _credit_day, _credit_used = _apply_daily_coin_credit_cap(
+                conn, 'user_state', 'anon_id', anon_id, current_coins, coins)
             conn.execute(
-                """INSERT INTO user_state (anon_id, coins, updated_at) VALUES (?, ?, ?)
-                   ON CONFLICT(anon_id) DO UPDATE SET coins = excluded.coins, updated_at = excluded.updated_at""",
-                (anon_id, coins, datetime.now(timezone.utc).isoformat())
+                """INSERT INTO user_state (anon_id, coins, updated_at, sync_credit_day, sync_credit_used) VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(anon_id) DO UPDATE SET coins = excluded.coins, updated_at = excluded.updated_at,
+                       sync_credit_day = excluded.sync_credit_day, sync_credit_used = excluded.sync_credit_used""",
+                (anon_id, coins, datetime.now(timezone.utc).isoformat(), _credit_day, _credit_used)
             )
         conn.commit()
         conn.close()
