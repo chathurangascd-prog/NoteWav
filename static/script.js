@@ -2604,8 +2604,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 estimatedCoinCost = estimateGeminiCoinCost(text.length, ttsModelVersion);
                 if (getCoinsBalance() < estimatedCoinCost) {
                     showErrorBanner(getAppLanguage() === 'en'
-                        ? 'Not enough coins for Natural (AI) Voice. A way to buy coins is coming soon!'
-                        : 'Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ. Coins මිලදී ගන්න පුළුවන් වෙන feature එකක් ඉක්මනින් එනවා!');
+                        ? 'Not enough coins for Natural (AI) Voice. Tap 🪙 at the top to get more coins.'
+                        : 'Natural (AI) Voice එකට ප්‍රමාණවත් coins නෑ. උඩ තියෙන 🪙 එක ඔබලා coins ගන්න.');
+                    if (typeof openCoinShop === 'function') openCoinShop();
                     return;
                 }
             }
@@ -4930,7 +4931,7 @@ function getCoinsBalance() {
 
 function updateCoinsDisplay() {
     const el = document.getElementById('coins-count');
-    if (el) el.textContent = 'Free';
+    if (el) el.textContent = String(getCoinsBalance());
 }
 
 function spendCoins(amount) {
@@ -6021,4 +6022,94 @@ document.addEventListener('keydown', function(e) {
             return;
         }
     }
+});
+
+// ========================================
+// COIN SHOP — "Get Coins" packages (opened from the 🪙 badge)
+// ========================================
+// International format, digits only, e.g. '94771234567'. While empty the
+// Buy buttons show a "payment details coming soon" note instead of a link.
+const COIN_SHOP_WHATSAPP_NUMBER = '';
+
+const COIN_PACKS = [
+    { price: 200,  coins: 200,  bonus: 0 },
+    { price: 500,  coins: 550,  bonus: 50,  tag: { si: '⭐ ජනප්‍රියම', en: '⭐ Most popular' } },
+    { price: 1000, coins: 1200, bonus: 200, tag: { si: '🔥 වටිනාම', en: '🔥 Best value' } },
+];
+
+// Coin costs per audio (mirrors calculate_gemini_tts_coin_cost on the server):
+// NoteWav 2.5 = 5 / 12 / 20 coins; NoteWav 3.8 = double that.
+function renderCoinShop() {
+    const en = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en');
+    const t = (si, enText) => (en ? enText : si);
+    const packsEl = document.getElementById('coin-shop-packs');
+    const balanceEl = document.getElementById('coin-shop-balance');
+    const noteEl = document.getElementById('coin-shop-note');
+    const titleEl = document.getElementById('coin-shop-title');
+    if (!packsEl) return;
+    if (titleEl) titleEl.textContent = t('🪙 Coins ගන්න', '🪙 Get Coins');
+    if (balanceEl) balanceEl.textContent = t(`ඔබේ දැන්නට coins: 🪙 ${getCoinsBalance()}`, `Your balance: 🪙 ${getCoinsBalance()}`);
+    packsEl.innerHTML = '';
+    COIN_PACKS.forEach(pack => {
+        const card = document.createElement('div');
+        card.className = 'coin-pack' + (pack.tag ? ' featured' : '');
+        const perCoin = (pack.price / pack.coins).toFixed(2);
+        const items = [
+            ['fa-microphone-lines', t(`NoteWav 3.8 හඬින් audio ~${Math.floor(pack.coins / 10)}ක් (අකුරු 500 දක්වා) හෝ ~${Math.floor(pack.coins / 24)}ක් (අකුරු 1200 දක්වා)`,
+                                      `~${Math.floor(pack.coins / 10)} NoteWav 3.8 audios (up to 500 characters) or ~${Math.floor(pack.coins / 24)} (up to 1200)`)],
+            ['fa-headphones', t(`NoteWav 2.5 හඬින් audio ~${Math.floor(pack.coins / 5)}ක් (අකුරු 500 දක්වා)`,
+                                `~${Math.floor(pack.coins / 5)} NoteWav 2.5 audios (up to 500 characters)`)],
+            ['fa-circle-check', t('හැම Natural (AI) voice එකක්ම: Female සහ Male හඬවල්', 'All Natural (AI) voices: female and male')],
+            ['fa-infinity', t('Coins කල් ඉකුත් වෙන්නේ නෑ', 'Coins never expire')],
+            ['fa-tag', t(`Coin එකක් රු. ${perCoin}`, `Rs. ${perCoin} per coin`)],
+        ];
+        card.innerHTML = `
+            ${pack.tag ? `<span class="coin-pack-tag">${pack.tag[en ? 'en' : 'si']}</span>` : ''}
+            <div class="coin-pack-coins">🪙 ${pack.coins}${pack.bonus ? `<small>${t(`+${pack.bonus} bonus coins`, `+${pack.bonus} bonus coins`)}</small>` : ''}</div>
+            <div class="coin-pack-price">Rs. ${pack.price.toLocaleString('en-US')}</div>
+            <ul class="coin-pack-list">${items.map(([icon, text]) => `<li><i class="fas ${icon}"></i><span>${text}</span></li>`).join('')}</ul>
+            <button type="button" class="coin-pack-btn">${t('මිලදී ගන්න', 'Buy now')}</button>`;
+        card.querySelector('.coin-pack-btn').addEventListener('click', () => buyCoinPack(pack));
+        packsEl.appendChild(card);
+    });
+    if (noteEl) noteEl.textContent = '';
+}
+
+function buyCoinPack(pack) {
+    const en = (typeof getAppLanguage === 'function' && getAppLanguage() === 'en');
+    const noteEl = document.getElementById('coin-shop-note');
+    if (!noteEl) return;
+    if (!notewavIsLoggedIn) {
+        noteEl.textContent = en
+            ? 'Please sign in first — coins are added to your account.'
+            : 'කරුණාකර මුලින් Sign in වෙන්න — coins එකතු කරන්නේ ඔබේ account එකටයි.';
+        return;
+    }
+    if (!COIN_SHOP_WHATSAPP_NUMBER) {
+        noteEl.textContent = en
+            ? 'Payment details are coming very soon. Please check back shortly.'
+            : 'ගෙවීම් විස්තර ඉතා ඉක්මනින් එනවා. ටිකකින් නැවත බලන්න.';
+        return;
+    }
+    const msg = en
+        ? `Hi! I'd like to buy the ${pack.coins}-coin pack (Rs. ${pack.price}) for NoteWav.`
+        : `Hi! NoteWav වලට coins ${pack.coins} pack එක (රු. ${pack.price}) ගන්න ඕන.`;
+    window.open(`https://wa.me/${COIN_SHOP_WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+}
+
+function openCoinShop() {
+    renderCoinShop();
+    const backdrop = document.getElementById('coin-shop-backdrop');
+    if (backdrop) backdrop.classList.remove('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const backdrop = document.getElementById('coin-shop-backdrop');
+    const closeBtn = document.getElementById('coin-shop-close');
+    const badge = document.getElementById('coins-badge');
+    if (badge) badge.addEventListener('click', openCoinShop);
+    if (closeBtn && backdrop) closeBtn.addEventListener('click', () => backdrop.classList.add('hidden'));
+    if (backdrop) backdrop.addEventListener('click', function(e) {
+        if (e.target === backdrop) backdrop.classList.add('hidden');
+    });
 });
