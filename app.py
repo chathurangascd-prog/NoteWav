@@ -1381,8 +1381,13 @@ def synthesize_gemini_tts(text, lang='si', voice_name=None, model_version='v25')
     # since v25 is the safer default already).
     model_attempt_plan = [model_version] if model_version == 'v25' else [model_version, 'v25']
     # Stable GA model goes first; the existing preview chain follows it.
+    # NoteWav 2.5 (v25) is billed at half price, so it gets the cheaper
+    # flash-lite model first instead of the flagship (which would leave
+    # almost no margin, and a loss once Google's 3.8 prices double on
+    # 2027-01-01). The 3.8/3.1 tier gets flagship -> lite.
     if model_attempt_plan[0] not in _GEMINI_38_MODELS:
-        model_attempt_plan = ['v38', 'v38l'] + model_attempt_plan
+        first_38 = ['v38l'] if model_version == 'v25' else ['v38', 'v38l']
+        model_attempt_plan = first_38 + model_attempt_plan
 
     # FIX #2 (Aug 19, 2026 — confirmed by production logs): the first
     # UPDATE (Aug 19, 2026 — per explicit request): give BOTH models 2
@@ -3337,6 +3342,11 @@ def user_update_profile():
 # client-side reward, the level-up bonus) is allowed per call; the
 # client is always free to report a LOWER balance (its own spending).
 MAX_SYNCABLE_COINS = 100_000
+# Matches STARTING_FREE_COINS in static/script.js. A brand-new anon_id may
+# only establish this much as its first-ever balance — otherwise a crafted
+# /track call could set any starting balance (up to MAX_SYNCABLE_COINS) and
+# use the paid TTS engines for free.
+STARTING_FREE_COINS = 100
 MAX_COIN_INCREASE_PER_SYNC = 20
 
 
@@ -3910,7 +3920,9 @@ def track_event():
             # brand-new anon_id (no user_state row yet) is free to
             # establish its starting balance without the increase cap.
             current_coins = _get_coin_balance(None, anon_id)
-            if current_coins is not None and coins > current_coins:
+            if current_coins is None:
+                coins = min(coins, STARTING_FREE_COINS)
+            elif coins > current_coins:
                 coins = min(coins, current_coins + MAX_COIN_INCREASE_PER_SYNC)
             conn.execute(
                 """INSERT INTO user_state (anon_id, coins, updated_at) VALUES (?, ?, ?)
